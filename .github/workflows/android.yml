@@ -1,0 +1,272 @@
+name: Android APK
+
+# Builds the employee app on GitHub's servers - no PC and no Android Studio needed.
+#   push to main      -> a release APK as a workflow artifact (this also keeps the build caches warm)
+#   push a v* tag     -> the same build is published as a GitHub Release:  git tag v1.0.1 && git push origin v1.0.1
+#   "Run workflow"    -> a build with the version / server address you type; tick "publish" to make a Release
+# Signing: the four repository secrets KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD (see docs/CICD.md).
+# A Release is only ever created from an APK signed with that key.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - 'backend/**'
+      - 'docs/**'
+      - 'scripts/**'
+      - 'infra/**'
+      - '**.md'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for this build, e.g. 1.0.1 (a pushed v* tag sets it by itself)'
+        required: false
+        default: ''
+      api_url:
+        description: 'Server address the app starts with (empty = the API_URL repository variable)'
+        required: false
+        default: ''
+      publish:
+        description: 'Publish a GitHub Release with this APK (needs a version and the signing secrets)'
+        type: boolean
+        default: false
+
+# creating the Release needs write access to the repository contents
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  # The native C++ code (Reanimated, worklets, screens, ...) is the slow part of the build. ccache re-uses every object that
+  # did not change since the last run, which brings a typical build down from ~25 to ~8 minutes.
+  CMAKE_C_COMPILER_LAUNCHER: ccache
+  CMAKE_CXX_COMPILER_LAUNCHER: ccache
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: 'true'
+  CCACHE_MAXSIZE: 1500M
+
+jobs:
+  apk:
+    name: Build release APK (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Work out version and server address
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          VAR_API_URL: ${{ vars.API_URL }}
+        run: |
+          set -euo pipefail
+          name=""
+          publish=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            name="${GITHUB_REF_NAME#v}"
+            publish=true
+          elif [[ -n "$INPUT_VERSION" ]]; then
+            name="${INPUT_VERSION#v}"
+          fi
+          if [[ "$INPUT_PUBLISH" == "true" ]]; then
+            publish=true
+            [[ -n "$name" ]] || { echo "::error::Type a version (for example 1.0.1) to publish a Release."; exit 1; }
+          fi
+          if [[ -z "$name" ]]; then
+            name="1.0.0-build.${GITHUB_RUN_NUMBER}"
+          fi
+          [[ "$name" =~ ^[0-9]+(\.[0-9]+){1,3}([-.][0-9A-Za-z.]+)?$ ]] || { echo "::error::Version '$name' should look like 1.2.3"; exit 1; }
+
+          api_url="${INPUT_API_URL:-}"
+          [[ -n "$api_url" ]] || api_url="${VAR_API_URL:-}"
+          [[ -n "$api_url" ]] || api_url="http://192.168.0.103:8000"
+          api_url="${api_url%/}"
+          [[ "$api_url" =~ ^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]] || { echo "::error::Server address '$api_url' does not look right (use http://192.168.x.x:8000 or https://api.company.com)"; exit 1; }
+
+          {
+            echo "name=$name"
+            echo "tag=v$name"
+            echo "publish=$publish"
+            echo "api_url=$api_url"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $name (code $GITHUB_RUN_NUMBER), server $api_url, publish=$publish"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install ccache
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ccache
+          ndk="$(grep -oP 'ndkVersion = "\K[^"]+' mobile/android/build.gradle)"
+          # the compiler is downloaded fresh on every run; identify it by its version, not by its file date
+          echo "CCACHE_COMPILERCHECK=string:ndk-${ndk}" >> "$GITHUB_ENV"
+
+      - name: Restore the native build cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json', 'mobile/android/build.gradle') }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json', 'mobile/android/build.gradle') }}-
+            ccache-${{ runner.os }}-
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Install JavaScript dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Accept Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Prepare signing
+        id: sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          PUBLISH: ${{ steps.ver.outputs.publish }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$KEYSTORE_BASE64" && -n "$KEYSTORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > mobile/android/app/release.keystore
+            keytool -list -keystore mobile/android/app/release.keystore -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" > /dev/null \
+              || { echo "::error::The keystore could not be opened - check KEYSTORE_BASE64, KEYSTORE_PASSWORD and KEY_ALIAS."; exit 1; }
+            {
+              echo "storeFile=app/release.keystore"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > mobile/android/keystore.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            if [[ "$PUBLISH" == "true" ]]; then
+              echo "::error title=Signing key missing::Add the repository secrets KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD (Settings > Secrets and variables > Actions). See docs/CICD.md."
+              exit 1
+            fi
+            echo "::warning title=Signing key missing::Building a TEST apk signed with the public debug key. Add the signing secrets (docs/CICD.md) for a real release."
+          fi
+
+      - name: Build the release APK
+        working-directory: mobile/android
+        env:
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+          VERSION_CODE: ${{ github.run_number }}
+          API_URL: ${{ steps.ver.outputs.api_url }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -PversionName="$VERSION_NAME" \
+            -PversionCode="$VERSION_CODE" \
+            -PapiUrl="$API_URL" \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
+            --console=plain --stacktrace
+
+      - name: Native build cache statistics
+        if: always()
+        run: ccache -s || true
+
+      - name: Check and name the APK
+        id: apk
+        env:
+          NAME: ${{ steps.ver.outputs.name }}
+          API_URL: ${{ steps.ver.outputs.api_url }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
+        run: |
+          set -euo pipefail
+          src="$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -1)"
+          bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$bt/apksigner" verify --print-certs "$src" | tee signer.txt
+          "$bt/aapt2" dump badging "$src" | grep -E "^package:|^targetSdkVersion|^application-label:"
+          unzip -l "$src" | grep -E "lib/(arm64-v8a|x86_64|armeabi-v7a)/libreactnative" || true
+
+          if [[ "$SIGNED" == "true" ]]; then
+            file="EmployeeCalling-${NAME}.apk"
+          else
+            file="EmployeeCalling-${NAME}-TEST-debug-signed.apk"
+          fi
+          cp "$src" "$file"
+          sha256sum "$file" > "$file.sha256"
+          cert="$(grep -m1 'certificate SHA-256 digest' signer.txt | awk '{print $NF}')"
+          size="$(du -h "$file" | cut -f1)"
+          {
+            echo "file=$file"
+            echo "cert=$cert"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Employee Calling $NAME"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| APK | \`$file\` ($size) |"
+            echo "| Signed with | $([[ "$SIGNED" == "true" ]] && echo "release key \`${cert:0:16}...\`" || echo "**debug key (test build only)**") |"
+            echo "| Starts with server | \`$API_URL\` |"
+            echo "| SHA-256 | \`$(cut -d' ' -f1 "$file.sha256")\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the APK as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.apk.outputs.file }}
+          path: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.file }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the GitHub Release
+        if: steps.ver.outputs.publish == 'true' && steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.ver.outputs.name }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          FILE: ${{ steps.apk.outputs.file }}
+          CERT: ${{ steps.apk.outputs.cert }}
+          API_URL: ${{ steps.ver.outputs.api_url }}
+        run: |
+          set -euo pipefail
+          cp "$FILE" EmployeeCalling.apk     # a fixed name, so  releases/latest/download/EmployeeCalling.apk  always works
+          sha256sum EmployeeCalling.apk > EmployeeCalling.apk.sha256
+          cat > notes.md <<EOF
+          ## Employee Calling $NAME - Android app
+
+          **Install** (Android 7+, 64-bit phone): download \`$FILE\` below, open it on the phone and allow *Install unknown apps*.
+          **इन्स्टॉल:** खालील \`$FILE\` डाउनलोड करा, फोनवर उघडा आणि *Install unknown apps* ला परवानगी द्या.
+
+          - The app starts with the server \`$API_URL\`. If your server address is different, tap the address on the login screen and change it.
+          - First start: finish the **Phone setup** wizard (default phone app + permissions).
+          - Always-latest link: \`https://github.com/$GITHUB_REPOSITORY/releases/latest/download/EmployeeCalling.apk\`
+          - Signing certificate SHA-256: \`$CERT\`
+          EOF
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" "$FILE.sha256" EmployeeCalling.apk EmployeeCalling.apk.sha256 --clobber
+          else
+            gh release create "$TAG" "$FILE" "$FILE.sha256" EmployeeCalling.apk EmployeeCalling.apk.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "Employee Calling $NAME" \
+              --notes-file notes.md \
+              --generate-notes
+          fi
+          echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
