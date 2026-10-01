@@ -8,12 +8,12 @@ import { dispositionLook } from '../utils/status';
 import { formatClock, formatDayLabel } from '../utils/time';
 import { Tag } from './Chip';
 import { Icon, type IconName } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 function tone(row: CallRowModel): { icon: IconName; color: string; bg: string } {
-  if (row.needsOutcome) return { icon: 'alert', color: '#B45309', bg: colors.orangeSoft };
-  if (row.status === 'failed') return { icon: 'phone-off', color: colors.muted, bg: '#EEF0F3' };
+  if (row.needsOutcome) return { icon: 'alert', color: colors.orangeDark, bg: colors.orangeSoft };
+  if (row.status === 'failed') return { icon: 'phone-off', color: colors.muted, bg: colors.neutralSoft };
   if (row.status === 'completed' || row.status === 'connected') return { icon: 'phone-out', color: colors.green, bg: colors.greenSoft };
   return { icon: 'phone-missed', color: colors.red, bg: colors.redSoft };
 }
@@ -31,7 +31,7 @@ export function CallRow({ row, onPress, showName = true }: Props) {
   const label = row.dispositionLabel ?? (row.disposition ? row.disposition.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : null);
   const answered = row.status === 'completed' || row.status === 'connected';
   return (
-    <PressableScale onPress={onPress} scaleTo={0.985} haptic={false} style={styles.row} disabled={!onPress}>
+    <Touchable onPress={onPress} style={styles.row} disabled={!onPress}>
       <View style={[styles.icon, { backgroundColor: look.bg }]}>
         <Icon name={look.icon} size={20} color={look.color} />
       </View>
@@ -47,9 +47,9 @@ export function CallRow({ row, onPress, showName = true }: Props) {
       </View>
       <View style={styles.right}>
         {row.needsOutcome ? (
-          <Tag label="Needs outcome" color="#B45309" background={colors.orangeSoft} />
+          <Tag label="Needs outcome" color={colors.orangeDark} background={colors.orangeSoft} />
         ) : label ? (
-          <Tag label={label} color={disposition?.tone ?? colors.muted} background={disposition?.soft ?? '#EEF0F3'} />
+          <Tag label={label} color={disposition?.tone ?? colors.muted} background={disposition?.soft ?? colors.neutralSoft} />
         ) : null}
         <View style={styles.meta}>
           {row.recording === 'available' ? <Icon name="headphones" size={14} color={colors.green} /> : null}
@@ -58,7 +58,7 @@ export function CallRow({ row, onPress, showName = true }: Props) {
           {!row.synced ? <Icon name="cloud-off" size={14} color={colors.orange} /> : null}
         </View>
       </View>
-    </PressableScale>
+    </Touchable>
   );
 }
 

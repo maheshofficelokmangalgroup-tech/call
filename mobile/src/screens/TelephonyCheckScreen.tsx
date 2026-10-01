@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '../components/Button';
@@ -26,7 +25,7 @@ interface Check {
 }
 
 const LEVEL_LOOK: Record<Level, { icon: IconName; color: string; bg: string }> = {
-  idle: { icon: 'clock', color: colors.faint, bg: '#EEF0F3' },
+  idle: { icon: 'clock', color: colors.faint, bg: colors.neutralSoft },
   running: { icon: 'refresh', color: colors.blue, bg: colors.blueSoft },
   pass: { icon: 'check-circle', color: colors.green, bg: colors.greenSoft },
   warn: { icon: 'alert', color: colors.orange, bg: colors.orangeSoft },
@@ -203,7 +202,7 @@ export function TelephonyCheckScreen() {
     <View style={styles.root}>
       <ScreenHeader title="Device check" subtitle="Validates calling on this phone" back />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(320)} style={[styles.summary, { backgroundColor: LEVEL_LOOK[overall].bg }]}>
+        <View style={[styles.summary, { backgroundColor: LEVEL_LOOK[overall].bg }]}>
           <Icon name={LEVEL_LOOK[overall].icon} size={26} color={LEVEL_LOOK[overall].color} />
           <View style={styles.flex}>
             <Text variant="h2" color={LEVEL_LOOK[overall].color}>
@@ -213,14 +212,14 @@ export function TelephonyCheckScreen() {
               Run a test call to confirm call tracking end to end.
             </Text>
           </View>
-        </Animated.View>
+        </View>
 
         <Card padded={false} style={styles.card}>
           {loading ? <ActivityIndicator color={colors.green} style={styles.loader} /> : null}
           {checks.map((c, i) => {
             const look = LEVEL_LOOK[c.level];
             return (
-              <Animated.View key={c.id} entering={FadeInDown.delay(i * 40).duration(260)}>
+              <View key={c.id}>
                 <View style={styles.check}>
                   <View style={[styles.checkIcon, { backgroundColor: look.bg }]}>
                     <Icon name={look.icon} size={16} color={look.color} />
@@ -233,7 +232,7 @@ export function TelephonyCheckScreen() {
                   </View>
                 </View>
                 {i < checks.length - 1 ? <View style={styles.sep} /> : null}
-              </Animated.View>
+              </View>
             );
           })}
         </Card>
@@ -252,7 +251,7 @@ export function TelephonyCheckScreen() {
               {log.map((l, i) => {
                 const look = LEVEL_LOOK[l.level];
                 return (
-                  <Animated.View key={`${l.at}-${i}`} entering={FadeIn.duration(200)} layout={LinearTransition} style={styles.logRow}>
+                  <View key={`${l.at}-${i}`} style={styles.logRow}>
                     <Icon name={look.icon} size={14} color={look.color} />
                     <Text variant="small" style={styles.flex}>
                       <Text variant="caption" color="muted">
@@ -260,7 +259,7 @@ export function TelephonyCheckScreen() {
                       </Text>
                       {l.text}
                     </Text>
-                  </Animated.View>
+                  </View>
                 );
               })}
             </View>

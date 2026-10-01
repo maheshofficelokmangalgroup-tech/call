@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CallRow } from '../components/CallRow';
@@ -150,10 +149,8 @@ export function HistoryScreen() {
             {section.title}
           </Text>
         )}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 35).duration(300)} layout={LinearTransition}>
-            <CallRow row={item} onPress={() => navigation.navigate('CallDetail', item.localUuid ? { callUuid: item.localUuid } : { serverId: item.serverId ?? undefined })} />
-          </Animated.View>
+        renderItem={({ item }) => (
+          <CallRow row={item} onPress={() => navigation.navigate('CallDetail', item.localUuid ? { callUuid: item.localUuid } : { serverId: item.serverId ?? undefined })} />
         )}
       />
     </View>

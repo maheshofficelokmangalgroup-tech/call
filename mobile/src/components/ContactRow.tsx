@@ -8,8 +8,8 @@ import { contactStatusLook } from '../utils/status';
 import { Avatar } from './Avatar';
 import { Tag } from './Chip';
 import { Icon } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 interface Props {
   contact: Contact;
@@ -21,7 +21,7 @@ export function ContactRow({ contact, onOpen, onCall }: Props) {
   const status = contactStatusLook(contact.status);
   const blocked = contact.status === 'do_not_contact';
   return (
-    <PressableScale onPress={onOpen} scaleTo={0.985} haptic={false} style={styles.card}>
+    <Touchable onPress={onOpen} style={styles.card}>
       <Avatar name={contact.name} size={46} />
       <View style={styles.body}>
         <Text variant="h3" numberOfLines={1}>
@@ -33,15 +33,15 @@ export function ContactRow({ contact, onOpen, onCall }: Props) {
         </Text>
         <View style={styles.tags}>
           <Tag label={status.label} color={status.color} background={status.bg} />
-          {contact.category ? <Tag label={contact.category} color={colors.inkSoft} background="#EEF0F3" /> : null}
+          {contact.category ? <Tag label={contact.category} color={colors.inkSoft} background={colors.neutralSoft} /> : null}
         </View>
       </View>
       {onCall && !blocked ? (
-        <PressableScale onPress={onCall} scaleTo={0.88} style={styles.call}>
+        <Touchable onPress={onCall} style={styles.call}>
           <Icon name="phone" size={20} color={colors.white} />
-        </PressableScale>
+        </Touchable>
       ) : null}
-    </PressableScale>
+    </Touchable>
   );
 }
 

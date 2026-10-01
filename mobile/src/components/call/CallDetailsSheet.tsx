@@ -67,7 +67,7 @@ export function CallDetailsSheet({ visible, onClose, identity }: { visible: bool
           <View style={styles.tags}>
             {status ? <Tag label={status.label} color={status.color} background={status.bg} /> : null}
             {contact.tags.map((t) => (
-              <Tag key={t} label={t} color={colors.inkSoft} background="#EEF0F3" />
+              <Tag key={t} label={t} color={colors.inkSoft} background={colors.neutralSoft} />
             ))}
           </View>
           <Line label="Location" value={contact.location} />

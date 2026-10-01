@@ -2,14 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
-import { PulseRing } from '../components/PulseRing';
 import { Text } from '../components/Text';
+import { Touchable } from '../components/Touchable';
 import { findContactByPhone } from '../database/contacts';
 import { useCallAction } from '../hooks/useCallAction';
 import type { RootStackParamList, TabParamList } from '../navigation/types';
@@ -18,7 +16,6 @@ import { telephony } from '../services/telephony/native';
 import { toast } from '../store/toastStore';
 import { colors, radius, shadow } from '../theme';
 import { formatDialerInput, formatPhone } from '../utils/format';
-import { haptics } from '../utils/haptics';
 import { contactStatusLook } from '../utils/status';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -105,37 +102,26 @@ export function DialerScreen() {
         </Text>
         <View style={styles.matchSlot}>
           {match ? (
-            <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(120)} layout={LinearTransition}>
-              <PressableScale
-                onPress={() => navigation.navigate('ContactDetail', { contactId: match.id, preview: match })}
-                style={styles.match}
-                scaleTo={0.97}
-                haptic={false}
-              >
-                <Avatar name={match.name} size={34} />
-                <View style={styles.matchText}>
-                  <Text variant="bodyMedium" numberOfLines={1}>
-                    {match.name}
-                  </Text>
-                  <Text variant="caption" color={contactStatusLook(match.status).color}>
-                    {contactStatusLook(match.status).label} • {formatPhone(match.phone)}
-                  </Text>
-                </View>
-                <Icon name="chevron-right" size={18} color={colors.muted} />
-              </PressableScale>
-            </Animated.View>
+            <Touchable onPress={() => navigation.navigate('ContactDetail', { contactId: match.id, preview: match })} style={styles.match}>
+              <Avatar name={match.name} size={34} />
+              <View style={styles.matchText}>
+                <Text variant="bodyMedium" numberOfLines={1}>
+                  {match.name}
+                </Text>
+                <Text variant="caption" color={contactStatusLook(match.status).color}>
+                  {contactStatusLook(match.status).label} • {formatPhone(match.phone)}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={18} color={colors.muted} />
+            </Touchable>
           ) : emergency ? (
-            <Animated.View entering={FadeIn.duration(200)}>
-              <Text variant="smallMedium" color={colors.red} align="center">
-                Emergency number
-              </Text>
-            </Animated.View>
+            <Text variant="smallMedium" color={colors.red} align="center">
+              Emergency number
+            </Text>
           ) : value.length >= 5 ? (
-            <Animated.View entering={FadeIn.duration(200)}>
-              <Text variant="small" color="muted" align="center">
-                Not in your contacts
-              </Text>
-            </Animated.View>
+            <Text variant="small" color="muted" align="center">
+              Not in your contacts
+            </Text>
           ) : null}
         </View>
       </View>
@@ -144,11 +130,10 @@ export function DialerScreen() {
         {KEYS.map((row, r) => (
           <View key={r} style={styles.row}>
             {row.map((key) => (
-              <PressableScale
+              <Touchable
                 key={key.digit}
                 onPress={() => press(key.digit)}
-                onLongPress={key.digit === '0' ? () => { haptics.select(); press('+'); } : undefined}
-                scaleTo={0.9}
+                onLongPress={key.digit === '0' ? () => press('+') : undefined}
                 style={styles.key}
                 testID={`key-${key.digit}`}
               >
@@ -160,7 +145,7 @@ export function DialerScreen() {
                     {key.letters}
                   </Text>
                 ) : null}
-              </PressableScale>
+              </Touchable>
             ))}
           </View>
         ))}
@@ -168,28 +153,19 @@ export function DialerScreen() {
 
       <View style={styles.bottom}>
         <View style={styles.side} />
-        <PressableScale onPress={placeCall} scaleTo={callable ? 0.92 : 1} haptic={callable} style={styles.callWrap} testID="dialer-call">
-          <PulseRing size={72} color={colors.green} active={callable} duration={1900} />
-          <View style={[styles.callDisc, !callable ? styles.callDisabled : null]}>
-            <Icon name="phone" size={32} color={colors.white} />
-          </View>
-        </PressableScale>
+        <Touchable onPress={placeCall} disabled={!callable} style={styles.callDisc} accessibilityRole="button" accessibilityLabel="Call" testID="dialer-call">
+          <Icon name="phone" size={32} color={colors.white} />
+        </Touchable>
         <View style={styles.side}>
           {value ? (
-            <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
-              <PressableScale
-                onPress={() => setValue((v) => v.slice(0, -1))}
-                onLongPress={() => {
-                  haptics.warning();
-                  setValue('');
-                }}
-                scaleTo={0.85}
-                style={styles.backspace}
-                testID="dialer-backspace"
-              >
-                <Icon name="backspace" size={28} color={colors.inkSoft} />
-              </PressableScale>
-            </Animated.View>
+            <Touchable
+              onPress={() => setValue((v) => v.slice(0, -1))}
+              onLongPress={() => setValue('')}
+              style={styles.backspace}
+              testID="dialer-backspace"
+            >
+              <Icon name="backspace" size={28} color={colors.inkSoft} />
+            </Touchable>
           ) : null}
         </View>
       </View>
@@ -212,8 +188,6 @@ const styles = StyleSheet.create({
   keyLetters: { fontSize: 9, lineHeight: 11, letterSpacing: 1.2, marginTop: -2 },
   bottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginTop: 14 },
   side: { width: 84, alignItems: 'center' },
-  callWrap: { width: 72, height: 72, alignItems: 'center', justifyContent: 'center' },
   callDisc: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', ...(shadow.raised as object) },
-  callDisabled: { backgroundColor: '#9BCBA4' },
   backspace: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
 });

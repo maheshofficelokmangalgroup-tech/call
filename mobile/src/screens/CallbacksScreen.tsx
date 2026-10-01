@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, FadeOutLeft, LinearTransition } from 'react-native-reanimated';
 
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
@@ -11,11 +10,11 @@ import { CallbackPicker } from '../components/CallbackPicker';
 import { Tag } from '../components/Chip';
 import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
-import { RowSkeleton } from '../components/Skeleton';
-import { ScreenHeader } from '../components/ScreenHeader';
 import { PullRefresh } from '../components/PullRefresh';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { RowSkeleton } from '../components/Skeleton';
 import { Text } from '../components/Text';
+import { Touchable } from '../components/Touchable';
 import { useCallbacks } from '../hooks/data';
 import { useCallAction } from '../hooks/useCallAction';
 import type { RootStackParamList } from '../navigation/types';
@@ -24,7 +23,6 @@ import { queueCallbackUpdate } from '../services/data/actions';
 import { toast } from '../store/toastStore';
 import { colors, radius, shadow } from '../theme';
 import { formatPhone } from '../utils/format';
-import { haptics } from '../utils/haptics';
 import { describeCallbackTime, formatDateTime, isSameDay, parseIso, startOfDay } from '../utils/time';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -42,6 +40,8 @@ export function CallbacksScreen() {
   const call = useCallAction();
   const [editing, setEditing] = useState<Callback | null>(null);
   const [when, setWhen] = useState<number | null>(null);
+  // cancelling cannot be undone, so it is confirmed first (Done is not: the callback was handled)
+  const [cancelling, setCancelling] = useState<Callback | null>(null);
 
   const sections = useMemo(() => {
     const now = Date.now();
@@ -53,7 +53,6 @@ export function CallbacksScreen() {
   }, [callbacks.data]);
 
   const remove = (cb: Callback, status: 'done' | 'cancelled') => {
-    haptics.success();
     void queueCallbackUpdate(cb.id, { status });
     callbacks.mutate((list) => (list ?? []).filter((c) => c.id !== cb.id));
     toast.success(status === 'done' ? 'Marked as done' : 'Callback cancelled');
@@ -84,13 +83,13 @@ export function CallbacksScreen() {
             {section.title.toUpperCase()}
           </Text>
         )}
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const at = parseIso(item.scheduled_at) ?? Date.now();
           const overdue = at <= Date.now();
           const contact = item.contact;
           return (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)} exiting={FadeOutLeft.duration(220)} layout={LinearTransition.springify().damping(18)} style={styles.card}>
-              <PressableScale onPress={() => navigation.navigate('ContactDetail', { contactId: item.contact_id, preview: contact ?? undefined })} haptic={false} scaleTo={0.985} style={styles.cardTop}>
+            <View style={styles.card}>
+              <Touchable onPress={() => navigation.navigate('ContactDetail', { contactId: item.contact_id, preview: contact ?? undefined })} style={styles.cardTop}>
                 <Avatar name={contact?.name ?? 'Contact'} size={46} />
                 <View style={styles.flex}>
                   <Text variant="h3" numberOfLines={1}>
@@ -100,7 +99,7 @@ export function CallbacksScreen() {
                     {contact ? formatPhone(contact.phone) : ''}
                   </Text>
                   <View style={styles.tags}>
-                    <Tag label={describeCallbackTime(at)} icon="calendar-clock" color={overdue ? colors.red : '#B45309'} background={overdue ? colors.redSoft : colors.orangeSoft} />
+                    <Tag label={describeCallbackTime(at)} icon="calendar-clock" color={overdue ? colors.red : colors.orangeDark} background={overdue ? colors.redSoft : colors.orangeSoft} />
                     <Text variant="caption" color="muted">
                       {formatDateTime(at)}
                     </Text>
@@ -111,7 +110,7 @@ export function CallbacksScreen() {
                     </Text>
                   ) : null}
                 </View>
-              </PressableScale>
+              </Touchable>
               <View style={styles.actions}>
                 <Button
                   title="Call"
@@ -131,14 +130,14 @@ export function CallbacksScreen() {
                   }}
                   style={styles.flex}
                 />
-                <PressableScale onPress={() => remove(item, 'done')} style={styles.iconBtn} scaleTo={0.88}>
+                <Touchable onPress={() => remove(item, 'done')} style={styles.iconBtn} accessibilityLabel="Mark as done">
                   <Icon name="check" size={20} color={colors.green} />
-                </PressableScale>
-                <PressableScale onPress={() => remove(item, 'cancelled')} style={styles.iconBtn} scaleTo={0.88}>
+                </Touchable>
+                <Touchable onPress={() => setCancelling(item)} style={styles.iconBtn} accessibilityLabel="Cancel callback">
                   <Icon name="x" size={20} color={colors.red} />
-                </PressableScale>
+                </Touchable>
               </View>
-            </Animated.View>
+            </View>
           );
         }}
       />
@@ -159,6 +158,26 @@ export function CallbacksScreen() {
           }}
         />
       </BottomSheet>
+
+      <BottomSheet visible={cancelling !== null} onClose={() => setCancelling(null)} title="Cancel this callback?">
+        <Text variant="body" color="muted" style={styles.confirmText}>
+          It is removed from your callbacks. You can schedule a new one from the contact page.
+        </Text>
+        <View style={styles.confirmButtons}>
+          <Button title="Keep it" variant="outline" size="md" onPress={() => setCancelling(null)} style={styles.flex} />
+          <Button
+            title="Cancel callback"
+            variant="danger"
+            size="md"
+            onPress={() => {
+              if (cancelling) remove(cancelling, 'cancelled');
+              setCancelling(null);
+            }}
+            style={styles.flex}
+            testID="confirm-cancel-callback"
+          />
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -175,4 +194,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   sheetGap: { height: 16 },
+  confirmText: { marginBottom: 18 },
+  confirmButtons: { flexDirection: 'row', gap: 12 },
 });

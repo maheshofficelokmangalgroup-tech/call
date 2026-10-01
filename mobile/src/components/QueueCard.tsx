@@ -7,14 +7,14 @@ import { formatPhone } from '../utils/format';
 import { describeCallbackTime, parseIso, timeAgo } from '../utils/time';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Tag } from './Chip';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 export const PRIORITY_LABEL: Record<number, { label: string; color: string; bg: string }> = {
   1: { label: 'High', color: colors.red, bg: colors.redSoft },
   2: { label: 'Medium', color: colors.blue, bg: colors.blueSoft },
-  3: { label: 'Low', color: colors.muted, bg: '#EEF0F3' },
+  3: { label: 'Low', color: colors.muted, bg: colors.neutralSoft },
 };
 
 function reasonTag(item: QueueItem) {
@@ -42,7 +42,7 @@ export function QueueCard({ item, onOpen, onCall, highlight = false }: Props) {
   const priority = PRIORITY_LABEL[contact.priority];
   const last = parseIso(item.last_called_at);
   return (
-    <PressableScale onPress={onOpen} scaleTo={0.985} haptic={false} style={styles.card}>
+    <Touchable onPress={onOpen} style={styles.card}>
       <Avatar name={contact.name} size={50} />
       <View style={styles.body}>
         <Text variant="h3" numberOfLines={1}>
@@ -63,10 +63,10 @@ export function QueueCard({ item, onOpen, onCall, highlight = false }: Props) {
           </Text>
         ) : null}
       </View>
-      <PressableScale onPress={onCall} scaleTo={0.88} style={[styles.call, highlight ? styles.callHighlight : null]} testID={`call-${contact.id}`}>
+      <Touchable onPress={onCall} style={[styles.call, highlight ? styles.callHighlight : null]} testID={`call-${contact.id}`}>
         <Icon name="phone" size={22} color={colors.white} />
-      </PressableScale>
-    </PressableScale>
+      </Touchable>
+    </Touchable>
   );
 }
 

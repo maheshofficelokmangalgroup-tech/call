@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { fonts } from '../theme';
 import { avatarColors, initials } from '../utils/format';
 import { Icon } from './Icon';
 import { Text } from './Text';
@@ -19,7 +20,7 @@ export function Avatar({ name, size = 48 }: Props) {
       {numberOnly ? (
         <Icon name="user" size={size * 0.46} color={fg} strokeWidth={2.4} />
       ) : (
-        <Text style={{ fontFamily: 'Poppins-Bold', fontSize: size * 0.38, lineHeight: size * 0.5 }} color={fg}>
+        <Text style={{ fontFamily: fonts.bold, fontSize: size * 0.38, lineHeight: size * 0.5 }} color={fg}>
           {initials(name)}
         </Text>
       )}

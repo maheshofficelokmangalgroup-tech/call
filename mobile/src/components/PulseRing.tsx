@@ -1,36 +1,28 @@
 import React, { useEffect } from 'react';
-import Animated, { Easing, cancelAnimation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { colors } from '../theme';
 
 interface Props {
   size: number;
   color?: string;
-  active?: boolean;
-  /** stagger several rings by giving each a different delay */
-  delay?: number;
-  duration?: number;
-  maxScale?: number;
 }
 
-/** An expanding, fading ring behind a button/avatar: "this is live / tap me". */
-export function PulseRing({ size, color = colors.green, active = true, delay = 0, duration = 1800, maxScale = 1.9 }: Props) {
+/**
+ * One soft, expanding ring behind the caller while the phone rings (incoming-call screen only). Like the loading skeleton
+ * and the REC dot it loops because it tells the employee something - here: "this call is ringing now".
+ */
+export function PulseRing({ size, color = colors.white }: Props) {
   const t = useSharedValue(0);
 
   useEffect(() => {
-    if (active) {
-      t.value = 0;
-      t.value = withDelay(delay, withRepeat(withTiming(1, { duration, easing: Easing.out(Easing.quad) }), -1, false));
-    } else {
-      cancelAnimation(t);
-      t.value = 0;
-    }
+    t.value = withRepeat(withTiming(1, { duration: 2000, easing: Easing.out(Easing.quad) }), -1, false);
     return () => cancelAnimation(t);
-  }, [active, delay, duration, t]);
+  }, [t]);
 
   const style = useAnimatedStyle(() => ({
-    opacity: interpolate(t.value, [0, 1], [0.42, 0]),
-    transform: [{ scale: interpolate(t.value, [0, 1], [1, maxScale]) }],
+    opacity: interpolate(t.value, [0, 1], [0.25, 0]),
+    transform: [{ scale: interpolate(t.value, [0, 1], [1, 1.5]) }],
   }));
 
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]} />;

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -98,118 +97,108 @@ export function CallDetailScreen() {
     <View style={styles.root}>
       <ScreenHeader title="Call details" back />
       <ScrollView contentContainerStyle={styles.pad} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(340)}>
-          <Card style={styles.summary}>
-            <Avatar name={name} size={60} />
-            <View style={styles.flex}>
-              <Text variant="h1" numberOfLines={1}>
-                {name}
-              </Text>
-              <Text variant="small" color="muted">
-                {formatPhone(phone)}
-              </Text>
-              <View style={styles.tags}>
-                <Tag label={CALL_STATUS_LABEL[status]} color={status === 'completed' || status === 'connected' ? colors.greenDark : colors.red} background={status === 'completed' || status === 'connected' ? colors.greenSoft : colors.redSoft} />
-                {look && disposition ? <Tag label={server?.disposition?.label ?? disposition.replace(/_/g, ' ')} color={look.tone} background={look.soft} /> : null}
-              </View>
+        <Card style={styles.summary}>
+          <Avatar name={name} size={60} />
+          <View style={styles.flex}>
+            <Text variant="h1" numberOfLines={1}>
+              {name}
+            </Text>
+            <Text variant="small" color="muted">
+              {formatPhone(phone)}
+            </Text>
+            <View style={styles.tags}>
+              <Tag label={CALL_STATUS_LABEL[status]} color={status === 'completed' || status === 'connected' ? colors.greenDark : colors.red} background={status === 'completed' || status === 'connected' ? colors.greenSoft : colors.redSoft} />
+              {look && disposition ? <Tag label={server?.disposition?.label ?? disposition.replace(/_/g, ' ')} color={look.tone} background={look.soft} /> : null}
             </View>
-          </Card>
-        </Animated.View>
+          </View>
+        </Card>
 
-        <Animated.View entering={FadeInDown.delay(60).duration(340)}>
-          <Card style={styles.stats}>
-            <Stat label="When" value={`${formatDayLabel(startedAt)}, ${formatClock(startedAt)}`} />
-            <View style={styles.divider} />
-            <Stat label="Talk time" value={duration > 0 ? formatDuration(duration) : '-'} />
-            <View style={styles.divider} />
-            <Stat label="Attempt" value={server ? `#${server.attempt_number}` : '-'} />
-          </Card>
-        </Animated.View>
+        <Card style={styles.stats}>
+          <Stat label="When" value={`${formatDayLabel(startedAt)}, ${formatClock(startedAt)}`} />
+          <View style={styles.divider} />
+          <Stat label="Talk time" value={duration > 0 ? formatDuration(duration) : '-'} />
+          <View style={styles.divider} />
+          <Stat label="Attempt" value={server ? `#${server.attempt_number}` : '-'} />
+        </Card>
 
         {recordingState ? (
-          <Animated.View entering={FadeInDown.delay(110).duration(340)}>
-            <Card style={styles.section}>
-              <View style={styles.sectionHead}>
-                <Text variant="h2">Recording</Text>
-                <RecordingBadge state={recordingState} />
-              </View>
-              {recordingState === 'available' && recordingId ? (
-                <RecordingPlayer recordingId={recordingId} durationSec={duration || null} />
-              ) : recordingState === 'unavailable' ? (
-                <NotRecorded info={decodeMissing(local?.recordingError)} onFix={() => navigation.navigate('Permissions')} />
-              ) : recordingState === 'failed' ? (
-                <View style={styles.gap}>
-                  <Text variant="small" color={colors.red}>
-                    {local?.recordingError ?? server?.recording?.failure_reason ?? 'The upload failed.'}
-                  </Text>
-                  {local ? (
-                    <Button
-                      title="Retry upload"
-                      icon="upload"
-                      size="sm"
-                      variant="outline"
-                      onPress={async () => {
-                        await retryRecordingUpload(local.uuid);
-                        toast.info('Retrying the upload');
-                      }}
-                    />
-                  ) : null}
-                </View>
-              ) : (
-                <Text variant="small" color="muted">
-                  {recordingState === 'uploading' ? 'Uploading the recording…' : 'The recording will upload automatically when you are online.'}
+          <Card style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text variant="h2">Recording</Text>
+              <RecordingBadge state={recordingState} />
+            </View>
+            {recordingState === 'available' && recordingId ? (
+              <RecordingPlayer recordingId={recordingId} durationSec={duration || null} />
+            ) : recordingState === 'unavailable' ? (
+              <NotRecorded info={decodeMissing(local?.recordingError)} onFix={() => navigation.navigate('Permissions')} />
+            ) : recordingState === 'failed' ? (
+              <View style={styles.gap}>
+                <Text variant="small" color={colors.red}>
+                  {local?.recordingError ?? server?.recording?.failure_reason ?? 'The upload failed.'}
                 </Text>
-              )}
-            </Card>
-          </Animated.View>
+                {local ? (
+                  <Button
+                    title="Retry upload"
+                    icon="upload"
+                    size="sm"
+                    variant="outline"
+                    onPress={async () => {
+                      await retryRecordingUpload(local.uuid);
+                      toast.info('Retrying the upload');
+                    }}
+                  />
+                ) : null}
+              </View>
+            ) : (
+              <Text variant="small" color="muted">
+                {recordingState === 'uploading' ? 'Uploading the recording…' : 'The recording will upload automatically when you are online.'}
+              </Text>
+            )}
+          </Card>
         ) : null}
 
         {notes.length > 0 ? (
-          <Animated.View entering={FadeInDown.delay(150).duration(340)}>
-            <Card style={styles.section}>
-              <Text variant="h2" style={styles.sectionTitle}>
-                Notes
-              </Text>
-              {notes.map((n) => (
-                <View key={n.id} style={styles.note}>
-                  <Text variant="body">{n.body}</Text>
-                  <Text variant="caption" color="faint">
-                    {n.author_name ?? 'You'}
-                  </Text>
-                </View>
-              ))}
-            </Card>
-          </Animated.View>
+          <Card style={styles.section}>
+            <Text variant="h2" style={styles.sectionTitle}>
+              Notes
+            </Text>
+            {notes.map((n) => (
+              <View key={n.id} style={styles.note}>
+                <Text variant="body">{n.body}</Text>
+                <Text variant="caption" color="faint">
+                  {n.author_name ?? 'You'}
+                </Text>
+              </View>
+            ))}
+          </Card>
         ) : null}
 
         {server && server.events.length > 0 ? (
-          <Animated.View entering={FadeInDown.delay(190).duration(340)}>
-            <Card style={styles.section}>
-              <Text variant="h2" style={styles.sectionTitle}>
-                Timeline
-              </Text>
-              {server.events.map((event, index) => {
-                const meta = EVENT_LABEL[event.event_type] ?? { label: event.event_type, icon: 'info' as IconName };
-                const at = parseIso(event.occurred_at) ?? 0;
-                return (
-                  <View key={event.id} style={styles.event}>
-                    <View style={styles.eventRail}>
-                      <View style={styles.eventDot}>
-                        <Icon name={meta.icon} size={14} color={colors.green} />
-                      </View>
-                      {index < server.events.length - 1 ? <View style={styles.eventLine} /> : null}
+          <Card style={styles.section}>
+            <Text variant="h2" style={styles.sectionTitle}>
+              Timeline
+            </Text>
+            {server.events.map((event, index) => {
+              const meta = EVENT_LABEL[event.event_type] ?? { label: event.event_type, icon: 'info' as IconName };
+              const at = parseIso(event.occurred_at) ?? 0;
+              return (
+                <View key={event.id} style={styles.event}>
+                  <View style={styles.eventRail}>
+                    <View style={styles.eventDot}>
+                      <Icon name={meta.icon} size={14} color={colors.green} />
                     </View>
-                    <View style={styles.eventText}>
-                      <Text variant="bodyMedium">{meta.label}</Text>
-                      <Text variant="caption" color="muted">
-                        {formatClock(at)}
-                      </Text>
-                    </View>
+                    {index < server.events.length - 1 ? <View style={styles.eventLine} /> : null}
                   </View>
-                );
-              })}
-            </Card>
-          </Animated.View>
+                  <View style={styles.eventText}>
+                    <Text variant="bodyMedium">{meta.label}</Text>
+                    <Text variant="caption" color="muted">
+                      {formatClock(at)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </Card>
         ) : null}
 
         {offline ? (
@@ -270,7 +259,7 @@ function RecordingBadge({ state }: { state: string }) {
     pending: { label: 'Pending', color: colors.blue, bg: colors.blueSoft },
     uploading: { label: 'Uploading', color: colors.blue, bg: colors.blueSoft },
     failed: { label: 'Failed', color: colors.red, bg: colors.redSoft },
-    unavailable: { label: 'Not recorded', color: colors.muted, bg: '#EEF0F3' },
+    unavailable: { label: 'Not recorded', color: colors.muted, bg: colors.neutralSoft },
   };
   const look = map[state] ?? map.pending;
   return <Tag label={look.label} color={look.color} background={look.bg} />;

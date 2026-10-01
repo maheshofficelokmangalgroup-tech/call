@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, Keyboard, Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { colors, motion, radius } from '../theme';
 import { Text } from './Text';
+
+const OPEN = { duration: motion.base, easing: Easing.out(Easing.cubic) };
 
 interface Props {
   visible: boolean;
@@ -25,7 +27,7 @@ interface Props {
 }
 
 /**
- * Slide-up sheet with a dimmed backdrop, spring entrance and drag-to-dismiss - the pattern quick-commerce apps use
+ * Slide-up sheet with a dimmed backdrop, a short ease-out entrance and drag-to-dismiss - the pattern quick-commerce apps use
  * for everything secondary. Built on Reanimated + Gesture Handler so the drag runs on the UI thread.
  */
 export function BottomSheet({ visible, onClose, title, children, dismissible = true, keyboardAware = false }: Props) {
@@ -43,12 +45,12 @@ export function BottomSheet({ visible, onClose, title, children, dismissible = t
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      translateY.value = withSpring(0, motion.spring);
-      backdrop.value = withTiming(1, { duration: 220 });
+      translateY.value = withTiming(0, OPEN);
+      backdrop.value = withTiming(1, { duration: motion.base });
     } else if (mounted) {
       if (keyboardAware) Keyboard.dismiss();
-      backdrop.value = withTiming(0, { duration: 200 });
-      translateY.value = withTiming(screenHeight, { duration: 240, easing: Easing.in(Easing.cubic) }, (finished) => {
+      backdrop.value = withTiming(0, { duration: motion.base });
+      translateY.value = withTiming(screenHeight, { duration: motion.base, easing: Easing.in(Easing.cubic) }, (finished) => {
         if (finished) scheduleOnRN(unmount);
       });
     }
@@ -77,7 +79,7 @@ export function BottomSheet({ visible, onClose, title, children, dismissible = t
       if (e.translationY > 110 || e.velocityY > 900) {
         scheduleOnRN(onClose);
       } else {
-        translateY.value = withSpring(0, motion.spring);
+        translateY.value = withTiming(0, OPEN);
       }
     },
   });

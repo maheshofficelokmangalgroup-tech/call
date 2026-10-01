@@ -18,7 +18,7 @@ export function Skeleton({ width = '100%', height = 16, rounded = 8, style }: Pr
     t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [t]);
   const animated = useAnimatedStyle(() => ({ opacity: interpolate(t.value, [0, 1], [0.45, 1]) }));
-  return <Animated.View style={[{ width, height, borderRadius: rounded, backgroundColor: '#E4E7EB' }, animated, style]} />;
+  return <Animated.View style={[{ width, height, borderRadius: rounded, backgroundColor: colors.track }, animated, style]} />;
 }
 
 /** A queue-row shaped placeholder. */

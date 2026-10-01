@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeIn, FadeInDown, LinearTransition, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
@@ -10,13 +9,13 @@ import { Button } from '../components/Button';
 import { ContactRow } from '../components/ContactRow';
 import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
-import { QueueCard } from '../components/QueueCard';
-import { RowSkeleton } from '../components/Skeleton';
-import { SegmentedControl } from '../components/SegmentedControl';
-import { SyncBanner } from '../components/SyncBanner';
 import { PullRefresh } from '../components/PullRefresh';
+import { QueueCard } from '../components/QueueCard';
+import { SegmentedControl } from '../components/SegmentedControl';
+import { RowSkeleton } from '../components/Skeleton';
+import { SyncBanner } from '../components/SyncBanner';
 import { Text } from '../components/Text';
+import { Touchable } from '../components/Touchable';
 import { useQueue } from '../hooks/data';
 import { useCallAction } from '../hooks/useCallAction';
 import { useContactSearch } from '../hooks/useContactSearch';
@@ -25,7 +24,6 @@ import type { Contact, QueueItem } from '../services/api/types';
 import { syncEngine } from '../services/sync/syncEngine';
 import { colors, fonts, radius, shadow } from '../theme';
 import { formatPhone, pluralize } from '../utils/format';
-import { haptics } from '../utils/haptics';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Segment = 'today' | 'all';
@@ -54,7 +52,6 @@ export function QueueScreen() {
   const open = useCallback((contact: Contact) => navigation.navigate('ContactDetail', { contactId: contact.id, preview: contact }), [navigation]);
 
   const onRefreshToday = useCallback(async () => {
-    haptics.tap();
     await syncEngine.syncNow();
     await queue.refresh();
   }, [queue]);
@@ -74,7 +71,7 @@ export function QueueScreen() {
           ]}
         />
         {segment === 'all' ? (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.searchWrap}>
+          <View style={styles.searchWrap}>
             <Icon name="search" size={20} color={colors.muted} />
             <TextInput
               value={search}
@@ -87,11 +84,11 @@ export function QueueScreen() {
               testID="contact-search"
             />
             {search ? (
-              <PressableScale onPress={() => setSearch('')} haptic={false} scaleTo={0.85} hitSlop={10}>
+              <Touchable onPress={() => setSearch('')} hitSlop={10} accessibilityLabel="Clear search">
                 <Icon name="x" size={18} color={colors.muted} />
-              </PressableScale>
+              </Touchable>
             ) : null}
-          </Animated.View>
+          </View>
         ) : null}
       </View>
 
@@ -132,9 +129,7 @@ export function QueueScreen() {
             )
           }
           renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 45).duration(360)} layout={LinearTransition.springify().damping(18)}>
-              <QueueCard item={item} highlight={index === 0} onOpen={() => open(item.contact)} onCall={() => callQueueItem(item)} />
-            </Animated.View>
+            <QueueCard item={item} highlight={index === 0} onOpen={() => open(item.contact)} onCall={() => callQueueItem(item)} />
           )}
         />
       ) : (
@@ -174,30 +169,28 @@ export function QueueScreen() {
             )
           }
           ListFooterComponent={contacts.loadingMore ? <ActivityIndicator color={colors.green} style={styles.footer} /> : undefined}
-          renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)}>
-              <ContactRow contact={item} onOpen={() => open(item)} onCall={() => callContact(item)} />
-            </Animated.View>
+          renderItem={({ item }) => (
+            <ContactRow contact={item} onOpen={() => open(item)} onCall={() => callContact(item)} />
           )}
         />
       )}
 
       {segment === 'today' && first ? (
-        <Animated.View entering={SlideInDown.delay(300).springify().damping(16)} style={styles.nextBar}>
+        <View style={styles.nextBar}>
           <Avatar name={first.contact.name} size={42} />
           <View style={styles.nextText}>
-            <Text variant="caption" color="rgba(255,255,255,0.75)">
+            <Text variant="caption" color={colors.onBrandMuted}>
               {first.reason === 'callback' ? 'CALLBACK DUE' : 'NEXT UP'}
             </Text>
             <Text variant="h3" color={colors.white} numberOfLines={1}>
               {first.contact.name}
             </Text>
-            <Text variant="caption" color="rgba(255,255,255,0.8)" numberOfLines={1}>
+            <Text variant="caption" color={colors.onBrandSoft} numberOfLines={1}>
               {formatPhone(first.contact.phone)}
             </Text>
           </View>
           <Button title="Call" icon="phone" variant="accent" size="md" onPress={() => callQueueItem(first)} testID="next-call" />
-        </Animated.View>
+        </View>
       ) : null}
     </View>
   );

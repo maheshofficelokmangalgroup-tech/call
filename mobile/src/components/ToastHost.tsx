@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeOutUp, SlideInUp } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useToastStore, type ToastKind } from '../store/toastStore';
@@ -12,11 +12,11 @@ import { Text } from './Text';
 const STYLE: Record<ToastKind, { bg: string; icon: IconName }> = {
   success: { bg: colors.greenDark, icon: 'check-circle' },
   error: { bg: colors.red, icon: 'alert' },
-  warning: { bg: '#B45309', icon: 'alert' },
+  warning: { bg: colors.orangeDark, icon: 'alert' },
   info: { bg: colors.ink, icon: 'info' },
 };
 
-/** Drops in from the top with a spring, auto-dismisses. Mount once near the root. */
+/** Fades in at the top and dismisses itself. Only errors vibrate. Mount once near the root. */
 export function ToastHost() {
   const current = useToastStore((s) => s.current);
   const hide = useToastStore((s) => s.hide);
@@ -25,7 +25,6 @@ export function ToastHost() {
   useEffect(() => {
     if (!current) return;
     if (current.kind === 'error') haptics.error();
-    else if (current.kind === 'success') haptics.success();
     const timer = setTimeout(() => hide(current.id), current.kind === 'error' ? 4200 : 2600);
     return () => clearTimeout(timer);
   }, [current, hide]);
@@ -36,8 +35,8 @@ export function ToastHost() {
     <View pointerEvents="none" style={[styles.host, { top: insets.top + 10 }]}>
       <Animated.View
         key={current.id}
-        entering={SlideInUp.springify().damping(motion.spring.damping).stiffness(motion.spring.stiffness)}
-        exiting={FadeOutUp.duration(180)}
+        entering={FadeIn.duration(motion.fast)}
+        exiting={FadeOut.duration(motion.fast)}
         style={[styles.toast, { backgroundColor: look.bg }]}
       >
         <Icon name={look.icon} size={20} color={colors.white} />

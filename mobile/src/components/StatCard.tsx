@@ -2,10 +2,9 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { colors, radius, shadow } from '../theme';
-import { AnimatedNumber } from './AnimatedNumber';
 import { Icon, type IconName } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 interface Props {
   label: string;
@@ -24,16 +23,18 @@ export function StatCard({ label, value, icon, tone, toneSoft, onPress, format, 
       <View style={[styles.icon, { backgroundColor: toneSoft }]}>
         <Icon name={icon} size={20} color={tone} />
       </View>
-      <AnimatedNumber value={value} variant="number" format={format} style={styles.number} />
+      <Text variant="number" style={styles.number}>
+        {format ? format(value) : String(value)}
+      </Text>
       <Text variant="smallMedium" color="muted" numberOfLines={1}>
         {label}
       </Text>
     </>
   );
   return onPress ? (
-    <PressableScale onPress={onPress} scaleTo={0.96} style={styles.card} testID={testID}>
+    <Touchable onPress={onPress} style={styles.card} testID={testID}>
       {body}
-    </PressableScale>
+    </Touchable>
   ) : (
     <View style={styles.card} testID={testID}>
       {body}

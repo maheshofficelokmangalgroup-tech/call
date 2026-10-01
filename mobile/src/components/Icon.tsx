@@ -74,6 +74,8 @@ import {
   Zap,
 } from 'lucide-react-native';
 
+import { colors } from '../theme';
+
 const icons = {
   'arrow-left': ArrowLeft,
   'arrow-right': ArrowRight,
@@ -158,7 +160,7 @@ interface IconProps {
   strokeWidth?: number;
 }
 
-export function Icon({ name, size = 22, color = '#1C1C1C', strokeWidth = 2.2 }: IconProps) {
+export function Icon({ name, size = 22, color = colors.ink, strokeWidth = 2.2 }: IconProps) {
   const Glyph = icons[name];
   return <Glyph size={size} color={color} strokeWidth={strokeWidth} />;
 }

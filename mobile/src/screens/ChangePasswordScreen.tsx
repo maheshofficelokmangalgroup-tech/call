@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import Animated, { FadeInDown, interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '../components/Button';
@@ -20,12 +20,12 @@ import { haptics } from '../utils/haptics';
 import { passwordStrength } from '../utils/password';
 
 const LEVELS = ['', 'Weak', 'Fair', 'Good', 'Strong'];
-const LEVEL_COLORS = ['#E4E7EB', colors.red, colors.orange, '#65A30D', colors.green];
+const LEVEL_COLORS = [colors.track, colors.red, colors.orange, colors.lime, colors.green];
 
 function StrengthBar({ score }: { score: number }) {
-  const t = useSharedValue(0);
+  const t = useSharedValue(score);
   useEffect(() => {
-    t.value = withSpring(score, motion.spring);
+    t.value = withTiming(score, { duration: motion.base });
   }, [score, t]);
   const fill = useAnimatedStyle(() => ({ width: `${(t.value / 4) * 100}%`, backgroundColor: interpolateColor(t.value, [0, 1, 2, 3, 4], LEVEL_COLORS) }));
   return (
@@ -62,7 +62,6 @@ export function ChangePasswordScreen() {
     setError(null);
     try {
       await api.changePassword(current, next);
-      haptics.success();
       toast.success('Password changed');
       useAuth.getState().markPasswordChanged();
       if (!forced) navigation.goBack();
@@ -94,7 +93,7 @@ export function ChangePasswordScreen() {
         <ScreenHeader title="Change password" back />
       )}
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(340)}>
+        <View>
           <TextField label="Current password" icon="lock" secure value={current} onChangeText={setCurrent} autoCapitalize="none" placeholder="Current password" />
           <TextField label="New password" icon="lock" secure value={next} onChangeText={setNext} autoCapitalize="none" placeholder="At least 8 characters, letters and numbers" />
           <StrengthBar score={score} />
@@ -110,18 +109,18 @@ export function ChangePasswordScreen() {
             error={mismatch ? 'Passwords do not match' : null}
           />
           {error ? (
-            <Animated.View entering={FadeInDown.duration(200)} style={styles.error}>
+            <View style={styles.error}>
               <Icon name="alert" size={18} color={colors.red} />
               <Text variant="smallMedium" color={colors.red} style={styles.flex}>
                 {error}
               </Text>
-            </Animated.View>
+            </View>
           ) : null}
           <Button title="Update password" icon="check" onPress={submit} loading={loading} disabled={!valid} style={styles.submit} />
           {forced ? (
             <Button title="Sign out" variant="outline" size="md" onPress={() => void useAuth.getState().signOut()} style={styles.signOut} />
           ) : null}
-        </Animated.View>
+        </View>
         <KeyboardSpacer extra={40} />
       </ScrollView>
     </View>
@@ -135,7 +134,7 @@ const styles = StyleSheet.create({
   lock: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   form: { padding: 20 },
   strength: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: -4 },
-  strengthTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: '#E4E7EB', overflow: 'hidden' },
+  strengthTrack: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.track, overflow: 'hidden' },
   strengthFill: { height: '100%', borderRadius: radius.pill },
   gap: { height: 14 },
   error: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.redSoft, marginBottom: 8 },

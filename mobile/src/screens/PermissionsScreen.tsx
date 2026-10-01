@@ -1,26 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Animated, { FadeInDown, FadeInRight, FadeOutLeft, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Tag } from '../components/Chip';
 import { Icon } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
 import { Text } from '../components/Text';
+import { Touchable } from '../components/Touchable';
 import { usePhoneSetup } from '../hooks/usePhoneSetup';
 import { telephony } from '../services/telephony/native';
 import { missingEssential, readyToCall, recommendedQueue, stageProgress, stepsOfStage, type Step, type StepTag } from '../services/telephony/setupModel';
 import { useAuth } from '../store/authStore';
 import { toast } from '../store/toastStore';
-import { colors, motion, radius } from '../theme';
+import { colors, fonts, motion, radius } from '../theme';
 
 const TAG: Record<StepTag, { label: string; color: string; background: string }> = {
   required: { label: 'Required', color: colors.red, background: colors.redSoft },
   recommended: { label: 'Recommended', color: colors.blue, background: colors.blueSoft },
-  optional: { label: 'Optional', color: colors.muted, background: '#EEF0F3' },
+  optional: { label: 'Optional', color: colors.muted, background: colors.neutralSoft },
 };
 
 const INTRO: Record<1 | 2, string> = {
@@ -43,10 +43,11 @@ export function PermissionsScreen() {
   const working = setup.busy !== null;
 
   // thin progress bar under the title
-  const fill = useSharedValue(0);
+  const ratio = progress.total ? progress.granted / progress.total : 0;
+  const fill = useSharedValue(ratio);
   useEffect(() => {
-    fill.value = withSpring(progress.total ? progress.granted / progress.total : 0, motion.springSoft);
-  }, [progress.granted, progress.total, fill]);
+    fill.value = withTiming(ratio, { duration: motion.base });
+  }, [ratio, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
 
   const leave = () => {
@@ -78,32 +79,29 @@ export function PermissionsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 190 }]} showsVerticalScrollIndicator={false}>
-        <Animated.View key={`intro-${stage}`} entering={FadeInDown.duration(260)}>
-          <Text variant="body" color={colors.inkSoft} style={styles.intro}>
-            {INTRO[stage]}
-          </Text>
-        </Animated.View>
+        <Text variant="body" color={colors.inkSoft} style={styles.intro}>
+          {INTRO[stage]}
+        </Text>
 
-        {list.map((step, index) => (
-          <Animated.View key={`${stage}-${step.id}`} entering={FadeInRight.delay(index * 55).duration(300)} exiting={FadeOutLeft.duration(140)}>
-            <SetupRow
-              step={step}
-              busy={setup.busy === step.id || (setup.busy === 'essential' && step.stage === 1 && step.action.kind === 'permission' && step.state !== 'granted')}
-              blocked={step.action.kind === 'permission' && setup.blocked.has(step.action.key) && step.state !== 'granted'}
-              disabled={working}
-              onPress={() => (step.action.kind === 'permission' && setup.blocked.has(step.action.key) ? void telephony.openAppSettings() : void setup.run(step))}
-              onReopen={() => void setup.run({ ...step, state: 'missing' })}
-            />
-          </Animated.View>
+        {list.map((step) => (
+          <SetupRow
+            key={`${stage}-${step.id}`}
+            step={step}
+            busy={setup.busy === step.id || (setup.busy === 'essential' && step.stage === 1 && step.action.kind === 'permission' && step.state !== 'granted')}
+            blocked={step.action.kind === 'permission' && setup.blocked.has(step.action.key) && step.state !== 'granted'}
+            disabled={working}
+            onPress={() => (step.action.kind === 'permission' && setup.blocked.has(step.action.key) ? void telephony.openAppSettings() : void setup.run(step))}
+            onReopen={() => void setup.run({ ...step, state: 'missing' })}
+          />
         ))}
 
         {stage === 2 && recording?.enabled ? (
-          <Animated.View entering={FadeInDown.delay(300).duration(300)} style={styles.notice}>
+          <View style={styles.notice}>
             <Icon name="shield" size={20} color={colors.blue} />
             <Text variant="small" color={colors.blue} style={styles.flex}>
               {recording.notice_text}
             </Text>
-          </Animated.View>
+          </View>
         ) : null}
       </ScrollView>
 
@@ -171,11 +169,11 @@ function SetupRow({ step, busy, blocked, disabled, onPress, onReopen }: { step: 
         <View style={styles.tagRow}>
           <Tag label={tag.label} color={tag.color} background={tag.background} />
           {confirmedByHand ? (
-            <PressableScale onPress={onReopen} haptic={false} scaleTo={0.95}>
+            <Touchable onPress={onReopen}>
               <Text variant="caption" color={colors.green} style={styles.reopen}>
                 Open again
               </Text>
-            </PressableScale>
+            </Touchable>
           ) : null}
         </View>
         <Text variant="small" color="muted" style={styles.why}>
@@ -188,11 +186,11 @@ function SetupRow({ step, busy, blocked, disabled, onPress, onReopen }: { step: 
 
 function TextLink({ label, onPress, disabled, strong, testID }: { label: string; onPress: () => void; disabled?: boolean; strong?: boolean; testID?: string }) {
   return (
-    <PressableScale onPress={onPress} disabled={disabled} haptic={false} scaleTo={0.95} style={styles.link} testID={testID}>
+    <Touchable onPress={onPress} disabled={disabled} style={styles.link} testID={testID}>
       <Text variant="bodyMedium" color={strong ? colors.green : colors.muted} style={strong ? styles.linkStrong : undefined}>
         {label}
       </Text>
-    </PressableScale>
+    </Touchable>
   );
 }
 
@@ -210,11 +208,11 @@ const styles = StyleSheet.create({
   rowIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tagRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  reopen: { fontFamily: 'Poppins-SemiBold' },
+  reopen: { fontFamily: fonts.semibold },
   why: { marginTop: 6 },
   notice: { flexDirection: 'row', gap: 10, padding: 14, borderRadius: radius.lg, backgroundColor: colors.blueSoft },
   bar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, paddingTop: 14, backgroundColor: colors.white, borderTopLeftRadius: 26, borderTopRightRadius: 26, gap: 4 },
   links: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4, minHeight: 44 },
   link: { paddingVertical: 10, paddingHorizontal: 12 },
-  linkStrong: { fontFamily: 'Poppins-SemiBold' },
+  linkStrong: { fontFamily: fonts.semibold },
 });

@@ -1,21 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, View, type TextInputInstance } from 'react-native';
-import Animated, { FadeInDown, SlideInDown, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '../components/BottomSheet';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
 import { KeyboardSpacer } from '../components/KeyboardSpacer';
-import { PressableScale } from '../components/PressableScale';
 import { Text } from '../components/Text';
 import { TextField } from '../components/TextField';
+import { Touchable } from '../components/Touchable';
 import { ApiError, NetworkError, getBaseUrl, normalizeServerUrl, setBaseUrl } from '../services/api/client';
 import { serverUrlProblem } from '../services/api/serverUrl';
 import { api } from '../services/api/endpoints';
 import { useAuth } from '../store/authStore';
 import { toast } from '../store/toastStore';
-import { colors, motion, radius } from '../theme';
+import { colors, fonts, radius } from '../theme';
 import { haptics } from '../utils/haptics';
 
 export function loginErrorMessage(error: unknown): string {
@@ -57,24 +57,22 @@ export function LoginScreen() {
     tapTimer.current = setTimeout(() => (taps.current = 0), 1200);
     if (taps.current >= 5) {
       taps.current = 0;
-      haptics.select();
       setSheet(true);
     }
   };
 
+  // a short shake of the form says "this did not work" (the message under the fields says why)
   const shake = useSharedValue(0);
-  const logoPop = useSharedValue(0);
-  useEffect(() => {
-    logoPop.value = withDelay(120, withSpring(1, motion.springBouncy));
-  }, [logoPop]);
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
-  const logoStyle = useAnimatedStyle(() => ({ transform: [{ scale: logoPop.value }], opacity: logoPop.value }));
+  const shakeForm = useCallback(() => {
+    shake.value = withSequence(withTiming(-9, { duration: 50 }), withTiming(9, { duration: 70 }), withTiming(-6, { duration: 60 }), withTiming(0, { duration: 50 }));
+  }, [shake]);
 
   const submit = useCallback(async () => {
     if (loading) return;
     if (!identifier.trim() || !password) {
       setError('Enter your employee ID (or email) and password.');
-      shake.value = withSequence(withTiming(-9, { duration: 50 }), withTiming(9, { duration: 70 }), withTiming(-6, { duration: 60 }), withTiming(0, { duration: 50 }));
+      shakeForm();
       haptics.warning();
       return;
     }
@@ -83,37 +81,30 @@ export function LoginScreen() {
     setLoading(true);
     try {
       await useAuth.getState().signIn(identifier, password);
-      haptics.success();
     } catch (e) {
       setError(loginErrorMessage(e));
-      shake.value = withSequence(withTiming(-9, { duration: 50 }), withTiming(9, { duration: 70 }), withTiming(-6, { duration: 60 }), withTiming(0, { duration: 50 }));
+      shakeForm();
       haptics.error();
     } finally {
       setLoading(false);
     }
-  }, [identifier, password, loading, shake]);
+  }, [identifier, password, loading, shakeForm]);
 
   return (
     <View style={styles.root}>
       <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
-        <View style={[styles.bubble, styles.bubbleA]} />
-        <View style={[styles.bubble, styles.bubbleB]} />
-        <Animated.View style={logoStyle}>
-          <PressableScale onPress={onLogoTap} haptic={false} scaleTo={0.92} style={styles.logo}>
-            <Icon name="phone-call" size={38} color={colors.green} />
-          </PressableScale>
-        </Animated.View>
-        <Animated.View entering={FadeInDown.delay(250).duration(420)}>
-          <Text variant="display" color={colors.ink} style={styles.heroTitle}>
-            Let’s start{'\n'}calling
-          </Text>
-          <Text variant="body" color={colors.inkSoft}>
-            Sign in to see today’s contacts.
-          </Text>
-        </Animated.View>
+        <Touchable onPress={onLogoTap} style={styles.logo}>
+          <Icon name="phone-call" size={38} color={colors.green} />
+        </Touchable>
+        <Text variant="display" color={colors.ink} style={styles.heroTitle}>
+          Let’s start{'\n'}calling
+        </Text>
+        <Text variant="body" color={colors.inkSoft}>
+          Sign in to see today’s contacts.
+        </Text>
       </View>
 
-      <Animated.View entering={SlideInDown.delay(150).springify().damping(motion.spring.damping).stiffness(180)} style={styles.sheet}>
+      <View style={styles.sheet}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
           <Animated.View style={shakeStyle}>
             {notice ? (
@@ -158,12 +149,12 @@ export function LoginScreen() {
               testID="login-password"
             />
             {error ? (
-              <Animated.View entering={FadeInDown.duration(200)} style={styles.error}>
+              <View style={styles.error}>
                 <Icon name="alert" size={18} color={colors.red} />
                 <Text variant="smallMedium" color={colors.red} style={styles.flex} testID="login-error">
                   {error}
                 </Text>
-              </Animated.View>
+              </View>
             ) : null}
           </Animated.View>
 
@@ -171,7 +162,7 @@ export function LoginScreen() {
           <Text variant="small" color="muted" align="center" style={styles.footnote}>
             Forgot your password? Ask your administrator to reset it.
           </Text>
-          <PressableScale onPress={() => setSheet(true)} haptic={false} scaleTo={0.97} style={styles.server} testID="login-server">
+          <Touchable onPress={() => setSheet(true)} style={styles.server} testID="login-server">
             <View style={styles.serverRow}>
               <Icon name="server" size={14} color={colors.faint} />
               <Text variant="caption" color="faint" numberOfLines={1} style={styles.serverText}>
@@ -181,10 +172,10 @@ export function LoginScreen() {
                 Change
               </Text>
             </View>
-          </PressableScale>
+          </Touchable>
           <KeyboardSpacer extra={24} />
         </ScrollView>
-      </Animated.View>
+      </View>
 
       <ServerSheet visible={sheet} onClose={() => setSheet(false)} />
     </View>
@@ -243,12 +234,12 @@ function ServerSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
       </Text>
       <TextField value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" icon="server" placeholder="https://api.company.com" />
       {result ? (
-        <Animated.View entering={FadeInDown.duration(180)} style={[styles.result, { backgroundColor: result.ok ? colors.greenSoft : colors.redSoft }]}>
+        <View style={[styles.result, { backgroundColor: result.ok ? colors.greenSoft : colors.redSoft }]}>
           <Icon name={result.ok ? 'check-circle' : 'alert'} size={18} color={result.ok ? colors.green : colors.red} />
           <Text variant="smallMedium" color={result.ok ? colors.greenDark : colors.red} style={styles.flex}>
             {result.text}
           </Text>
-        </Animated.View>
+        </View>
       ) : null}
       <View style={styles.sheetButtons}>
         <Button title="Test" variant="outline" size="md" onPress={test} loading={testing} style={styles.flex} />
@@ -260,10 +251,7 @@ function ServerSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.yellow },
-  hero: { paddingHorizontal: 28, paddingBottom: 34, overflow: 'hidden' },
-  bubble: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.22)' },
-  bubbleA: { width: 220, height: 220, right: -70, top: -40 },
-  bubbleB: { width: 120, height: 120, right: 70, top: 120 },
+  hero: { paddingHorizontal: 28, paddingBottom: 34 },
   logo: { width: 78, height: 78, borderRadius: 39, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
   heroTitle: { marginBottom: 6 },
   sheet: { flex: 1, backgroundColor: colors.white, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
@@ -276,7 +264,7 @@ const styles = StyleSheet.create({
   server: { marginTop: 8, alignSelf: 'center' },
   serverRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12 },
   serverText: { maxWidth: 220 },
-  serverChange: { fontFamily: 'Poppins-SemiBold' },
+  serverChange: { fontFamily: fonts.semibold },
   sheetHint: { marginBottom: 14 },
   result: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, marginBottom: 12 },
   sheetButtons: { flexDirection: 'row', gap: 12, marginTop: 4 },

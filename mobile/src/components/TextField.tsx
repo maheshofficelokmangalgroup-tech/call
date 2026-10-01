@@ -4,8 +4,8 @@ import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTimin
 
 import { colors, fonts, radius } from '../theme';
 import { Icon, type IconName } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -54,9 +54,9 @@ export const TextField = forwardRef<TextInputInstance, Props>(function TextField
           style={[styles.input, multiline ? styles.multiline : null, style]}
         />
         {secure ? (
-          <PressableScale onPress={() => setReveal((v) => !v)} haptic={false} scaleTo={0.85} hitSlop={10}>
+          <Touchable onPress={() => setReveal((v) => !v)} hitSlop={10}>
             <Icon name={reveal ? 'eye-off' : 'eye'} size={20} color={colors.muted} />
-          </PressableScale>
+          </Touchable>
         ) : null}
       </Animated.View>
       {error ? (

@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, FadeIn, FadeInDown, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { CallIdentity } from '../../hooks/useCallIdentity';
 import { useNow } from '../../hooks/useNow';
 import { callControls, callSeconds, heldCall, nextRoute, statusLabel, waitingCall } from '../../services/telephony/liveCalls';
 import type { AudioRoute, LiveCall, LiveSnapshot } from '../../services/telephony/native';
-import { colors } from '../../theme';
+import { colors, fonts } from '../../theme';
 import { formatDuration, formatPhone } from '../../utils/format';
 import { Avatar } from '../Avatar';
 import { Icon } from '../Icon';
-import { PressableScale } from '../PressableScale';
-import { PulseRing } from '../PulseRing';
 import { Text } from '../Text';
+import { Touchable } from '../Touchable';
 import { CallBackdrop } from './CallBackdrop';
 import { CallControlButton } from './CallControlButton';
 import { CallDetailsSheet } from './CallDetailsSheet';
@@ -50,7 +49,6 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
     if (ended) setKeypad(false);
   }, [ended]);
 
-  const ringing = call.state === 'dialing' || call.state === 'connecting';
   const onHold = call.state === 'holding';
   const choosingSim = call.state === 'select_sim';
   const route = snapshot.route;
@@ -78,105 +76,99 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
       </View>
 
       {keypad ? (
-        <Animated.View entering={FadeIn.duration(200)} style={styles.compactIdentity}>
+        <View style={styles.compactIdentity}>
           <Avatar name={identity.title} size={52} />
           <View style={styles.compactText}>
             <Text variant="h2" color={colors.white} numberOfLines={1}>
               {identity.title}
             </Text>
-            <Text variant="small" color="rgba(255,255,255,0.8)" numberOfLines={1}>
+            <Text variant="small" color={colors.onBrandSoft} numberOfLines={1}>
               {connected || (ended && seconds > 0) ? formatDuration(seconds) : statusLabel(call)}
               {onHold ? '  •  On hold' : ''}
             </Text>
           </View>
-        </Animated.View>
-      ) : (
-      <Animated.View entering={FadeInDown.duration(360)} style={styles.identity}>
-        <View style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}>
-          {ringing ? (
-            <>
-              <PulseRing size={avatarSize} color={colors.white} delay={0} duration={2400} maxScale={1.9} />
-              <PulseRing size={avatarSize} color={colors.white} delay={1200} duration={2400} maxScale={1.9} />
-            </>
-          ) : null}
-          <Avatar name={identity.title} size={avatarSize} />
         </View>
-        <Text variant="title" color={colors.white} align="center" numberOfLines={2} style={styles.name} testID="call-name">
-          {identity.title}
-        </Text>
-        <Text variant="h3" color="rgba(255,255,255,0.86)" align="center" numberOfLines={1}>
-          {call.number ? formatPhone(call.number) : 'Unknown number'}
-        </Text>
-        {identity.subtitle ? (
-          <Text variant="small" color="rgba(255,255,255,0.7)" align="center" numberOfLines={1}>
-            {identity.subtitle}
+      ) : (
+        <View style={styles.identity}>
+          <View style={styles.avatarWrap}>
+            <Avatar name={identity.title} size={avatarSize} />
+          </View>
+          <Text variant="title" color={colors.white} align="center" numberOfLines={2} style={styles.name} testID="call-name">
+            {identity.title}
           </Text>
-        ) : null}
-
-        <View style={styles.statusBox}>
-          {connected || (ended && seconds > 0) ? (
-            <Text variant="display" color={onHold ? 'rgba(255,255,255,0.55)' : colors.white} align="center" style={styles.timer} testID="call-timer">
-              {formatDuration(seconds)}
+          <Text variant="h3" color={colors.onBrandSoft} align="center" numberOfLines={1}>
+            {call.number ? formatPhone(call.number) : 'Unknown number'}
+          </Text>
+          {identity.subtitle ? (
+            <Text variant="small" color={colors.onBrandMuted} align="center" numberOfLines={1}>
+              {identity.subtitle}
             </Text>
           ) : null}
-          <Text variant="h2" color={ended ? 'rgba(255,255,255,0.8)' : colors.yellow} align="center" testID="call-status">
-            {statusLabel(call)}
-          </Text>
+
+          <View style={styles.statusBox}>
+            {connected || (ended && seconds > 0) ? (
+              <Text variant="display" color={onHold ? colors.onBrandMuted : colors.white} align="center" style={styles.timer} testID="call-timer">
+                {formatDuration(seconds)}
+              </Text>
+            ) : null}
+            <Text variant="h2" color={ended ? colors.onBrandSoft : colors.yellow} align="center" testID="call-status">
+              {statusLabel(call)}
+            </Text>
+          </View>
         </View>
-      </Animated.View>
       )}
 
       {waiting ? (
-        <Animated.View entering={FadeInDown.duration(260)} exiting={FadeOut.duration(160)} style={styles.banner}>
+        <View style={styles.banner}>
           <View style={styles.bannerIcon}>
             <Icon name="phone-in" size={18} color={colors.white} />
           </View>
           <View style={styles.bannerText}>
-            <Text variant="caption" color="rgba(255,255,255,0.75)">
+            <Text variant="caption" color={colors.onBrandMuted}>
               Call waiting
             </Text>
             <Text variant="bodyMedium" color={colors.white} numberOfLines={1}>
               {waiting.name ?? formatPhone(waiting.number)}
             </Text>
           </View>
-          <PressableScale onPress={() => callControls.reject(waiting.id)} scaleTo={0.9} style={[styles.bannerBtn, styles.decline]} testID="waiting-decline">
+          <Touchable onPress={() => callControls.reject(waiting.id)} style={[styles.bannerBtn, styles.decline]} testID="waiting-decline">
             <Icon name="phone-off" size={18} color={colors.white} />
-          </PressableScale>
-          <PressableScale onPress={() => callControls.answer(waiting.id)} scaleTo={0.9} style={[styles.bannerBtn, styles.accept]} testID="waiting-accept">
+          </Touchable>
+          <Touchable onPress={() => callControls.answer(waiting.id)} style={[styles.bannerBtn, styles.accept]} testID="waiting-accept">
             <Icon name="phone" size={18} color={colors.white} />
-          </PressableScale>
-        </Animated.View>
+          </Touchable>
+        </View>
       ) : held ? (
-        <Animated.View entering={FadeInDown.duration(260)} exiting={FadeOut.duration(160)} style={styles.banner}>
+        <View style={styles.banner}>
           <View style={[styles.bannerIcon, styles.holdIcon]}>
             <Icon name="pause" size={18} color={colors.white} />
           </View>
           <View style={styles.bannerText}>
-            <Text variant="caption" color="rgba(255,255,255,0.75)">
+            <Text variant="caption" color={colors.onBrandMuted}>
               On hold
             </Text>
             <Text variant="bodyMedium" color={colors.white} numberOfLines={1}>
               {held.name ?? formatPhone(held.number)}
             </Text>
           </View>
-          <PressableScale onPress={() => callControls.swap()} scaleTo={0.94} style={styles.swap} testID="swap-calls">
+          <Touchable onPress={() => callControls.swap()} style={styles.swap} testID="swap-calls">
             <Text variant="smallMedium" color={colors.greenDark}>
               Swap
             </Text>
-          </PressableScale>
-        </Animated.View>
+          </Touchable>
+        </View>
       ) : null}
 
       <View style={[styles.controls, keypad ? styles.controlsFill : styles.controlsGrid]}>
         {choosingSim ? (
-          <Animated.View entering={FadeIn.duration(220)} style={styles.simCard}>
+          <View style={styles.simCard}>
             <Text variant="h2" style={styles.simTitle}>
               Call with which SIM?
             </Text>
             <SimList sims={call.sims} onPick={(id) => callControls.selectSim(call.id, id)} />
-          </Animated.View>
+          </View>
         ) : keypad ? (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.padWrap}>
+          <View style={styles.padWrap}>
             <Text variant="number" color={colors.white} align="center" numberOfLines={1} style={styles.typed}>
               {typed || ' '}
             </Text>
@@ -187,9 +179,9 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
                 Hide
               </Text>
             </Pressable>
-          </Animated.View>
+          </View>
         ) : (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.grid}>
+          <View style={styles.grid}>
             <View style={styles.gridRow}>
               <CallControlButton
                 icon={snapshot.muted ? 'mic-off' : 'mic'}
@@ -231,14 +223,14 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
               />
               <CallControlButton icon="user" label="Details" onPress={() => setDetailsOpen(true)} size={control} testID="ctl-details" />
             </View>
-          </Animated.View>
+          </View>
         )}
       </View>
 
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 14) + 12 }]}>
-        <PressableScale onPress={() => callControls.hangup(call.id)} disabled={ended} scaleTo={0.92} style={styles.end} accessibilityLabel="End call" testID="end-call">
+        <Touchable onPress={() => callControls.hangup(call.id)} disabled={ended} style={styles.end} accessibilityLabel="End call" testID="end-call">
           <Icon name="phone-off" size={32} color={colors.white} />
-        </PressableScale>
+        </Touchable>
       </View>
 
       {call.sessionId ? <CallNoteSheet visible={noteOpen} onClose={() => setNoteOpen(false)} sessionId={call.sessionId} existing={identity.localCall?.notes ?? null} /> : null}
@@ -250,8 +242,8 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
 function Chip({ label, icon }: { label: string; icon?: React.ComponentProps<typeof Icon>['name'] }) {
   return (
     <View style={styles.chip}>
-      {icon ? <Icon name={icon} size={12} color="rgba(255,255,255,0.9)" /> : null}
-      <Text variant="caption" color="rgba(255,255,255,0.92)">
+      {icon ? <Icon name={icon} size={12} color={colors.onBrandSoft} /> : null}
+      <Text variant="caption" color={colors.onBrandSoft}>
         {label}
       </Text>
     </View>
@@ -276,21 +268,21 @@ function RecChip() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#074F13' },
+  root: { flex: 1, backgroundColor: colors.greenDeep },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, minHeight: 56 },
   chips: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.16)' },
-  recChip: { backgroundColor: 'rgba(226,55,68,0.85)' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.onBrandFill },
+  recChip: { backgroundColor: colors.red },
   recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.white },
-  recText: { fontFamily: 'Poppins-Bold', letterSpacing: 1 },
+  recText: { fontFamily: fonts.bold, letterSpacing: 1 },
   identity: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 3 },
   avatarWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   name: { alignSelf: 'stretch' },
   statusBox: { marginTop: 12, alignItems: 'center', gap: 2, minHeight: 74, justifyContent: 'center' },
   timer: { alignSelf: 'stretch', fontVariant: ['tabular-nums'] },
-  banner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 12, padding: 10, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)' },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 12, padding: 10, borderRadius: 20, backgroundColor: colors.onBrandFill },
   bannerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-  holdIcon: { backgroundColor: 'rgba(255,255,255,0.22)' },
+  holdIcon: { backgroundColor: colors.onBrandFill },
   bannerText: { flex: 1 },
   bannerBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   decline: { backgroundColor: colors.red },

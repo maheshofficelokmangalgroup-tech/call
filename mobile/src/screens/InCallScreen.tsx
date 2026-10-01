@@ -2,15 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
-import { PulseRing } from '../components/PulseRing';
 import { Text } from '../components/Text';
+import { Touchable } from '../components/Touchable';
 import type { RootStackParamList } from '../navigation/types';
 import { LiveCallScreen } from '../components/call/LiveCallScreen';
 import { primaryCall, startLiveCallSync, useLiveCalls } from '../services/telephony/liveCalls';
@@ -90,32 +88,20 @@ function ClassicInCall() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
-      <View style={[styles.bubble, styles.bubbleA]} />
-      <View style={[styles.bubble, styles.bubbleB]} />
-
-      <Animated.View entering={FadeIn.duration(300)} style={styles.top}>
-        <Text variant="smallMedium" color="rgba(255,255,255,0.75)">
+      <View style={styles.top}>
+        <Text variant="smallMedium" color={colors.onBrandMuted}>
           {call.phase === 'failed' ? 'PROBLEM' : 'OUTGOING CALL'}
         </Text>
-      </Animated.View>
+      </View>
 
       <View style={styles.center}>
-        <View style={styles.avatarWrap}>
-          {live ? (
-            <>
-              <PulseRing size={132} color={colors.white} delay={0} duration={2400} maxScale={2.1} />
-              <PulseRing size={132} color={colors.white} delay={800} duration={2400} maxScale={2.1} />
-              <PulseRing size={132} color={colors.white} delay={1600} duration={2400} maxScale={2.1} />
-            </>
-          ) : null}
-          <Avatar name={call.contactName ?? call.phone} size={132} />
-        </View>
-        <Animated.View entering={FadeInDown.delay(120).duration(360)} style={styles.info}>
+        <Avatar name={call.contactName ?? call.phone} size={132} />
+        <View style={styles.info}>
           <Text variant="title" color={colors.white} align="center" numberOfLines={2}>
             {call.contactName ?? formatPhone(call.phone)}
           </Text>
           {call.contactName ? (
-            <Text variant="h3" color="rgba(255,255,255,0.85)" align="center">
+            <Text variant="h3" color={colors.onBrandSoft} align="center">
               {formatPhone(call.phone)}
             </Text>
           ) : null}
@@ -130,19 +116,19 @@ function ClassicInCall() {
               {formatDuration(call.phase === 'finishing' && call.endedAt ? (call.endedAt - (call.offhookAt ?? call.startedAt)) / 1000 : elapsed)}
             </Text>
           ) : null}
-        </Animated.View>
+        </View>
       </View>
 
       {call.phase === 'failed' ? (
-        <Animated.View entering={FadeInDown.duration(300)} style={styles.bottom}>
-          <Text variant="body" color="rgba(255,255,255,0.9)" align="center" style={styles.note}>
+        <View style={styles.bottom}>
+          <Text variant="body" color={colors.onBrandSoft} align="center" style={styles.note}>
             {call.error ?? 'The call could not be placed.'}
           </Text>
           <Button title="Close" variant="accent" onPress={() => { useCallStore.getState().setActive(null); navigation.goBack(); }} />
-        </Animated.View>
+        </View>
       ) : (
-        <Animated.View entering={FadeInDown.delay(200).duration(360)} style={styles.bottom}>
-          <Text variant="small" color="rgba(255,255,255,0.8)" align="center" style={styles.note}>
+        <View style={styles.bottom}>
+          <Text variant="small" color={colors.onBrandSoft} align="center" style={styles.note}>
             {live
               ? phoneApp
                 ? 'Connecting your call…'
@@ -150,29 +136,25 @@ function ClassicInCall() {
               : 'Checking how the call went…'}
           </Text>
           {live ? (
-            <PressableScale onPress={endCall} scaleTo={0.92} style={styles.endButton} testID="end-call">
+            <Touchable onPress={endCall} style={styles.endButton} accessibilityLabel="End call" testID="end-call">
               <Icon name="phone-off" size={30} color={colors.white} />
-            </PressableScale>
+            </Touchable>
           ) : null}
           {live ? (
-            <Text variant="caption" color="rgba(255,255,255,0.7)">
+            <Text variant="caption" color={colors.onBrandMuted}>
               End call
             </Text>
           ) : null}
-        </Animated.View>
+        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.greenDeep, alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden' },
-  bubble: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.05)' },
-  bubbleA: { width: 420, height: 420, top: -140, right: -160 },
-  bubbleB: { width: 300, height: 300, bottom: -90, left: -110 },
+  root: { flex: 1, backgroundColor: colors.greenDeep, alignItems: 'center', justifyContent: 'space-between' },
   top: { alignItems: 'center' },
   center: { alignSelf: 'stretch', alignItems: 'center', gap: 34, paddingHorizontal: 24 },
-  avatarWrap: { width: 132, height: 132, alignItems: 'center', justifyContent: 'center' },
   // The texts span the full width and centre themselves: shrink-wrapped Devanagari names can get their last word clipped.
   info: { alignSelf: 'stretch', alignItems: 'stretch', gap: 4 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12 },

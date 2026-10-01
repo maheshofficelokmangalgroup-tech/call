@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
-import { colors } from '../theme';
+import { colors, motion } from '../theme';
 import { clamp } from '../utils/format';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -18,15 +18,16 @@ interface Props {
   children?: React.ReactNode;
 }
 
-/** Circular progress whose arc sweeps to its value with an ease-out (used for the daily target). */
-export function ProgressRing({ progress, size = 132, stroke = 12, color = colors.yellow, track = 'rgba(255,255,255,0.22)', children }: Props) {
+/** Circular progress (used for the daily target). It opens at its value; a new value eases in briefly. */
+export function ProgressRing({ progress, size = 132, stroke = 12, color = colors.yellow, track = colors.onBrandFill, children }: Props) {
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
-  const p = useSharedValue(0);
+  const target = clamp(progress, 0, 1);
+  const p = useSharedValue(target);
 
   useEffect(() => {
-    p.value = withTiming(clamp(progress, 0, 1), { duration: 1000, easing: Easing.out(Easing.cubic) });
-  }, [progress, p]);
+    p.value = withTiming(target, { duration: motion.base });
+  }, [target, p]);
 
   const animatedProps = useAnimatedProps(() => ({ strokeDashoffset: circumference * (1 - p.value) }));
 

@@ -1,6 +1,7 @@
 /**
  * Design tokens. The look borrows from quick-commerce apps: bold green + yellow brand colours, white cards on a
- * light grey canvas, generous rounding, big touch targets and lively (but short) motion.
+ * light grey canvas, generous rounding, big touch targets and calm, short motion.
+ * Every colour the screens use is defined here - no hex or rgba literals in components.
  */
 import { Platform } from 'react-native';
 
@@ -23,17 +24,33 @@ export const colors = {
   borderStrong: '#D7DBE0',
   red: '#E23744',
   redSoft: '#FDECEE',
+  redLine: '#FCA5A5',
   orange: '#F59E0B',
+  orangeDark: '#B45309',
   orangeSoft: '#FEF3DC',
+  orangeLine: '#FCD34D',
+  lime: '#65A30D',
   blue: '#2563EB',
   blueSoft: '#E8F0FE',
   purple: '#7C3AED',
   purpleSoft: '#F1EAFE',
   teal: '#0E9F9A',
   tealSoft: '#E2F6F5',
+  neutralSoft: '#EEF0F3',
+  track: '#E4E7EB',
   white: '#FFFFFF',
   black: '#000000',
   overlay: 'rgba(17,24,39,0.5)',
+  shade: 'rgba(0,0,0,0.2)',
+  // text and fills drawn on the green brand colour (call screens, hero cards)
+  onBrandSoft: 'rgba(255,255,255,0.85)',
+  onBrandMuted: 'rgba(255,255,255,0.7)',
+  onBrandFill: 'rgba(255,255,255,0.16)',
+  // call screen backdrop
+  callTop: '#0F7F24',
+  callMid: '#0A6119',
+  callBottom: '#042F0C',
+  callGlow: '#4BE06A',
 } as const;
 
 export type ColorName = keyof typeof colors;
@@ -81,15 +98,13 @@ export const shadow = {
   }),
 } as const;
 
-/** Motion presets shared across the app so everything feels like one product. */
+/**
+ * Motion durations (ms). Animations are short timings with no springs: nothing bounces, and nothing loops just for
+ * decoration. The phone's "Remove animations" setting is respected (Reanimated's default).
+ */
 export const motion = {
-  spring: { damping: 16, stiffness: 240, mass: 0.9 },
-  springSoft: { damping: 20, stiffness: 160, mass: 1 },
-  springBouncy: { damping: 11, stiffness: 260, mass: 0.8 },
-  press: { damping: 18, stiffness: 420, mass: 0.6 },
-  fast: 160,
-  base: 240,
-  slow: 380,
+  fast: 150,
+  base: 220,
 } as const;
 
 export const hitSlop = { top: 10, bottom: 10, left: 10, right: 10 } as const;

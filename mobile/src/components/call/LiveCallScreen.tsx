@@ -73,5 +73,5 @@ export function LiveCallScreen({ variant }: Props) {
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, backgroundColor: '#074F13', alignItems: 'center', justifyContent: 'center' },
+  loading: { flex: 1, backgroundColor: colors.greenDeep, alignItems: 'center', justifyContent: 'center' },
 });

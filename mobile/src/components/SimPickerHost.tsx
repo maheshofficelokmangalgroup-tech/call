@@ -6,8 +6,8 @@ import { colors } from '../theme';
 import { BottomSheet } from './BottomSheet';
 import { SimList } from './call/SimList';
 import { Icon } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 /** Mounted once at the app root: shows "Call with which SIM?" whenever a call needs the employee to choose. */
 export function SimPickerHost() {
@@ -23,12 +23,12 @@ export function SimPickerHost() {
   return (
     <BottomSheet visible={open} onClose={() => resolve(null)} title="Call with which SIM?">
       <SimList sims={sims} onPick={(id) => resolve({ id, remember })} />
-      <PressableScale onPress={() => setRemember((r) => !r)} haptic={false} scaleTo={0.98} style={styles.remember}>
+      <Touchable onPress={() => setRemember((r) => !r)} style={styles.remember}>
         <View style={[styles.box, remember ? styles.boxOn : null]}>{remember ? <Icon name="check" size={14} color={colors.white} strokeWidth={3} /> : null}</View>
         <Text variant="small" color="muted">
           Remember my choice
         </Text>
-      </PressableScale>
+      </Touchable>
     </BottomSheet>
   );
 }

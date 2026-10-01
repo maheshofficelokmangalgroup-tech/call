@@ -9,8 +9,8 @@ import { toast } from '../store/toastStore';
 import { colors, radius } from '../theme';
 import { formatDuration } from '../utils/format';
 import { Icon } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 interface Props {
   recordingId: number;
@@ -24,6 +24,7 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
   const [duration, setDuration] = useState((durationSec ?? 0) * 1000);
   const progress = useSharedValue(0);
   const owned = useRef(false);
+  const fetching = useRef(false);
 
   useEffect(() => {
     const sub = audioPlayer.onEvent((event) => {
@@ -51,6 +52,8 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
   const barStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
 
   const toggle = async () => {
+    // a second tap while the link is being fetched or the player is preparing must not start a second playback
+    if (fetching.current || state === 'preparing') return;
     if (state === 'playing') {
       audioPlayer.pause();
       return;
@@ -59,6 +62,7 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
       audioPlayer.resume();
       return;
     }
+    fetching.current = true;
     try {
       setState('preparing');
       const signed = await api.playbackUrl(recordingId);
@@ -69,15 +73,17 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
       if (error instanceof NetworkError) toast.error('You are offline. Connect to play recordings.');
       else if (error instanceof ApiError) toast.error(error.message);
       else toast.error('Could not load the recording.');
+    } finally {
+      fetching.current = false;
     }
   };
 
   const busy = state === 'preparing';
   return (
     <View style={styles.wrap}>
-      <PressableScale onPress={toggle} scaleTo={0.9} style={styles.play} testID="recording-play">
+      <Touchable onPress={toggle} style={styles.play} testID="recording-play" accessibilityRole="button" accessibilityLabel={state === 'playing' ? 'Pause' : 'Play'} accessibilityState={{ busy }}>
         {busy ? <ActivityIndicator color={colors.white} /> : <Icon name={state === 'playing' ? 'pause' : 'play'} size={22} color={colors.white} />}
-      </PressableScale>
+      </Touchable>
       <View style={styles.track}>
         <View style={styles.bar}>
           <Animated.View style={[styles.fill, barStyle]} />
@@ -99,7 +105,7 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   play: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   track: { flex: 1, gap: 6 },
-  bar: { height: 8, borderRadius: radius.pill, backgroundColor: '#E4E7EB', overflow: 'hidden' },
+  bar: { height: 8, borderRadius: radius.pill, backgroundColor: colors.track, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.green },
   times: { flexDirection: 'row', justifyContent: 'space-between' },
 });

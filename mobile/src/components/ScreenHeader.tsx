@@ -5,8 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../theme';
 import { Icon } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 interface Props {
   title: string;
@@ -24,16 +24,16 @@ export function ScreenHeader({ title, subtitle, back = false, right, onBrand = f
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + 8 }]}>
       {back ? (
-        <PressableScale onPress={() => navigation.goBack()} style={[styles.back, onBrand ? styles.backOnBrand : null]} scaleTo={0.9}>
+        <Touchable onPress={() => navigation.goBack()} style={[styles.back, onBrand ? styles.backOnBrand : null]}>
           <Icon name="arrow-left" size={22} color={fg} />
-        </PressableScale>
+        </Touchable>
       ) : null}
       <View style={styles.titles}>
         <Text variant="title" color={fg} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="small" color={onBrand ? 'rgba(255,255,255,0.8)' : 'muted'} numberOfLines={1}>
+          <Text variant="small" color={onBrand ? colors.onBrandSoft : 'muted'} numberOfLines={1}>
             {subtitle}
           </Text>
         ) : null}
@@ -46,7 +46,7 @@ export function ScreenHeader({ title, subtitle, back = false, right, onBrand = f
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, gap: 12 },
   back: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  backOnBrand: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'transparent' },
+  backOnBrand: { backgroundColor: colors.onBrandFill, borderColor: 'transparent' },
   titles: { flex: 1 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

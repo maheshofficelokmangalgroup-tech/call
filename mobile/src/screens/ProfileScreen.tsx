@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
@@ -11,8 +10,8 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Tag } from '../components/Chip';
 import { Icon, type IconName } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
 import { Text } from '../components/Text';
+import { Touchable } from '../components/Touchable';
 import type { RootStackParamList } from '../navigation/types';
 import { syncEngine } from '../services/sync/syncEngine';
 import { telephony, type SimAccount } from '../services/telephony/native';
@@ -29,7 +28,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function Row({ icon, label, value, onPress, tone = colors.green, toneSoft = colors.greenSoft, danger }: { icon: IconName; label: string; value?: string; onPress?: () => void; tone?: string; toneSoft?: string; danger?: boolean }) {
   return (
-    <PressableScale onPress={onPress} disabled={!onPress} haptic={false} scaleTo={0.985} style={styles.row}>
+    <Touchable onPress={onPress} disabled={!onPress} style={styles.row}>
       <View style={[styles.rowIcon, { backgroundColor: toneSoft }]}>
         <Icon name={icon} size={20} color={tone} />
       </View>
@@ -44,7 +43,7 @@ function Row({ icon, label, value, onPress, tone = colors.green, toneSoft = colo
         ) : null}
       </View>
       {onPress ? <Icon name="chevron-right" size={18} color={colors.faint} /> : null}
-    </PressableScale>
+    </Touchable>
   );
 }
 
@@ -77,26 +76,24 @@ export function ProfileScreen() {
           Profile
         </Text>
 
-        <Animated.View entering={FadeInDown.duration(360)}>
-          <Card style={styles.header}>
-            <Avatar name={employee.full_name} size={68} />
-            <View style={styles.flex}>
-              <Text variant="h1" numberOfLines={1}>
-                {employee.full_name}
-              </Text>
-              <Text variant="small" color="muted">
-                {employee.employee_code} • {employee.email}
-              </Text>
-              <View style={styles.tags}>
-                <Tag label={titleCase(employee.role)} icon="badge-check" />
-                {employee.team_name ? <Tag label={employee.team_name} icon="users" color={colors.blue} background={colors.blueSoft} /> : null}
-                <Tag label={`Target ${employee.daily_target}/day`} icon="target" color="#B45309" background={colors.orangeSoft} />
-              </View>
+        <Card style={styles.header}>
+          <Avatar name={employee.full_name} size={68} />
+          <View style={styles.flex}>
+            <Text variant="h1" numberOfLines={1}>
+              {employee.full_name}
+            </Text>
+            <Text variant="small" color="muted">
+              {employee.employee_code} • {employee.email}
+            </Text>
+            <View style={styles.tags}>
+              <Tag label={titleCase(employee.role)} icon="badge-check" />
+              {employee.team_name ? <Tag label={employee.team_name} icon="users" color={colors.blue} background={colors.blueSoft} /> : null}
+              <Tag label={`Target ${employee.daily_target}/day`} icon="target" color={colors.orangeDark} background={colors.orangeSoft} />
             </View>
-          </Card>
-        </Animated.View>
+          </View>
+        </Card>
 
-        <Animated.View entering={FadeInDown.delay(70).duration(360)}>
+        <View>
           <Text variant="smallMedium" color="muted" style={styles.group}>
             PHONE
           </Text>
@@ -130,9 +127,9 @@ export function ProfileScreen() {
               </>
             ) : null}
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(130).duration(360)}>
+        <View>
           <Text variant="smallMedium" color="muted" style={styles.group}>
             SYNC
           </Text>
@@ -154,18 +151,18 @@ export function ProfileScreen() {
               {sync.failed > 0 ? <Button title="Retry failed" size="sm" variant="outline" onPress={() => void syncEngine.retryFailed()} style={styles.flex} /> : null}
             </View>
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(190).duration(360)}>
+        <View>
           <Text variant="smallMedium" color="muted" style={styles.group}>
             ACCOUNT
           </Text>
           <Card padded={false} style={styles.list}>
             <Row icon="lock" label="Change password" onPress={() => navigation.navigate('ChangePassword', {})} tone={colors.purple} toneSoft={colors.purpleSoft} />
             <View style={styles.sep} />
-            <Row icon="server" label="Server" value={serverUrl} tone={colors.muted} toneSoft="#EEF0F3" />
+            <Row icon="server" label="Server" value={serverUrl} tone={colors.muted} toneSoft={colors.neutralSoft} />
             <View style={styles.sep} />
-            <Row icon="info" label="App version" value={version || '1.0.0'} tone={colors.muted} toneSoft="#EEF0F3" />
+            <Row icon="info" label="App version" value={version || '1.0.0'} tone={colors.muted} toneSoft={colors.neutralSoft} />
             {config?.recording.enabled ? (
               <>
                 <View style={styles.sep} />
@@ -173,11 +170,11 @@ export function ProfileScreen() {
               </>
             ) : null}
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(250).duration(360)} style={styles.out}>
+        <View style={styles.out}>
           <Button title="Sign out" icon="log-out" variant="outline" onPress={() => setConfirmOut(true)} testID="sign-out" />
-        </Animated.View>
+        </View>
       </ScrollView>
 
       <BottomSheet visible={confirmOut} onClose={() => setConfirmOut(false)} title="Sign out?">

@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { StatusBar } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ReduceMotion, ReducedMotionConfig } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CallWatcher } from './src/components/CallWatcher';
@@ -26,7 +25,6 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ReducedMotionConfig mode={ReduceMotion.Never} />
       <SafeAreaProvider>
         <StatusBar barStyle="dark-content" />
         <NavigationContainer ref={navigationRef} theme={navTheme}>

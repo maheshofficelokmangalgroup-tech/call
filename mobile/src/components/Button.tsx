@@ -1,11 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, radius } from '../theme';
+import { colors, fonts, radius } from '../theme';
 import { Icon, type IconName } from './Icon';
-import { PressableScale } from './PressableScale';
 import { Text } from './Text';
+import { Touchable } from './Touchable';
 
 type Variant = 'primary' | 'accent' | 'soft' | 'outline' | 'danger' | 'dark';
 type Size = 'lg' | 'md' | 'sm';
@@ -38,7 +37,7 @@ export function Button({ title, onPress, variant = 'primary', size = 'lg', icon,
   const palette = PALETTE[variant];
   const iconSize = size === 'sm' ? 16 : 20;
   return (
-    <PressableScale
+    <Touchable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={title}
@@ -53,19 +52,17 @@ export function Button({ title, onPress, variant = 'primary', size = 'lg', icon,
       ]}
     >
       {loading ? (
-        <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
-          <ActivityIndicator color={palette.fg} />
-        </Animated.View>
+        <ActivityIndicator color={palette.fg} />
       ) : (
-        <Animated.View entering={FadeIn.duration(150)} style={styles.row}>
+        <View style={styles.row}>
           {icon ? <Icon name={icon} size={iconSize} color={palette.fg} /> : null}
           <Text variant={size === 'sm' ? 'bodyMedium' : 'button'} color={palette.fg} numberOfLines={1} style={size === 'sm' ? styles.smallLabel : undefined}>
             {title}
           </Text>
           {iconRight ? <Icon name={iconRight} size={iconSize} color={palette.fg} /> : null}
-        </Animated.View>
+        </View>
       )}
-    </PressableScale>
+    </Touchable>
   );
 }
 
@@ -78,5 +75,5 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   smallPad: { paddingHorizontal: 12 },
-  smallLabel: { fontFamily: 'Poppins-SemiBold', flexShrink: 1 },
+  smallLabel: { fontFamily: fonts.semibold, flexShrink: 1 },
 });

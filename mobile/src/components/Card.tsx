@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { colors, radius, shadow, space } from '../theme';
-import { PressableScale } from './PressableScale';
+import { Touchable } from './Touchable';
 
 interface CardProps extends ViewProps {
   style?: StyleProp<ViewStyle>;
@@ -16,9 +16,9 @@ export function Card({ style, onPress, padded = true, tint, children, ...rest }:
   const body = [styles.card, padded ? styles.padded : null, tint ? { backgroundColor: tint } : null, style];
   if (onPress) {
     return (
-      <PressableScale onPress={onPress} scaleTo={0.98} style={body}>
+      <Touchable onPress={onPress} style={body}>
         {children}
-      </PressableScale>
+      </Touchable>
     );
   }
   return (

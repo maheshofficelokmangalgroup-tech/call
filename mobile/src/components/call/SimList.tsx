@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radius } from '../../theme';
+import { colors, fonts, radius } from '../../theme';
 import { Icon } from '../Icon';
-import { PressableScale } from '../PressableScale';
 import { Text } from '../Text';
+import { Touchable } from '../Touchable';
 
 interface SimOption {
   id: string;
@@ -18,7 +18,7 @@ export function SimList({ sims, onPick }: { sims: SimOption[]; onPick: (id: stri
   return (
     <View style={styles.list}>
       {sims.map((sim, index) => (
-        <PressableScale key={sim.id} onPress={() => onPick(sim.id)} scaleTo={0.97} style={styles.row} testID={`sim-${index + 1}`}>
+        <Touchable key={sim.id} onPress={() => onPick(sim.id)} style={styles.row} testID={`sim-${index + 1}`}>
           <View style={styles.badge}>
             <Icon name="smartphone" size={20} color={colors.green} />
             <Text variant="caption" color={colors.greenDark} style={styles.slot}>
@@ -36,7 +36,7 @@ export function SimList({ sims, onPick }: { sims: SimOption[]; onPick: (id: stri
             ) : null}
           </View>
           <Icon name="chevron-right" size={20} color={colors.faint} />
-        </PressableScale>
+        </Touchable>
       ))}
     </View>
   );
@@ -46,6 +46,6 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.lg, backgroundColor: colors.bg },
   badge: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
-  slot: { position: 'absolute', right: 4, bottom: 2, fontFamily: 'Poppins-Bold', fontSize: 10, lineHeight: 12 },
+  slot: { position: 'absolute', right: 4, bottom: 2, fontFamily: fonts.bold, fontSize: 10, lineHeight: 12 },
   text: { flex: 1 },
 });

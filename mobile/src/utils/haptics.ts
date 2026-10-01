@@ -9,9 +9,11 @@ function pulse(ms: number | number[]) {
   }
 }
 
+/**
+ * Only for moments that matter: an outcome saved, a call that ended and needs its outcome, and errors.
+ * Ordinary taps never vibrate.
+ */
 export const haptics = {
-  tap: () => pulse(8),
-  select: () => pulse(12),
   success: () => pulse([0, 18, 40, 28]),
   warning: () => pulse([0, 30, 40, 30]),
   error: () => pulse([0, 40, 60, 40, 60, 40]),

@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 import { colors } from '../theme';
 import { Button } from './Button';
@@ -17,22 +16,13 @@ interface Props {
   toneSoft?: string;
 }
 
-/** Friendly empty/error state with a gently floating icon. */
+/** Friendly empty/error state: an icon, a title and what to do next. */
 export function EmptyState({ icon, title, message, actionLabel, onAction, tone = colors.green, toneSoft = colors.greenSoft }: Props) {
-  const float = useSharedValue(0);
-  useEffect(() => {
-    float.value = withRepeat(
-      withSequence(withTiming(-7, { duration: 1400, easing: Easing.inOut(Easing.quad) }), withTiming(0, { duration: 1400, easing: Easing.inOut(Easing.quad) })),
-      -1,
-    );
-  }, [float]);
-  const floatStyle = useAnimatedStyle(() => ({ transform: [{ translateY: float.value }] }));
-
   return (
-    <Animated.View entering={FadeInUp.duration(380)} style={styles.wrap}>
-      <Animated.View style={[styles.disc, { backgroundColor: toneSoft }, floatStyle]}>
+    <View style={styles.wrap}>
+      <View style={[styles.disc, { backgroundColor: toneSoft }]}>
         <Icon name={icon} size={40} color={tone} />
-      </Animated.View>
+      </View>
       <Text variant="h1" align="center" style={styles.title}>
         {title}
       </Text>
@@ -46,7 +36,7 @@ export function EmptyState({ icon, title, message, actionLabel, onAction, tone =
           <Button title={actionLabel} onPress={onAction} size="md" variant="soft" />
         </View>
       ) : null}
-    </Animated.View>
+    </View>
   );
 }
 

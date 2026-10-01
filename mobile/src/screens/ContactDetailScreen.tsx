@@ -4,7 +4,6 @@ import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, {
   Extrapolation,
-  FadeInDown,
   SlideInDown,
   SlideOutDown,
   interpolate,
@@ -24,11 +23,10 @@ import { CallbackPicker } from '../components/CallbackPicker';
 import { Card } from '../components/Card';
 import { Tag } from '../components/Chip';
 import { Icon } from '../components/Icon';
-import { PressableScale } from '../components/PressableScale';
-import { PulseRing } from '../components/PulseRing';
 import { Skeleton } from '../components/Skeleton';
 import { Text } from '../components/Text';
 import { TextField } from '../components/TextField';
+import { Touchable } from '../components/Touchable';
 import { listCallsForContact, type LocalCall } from '../database/calls';
 import { getUnsyncedCallUuids } from '../database/syncOps';
 import { useCallbacks } from '../hooks/data';
@@ -42,9 +40,8 @@ import { queueCallback, queueCallbackUpdate, queueNote } from '../services/data/
 import { useAuth } from '../store/authStore';
 import { useSyncStore } from '../store/syncStore';
 import { toast } from '../store/toastStore';
-import { colors, radius, shadow } from '../theme';
+import { colors, fonts, hitSlop, motion, radius, shadow } from '../theme';
 import { formatPhone } from '../utils/format';
-import { haptics } from '../utils/haptics';
 import { contactStatusLook } from '../utils/status';
 import { describeCallbackTime, formatDateTime, parseIso, timeAgo } from '../utils/time';
 import { PRIORITY_LABEL } from '../components/QueueCard';
@@ -91,18 +88,13 @@ export function ContactDetailScreen() {
   const [noteSheet, setNoteSheet] = useState(false);
   const [callbackSheet, setCallbackSheet] = useState(false);
 
-  // header / sticky bar animation
+  // once the green header has scrolled away: the name in a slim top bar, and a Call button at the bottom
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.value = e.contentOffset.y;
   });
-  const heroStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, HERO * 0.6], [1, 0], Extrapolation.CLAMP),
-    transform: [{ translateY: interpolate(scrollY.value, [-100, 0, HERO], [-50, 0, HERO * 0.45], Extrapolation.CLAMP) }, { scale: interpolate(scrollY.value, [-120, 0], [1.12, 1], Extrapolation.CLAMP) }],
-  }));
   const compactStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [HERO * 0.45, HERO * 0.75], [0, 1], Extrapolation.CLAMP),
-    transform: [{ translateY: interpolate(scrollY.value, [HERO * 0.45, HERO * 0.75], [-12, 0], Extrapolation.CLAMP) }],
   }));
   const [showStickyCall, setShowStickyCall] = useState(false);
   useAnimatedReaction(
@@ -135,14 +127,12 @@ export function ContactDetailScreen() {
   return (
     <View style={styles.root}>
       <Animated.ScrollView onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Animated.View style={[styles.hero, { paddingTop: insets.top + 64 }, heroStyle]}>
-          <View style={[styles.bubble, styles.bubbleA]} />
-          <View style={[styles.bubble, styles.bubbleB]} />
+        <View style={[styles.hero, { paddingTop: insets.top + 64 }]}>
           <Avatar name={contact.name} size={84} />
           <Text variant="title" color={colors.white} align="center" style={styles.name} numberOfLines={2}>
             {contact.name}
           </Text>
-          <Text variant="h3" color="rgba(255,255,255,0.9)" selectable>
+          <Text variant="h3" color={colors.onBrandSoft} selectable>
             {formatPhone(contact.phone)}
           </Text>
           <View style={styles.heroTags}>
@@ -157,102 +147,92 @@ export function ContactDetailScreen() {
                 <Icon name="shield" size={28} color={colors.white} />
               </View>
             ) : (
-              <PressableScale onPress={startCall} scaleTo={0.92} style={styles.callFab} testID="contact-call">
-                <PulseRing size={68} color={colors.yellow} duration={2000} />
-                <View style={styles.callDisc}>
-                  <Icon name="phone" size={30} color={colors.ink} />
-                </View>
-              </PressableScale>
+              <Touchable onPress={startCall} style={styles.callDisc} accessibilityRole="button" accessibilityLabel="Call" testID="contact-call">
+                <Icon name="phone" size={30} color={colors.ink} />
+              </Touchable>
             )}
             <ActionButton icon="note" label="Note" onPress={() => setNoteSheet(true)} />
           </View>
-        </Animated.View>
+        </View>
 
         <View style={styles.body}>
           {blocked ? (
-            <Animated.View entering={FadeInDown.duration(300)} style={styles.blockedCard}>
+            <View style={styles.blockedCard}>
               <Icon name="shield" size={22} color={colors.red} />
               <Text variant="bodyMedium" color={colors.red} style={styles.flex}>
                 This contact asked not to be called. Calling is blocked.
               </Text>
-            </Animated.View>
+            </View>
           ) : null}
 
           {pendingCallback ? (
-            <Animated.View entering={FadeInDown.delay(40).duration(340)}>
-              <CallbackCard
-                callback={pendingCallback}
-                onCall={startCall}
-                onReschedule={() => setCallbackSheet(true)}
-                onDone={() => {
-                  haptics.success();
-                  void queueCallbackUpdate(pendingCallback.id, { status: 'done' });
-                  callbacks.mutate((list) => (list ?? []).filter((c) => c.id !== pendingCallback.id));
-                  toast.success('Callback marked as done');
-                }}
-              />
-            </Animated.View>
+            <CallbackCard
+              callback={pendingCallback}
+              onCall={startCall}
+              onReschedule={() => setCallbackSheet(true)}
+              onDone={() => {
+                void queueCallbackUpdate(pendingCallback.id, { status: 'done' });
+                callbacks.mutate((list) => (list ?? []).filter((c) => c.id !== pendingCallback.id));
+                toast.success('Callback marked as done');
+              }}
+            />
           ) : null}
 
-          <Animated.View entering={FadeInDown.delay(90).duration(340)}>
-            <Card style={styles.card}>
-              <Text variant="h2" style={styles.cardTitle}>
-                Details
-              </Text>
-              {detail.loading && !full ? (
-                <>
-                  <Skeleton height={16} style={styles.lineGap} />
-                  <Skeleton height={16} width="70%" />
-                </>
-              ) : (
-                <>
-                  <DetailLine icon="mail" label="Email" value={contact.email} />
-                  <DetailLine icon="pin" label="Location" value={contact.location} />
-                  <DetailLine icon="tag" label="Category" value={contact.category} />
-                  <DetailLine icon="phone-out" label="Calls so far" value={String(contact.call_count)} />
-                  <DetailLine icon="clock" label="Last called" value={last ? timeAgo(last) : 'Never'} />
-                  {customEntries.map(([key, value]) => (
-                    <DetailLine key={key} icon="info" label={key} value={String(value)} />
-                  ))}
-                  {contact.tags.length > 0 ? (
-                    <View style={styles.tagWrap}>
-                      {contact.tags.map((t) => (
-                        <Tag key={t} label={t} color={colors.inkSoft} background="#EEF0F3" />
-                      ))}
-                    </View>
-                  ) : null}
-                </>
-              )}
-            </Card>
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.delay(140).duration(340)}>
-            <Card style={styles.card}>
-              <View style={styles.cardHead}>
-                <Text variant="h2">Notes</Text>
-                <PressableScale onPress={() => setNoteSheet(true)} haptic={false} scaleTo={0.92}>
-                  <Text variant="smallMedium" color={colors.green} style={styles.link}>
-                    + Add note
-                  </Text>
-                </PressableScale>
-              </View>
-              {(notes.data ?? []).length === 0 ? (
-                <Text variant="small" color="muted">
-                  No notes yet. Add what matters for the next call.
-                </Text>
-              ) : (
-                (notes.data ?? []).slice(0, 5).map((n) => (
-                  <View key={n.id} style={styles.note}>
-                    <Text variant="body">{n.body}</Text>
-                    <Text variant="caption" color="faint">
-                      {n.author_name ?? 'You'} • {timeAgo(parseIso(n.created_at) ?? Date.now())}
-                      {n.id < 0 ? '  • waiting to sync' : ''}
-                    </Text>
+          <Card style={styles.card}>
+            <Text variant="h2" style={styles.cardTitle}>
+              Details
+            </Text>
+            {detail.loading && !full ? (
+              <>
+                <Skeleton height={16} style={styles.lineGap} />
+                <Skeleton height={16} width="70%" />
+              </>
+            ) : (
+              <>
+                <DetailLine icon="mail" label="Email" value={contact.email} />
+                <DetailLine icon="pin" label="Location" value={contact.location} />
+                <DetailLine icon="tag" label="Category" value={contact.category} />
+                <DetailLine icon="phone-out" label="Calls so far" value={String(contact.call_count)} />
+                <DetailLine icon="clock" label="Last called" value={last ? timeAgo(last) : 'Never'} />
+                {customEntries.map(([key, value]) => (
+                  <DetailLine key={key} icon="info" label={key} value={String(value)} />
+                ))}
+                {contact.tags.length > 0 ? (
+                  <View style={styles.tagWrap}>
+                    {contact.tags.map((t) => (
+                      <Tag key={t} label={t} color={colors.inkSoft} background={colors.neutralSoft} />
+                    ))}
                   </View>
-                ))
-              )}
-            </Card>
-          </Animated.View>
+                ) : null}
+              </>
+            )}
+          </Card>
+
+          <Card style={styles.card}>
+            <View style={styles.cardHead}>
+              <Text variant="h2">Notes</Text>
+              <Touchable onPress={() => setNoteSheet(true)} hitSlop={hitSlop} accessibilityRole="button">
+                <Text variant="smallMedium" color={colors.green} style={styles.link}>
+                  + Add note
+                </Text>
+              </Touchable>
+            </View>
+            {(notes.data ?? []).length === 0 ? (
+              <Text variant="small" color="muted">
+                No notes yet. Add what matters for the next call.
+              </Text>
+            ) : (
+              (notes.data ?? []).slice(0, 5).map((n) => (
+                <View key={n.id} style={styles.note}>
+                  <Text variant="body">{n.body}</Text>
+                  <Text variant="caption" color="faint">
+                    {n.author_name ?? 'You'} • {timeAgo(parseIso(n.created_at) ?? Date.now())}
+                    {n.id < 0 ? '  • waiting to sync' : ''}
+                  </Text>
+                </View>
+              ))
+            )}
+          </Card>
 
           <Text variant="h2" style={styles.sectionTitle}>
             Call history
@@ -262,33 +242,32 @@ export function ContactDetailScreen() {
               No calls yet.
             </Text>
           ) : (
-            callHistory.slice(0, 15).map((row, index) => (
-              <Animated.View key={row.key} entering={FadeInDown.delay(Math.min(index, 6) * 40).duration(300)}>
-                <CallRow
-                  row={row}
-                  showName={false}
-                  onPress={() => navigation.navigate('CallDetail', row.localUuid ? { callUuid: row.localUuid } : { serverId: row.serverId ?? undefined })}
-                />
-              </Animated.View>
+            callHistory.slice(0, 15).map((row) => (
+              <CallRow
+                key={row.key}
+                row={row}
+                showName={false}
+                onPress={() => navigation.navigate('CallDetail', row.localUuid ? { callUuid: row.localUuid } : { serverId: row.serverId ?? undefined })}
+              />
             ))
           )}
         </View>
       </Animated.ScrollView>
 
-      {/* top bars */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-        <PressableScale onPress={() => navigation.goBack()} style={styles.back} scaleTo={0.9} testID="contact-back">
-          <Icon name="arrow-left" size={22} color={colors.ink} />
-        </PressableScale>
-      </View>
+      {/* top bars: the back button stays above the slim name bar */}
       <Animated.View pointerEvents="none" style={[styles.compact, { paddingTop: insets.top + 8 }, compactStyle]}>
         <Text variant="h2" numberOfLines={1} style={styles.compactName}>
           {contact.name}
         </Text>
       </Animated.View>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+        <Touchable onPress={() => navigation.goBack()} style={styles.back} accessibilityLabel="Back" testID="contact-back">
+          <Icon name="arrow-left" size={22} color={colors.ink} />
+        </Touchable>
+      </View>
 
       {showStickyCall && !blocked ? (
-        <Animated.View entering={SlideInDown.springify().damping(16)} exiting={SlideOutDown.duration(180)} style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <Animated.View entering={SlideInDown.duration(motion.base)} exiting={SlideOutDown.duration(motion.fast)} style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <Button title={`Call ${contact.name.split(' ')[0]}`} icon="phone" onPress={startCall} />
         </Animated.View>
       ) : null}
@@ -340,14 +319,14 @@ export function ContactDetailScreen() {
 
 function ActionButton({ icon, label, onPress, disabled }: { icon: React.ComponentProps<typeof Icon>['name']; label: string; onPress: () => void; disabled?: boolean }) {
   return (
-    <PressableScale onPress={onPress} disabled={disabled} scaleTo={0.9} style={styles.action}>
+    <Touchable onPress={onPress} disabled={disabled} style={styles.action}>
       <View style={styles.actionDisc}>
         <Icon name={icon} size={22} color={colors.white} />
       </View>
-      <Text variant="caption" color="rgba(255,255,255,0.9)">
+      <Text variant="caption" color={colors.onBrandSoft}>
         {label}
       </Text>
-    </PressableScale>
+    </Touchable>
   );
 }
 
@@ -374,9 +353,9 @@ function CallbackCard({ callback, onCall, onReschedule, onDone }: { callback: Ca
   return (
     <View style={[styles.callbackCard, overdue ? styles.callbackOverdue : null]}>
       <View style={styles.callbackHead}>
-        <Icon name="calendar-clock" size={22} color={overdue ? colors.red : '#B45309'} />
+        <Icon name="calendar-clock" size={22} color={overdue ? colors.red : colors.orangeDark} />
         <View style={styles.flex}>
-          <Text variant="h3" color={overdue ? colors.red : '#7C2D12'}>
+          <Text variant="h3" color={overdue ? colors.red : colors.orangeDark}>
             Callback {describeCallbackTime(when)}
           </Text>
           <Text variant="small" color="muted">
@@ -472,16 +451,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   scroll: { paddingBottom: 160 },
-  hero: { backgroundColor: colors.green, alignItems: 'center', paddingBottom: 26, paddingHorizontal: 20, borderBottomLeftRadius: 34, borderBottomRightRadius: 34, overflow: 'hidden', minHeight: HERO },
-  bubble: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
-  bubbleA: { width: 240, height: 240, right: -80, top: -90 },
-  bubbleB: { width: 130, height: 130, left: -40, bottom: 10 },
+  hero: { backgroundColor: colors.green, alignItems: 'center', paddingBottom: 26, paddingHorizontal: 20, borderBottomLeftRadius: 34, borderBottomRightRadius: 34, minHeight: HERO },
   name: { marginTop: 12, marginBottom: 2, alignSelf: 'stretch' },
   heroTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 12 },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 20 },
   action: { alignItems: 'center', gap: 6 },
-  actionDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  callFab: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
+  actionDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.onBrandFill, alignItems: 'center', justifyContent: 'center' },
   callDisc: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center', ...(shadow.raised as object) },
   blockedCall: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center' },
   body: { padding: 16, gap: 12 },
@@ -489,7 +464,7 @@ const styles = StyleSheet.create({
   card: { gap: 4 },
   cardTitle: { marginBottom: 6 },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  link: { fontFamily: 'Poppins-SemiBold' },
+  link: { fontFamily: fonts.semibold },
   lineGap: { marginBottom: 10 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 },
   lineIcon: { width: 24, alignItems: 'center' },
@@ -499,13 +474,14 @@ const styles = StyleSheet.create({
   note: { paddingVertical: 10, gap: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   sectionTitle: { marginTop: 8, marginLeft: 2 },
   emptyHistory: { marginLeft: 2 },
-  callbackCard: { padding: 14, gap: 12, borderRadius: radius.lg, backgroundColor: colors.orangeSoft, borderWidth: 1, borderColor: '#FCD34D' },
-  callbackOverdue: { backgroundColor: colors.redSoft, borderColor: '#FCA5A5' },
+  callbackCard: { padding: 14, gap: 12, borderRadius: radius.lg, backgroundColor: colors.orangeSoft, borderWidth: 1, borderColor: colors.orangeLine },
+  callbackOverdue: { backgroundColor: colors.redSoft, borderColor: colors.redLine },
   callbackHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   callbackActions: { flexDirection: 'row', gap: 8 },
   // three buttons share the card: each is as wide as its label, the spare room is shared out evenly (flex: 1 would cut "Reschedule")
   actionBtn: { flexGrow: 1, flexShrink: 1 },
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16 },
+  // a higher elevation than the name bar's (6): Android draws siblings with a higher elevation on top
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, zIndex: 2, elevation: 8 },
   back: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', ...(shadow.raised as object) },
   compact: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: 12, paddingHorizontal: 72, backgroundColor: colors.white, ...(shadow.raised as object) },
   compactName: { textAlign: 'center' },
