@@ -31,6 +31,10 @@ on:
         description: 'Publish a GitHub Release with this APK (needs a version and the signing secrets)'
         type: boolean
         default: false
+      abis:
+        description: 'CPU types: arm64-v8a for phones (default). x86_64 only for testing on a PC emulator - never published.'
+        required: false
+        default: 'arm64-v8a'
 
 # creating the Release needs write access to the repository contents
 permissions:
@@ -52,7 +56,7 @@ env:
 
 jobs:
   apk:
-    name: Build release APK (arm64)
+    name: Build release APK
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
@@ -64,6 +68,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_API_URL: ${{ inputs.api_url }}
           INPUT_PUBLISH: ${{ inputs.publish }}
+          INPUT_ABIS: ${{ inputs.abis }}
           VAR_API_URL: ${{ vars.API_URL }}
         run: |
           set -euo pipefail
@@ -84,6 +89,13 @@ jobs:
           fi
           [[ "$name" =~ ^[0-9]+(\.[0-9]+){1,3}([-.][0-9A-Za-z.]+)?$ ]] || { echo "::error::Version '$name' should look like 1.2.3"; exit 1; }
 
+          abis="${INPUT_ABIS:-arm64-v8a}"
+          [[ "$abis" =~ ^(arm64-v8a|x86_64|arm64-v8a,x86_64)$ ]] || { echo "::error::abis must be arm64-v8a, x86_64 or arm64-v8a,x86_64"; exit 1; }
+          if [[ "$abis" != "arm64-v8a" && "$publish" == "true" ]]; then
+            echo "::error::A Release is built for phones only (arm64-v8a). x86_64 builds are for testing on a PC emulator."
+            exit 1
+          fi
+
           api_url="${INPUT_API_URL:-}"
           [[ -n "$api_url" ]] || api_url="${VAR_API_URL:-}"
           [[ -n "$api_url" ]] || api_url="http://192.168.0.103:8000"
@@ -95,8 +107,9 @@ jobs:
             echo "tag=v$name"
             echo "publish=$publish"
             echo "api_url=$api_url"
+            echo "abis=$abis"
           } >> "$GITHUB_OUTPUT"
-          echo "Version $name (code $GITHUB_RUN_NUMBER), server $api_url, publish=$publish"
+          echo "Version $name (code $GITHUB_RUN_NUMBER), server $api_url, abis $abis, publish=$publish"
 
       - uses: actions/setup-java@v6
         with:
@@ -173,10 +186,11 @@ jobs:
           VERSION_NAME: ${{ steps.ver.outputs.name }}
           VERSION_CODE: ${{ github.run_number }}
           API_URL: ${{ steps.ver.outputs.api_url }}
+          ABIS: ${{ steps.ver.outputs.abis }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease \
-            -PreactNativeArchitectures=arm64-v8a \
+            -PreactNativeArchitectures="$ABIS" \
             -PversionName="$VERSION_NAME" \
             -PversionCode="$VERSION_CODE" \
             -PapiUrl="$API_URL" \
@@ -193,6 +207,7 @@ jobs:
           NAME: ${{ steps.ver.outputs.name }}
           API_URL: ${{ steps.ver.outputs.api_url }}
           SIGNED: ${{ steps.sign.outputs.signed }}
+          ABIS: ${{ steps.ver.outputs.abis }}
         run: |
           set -euo pipefail
           src="$(ls mobile/android/app/build/outputs/apk/release/*.apk | head -1)"
@@ -201,10 +216,12 @@ jobs:
           "$bt/aapt2" dump badging "$src" | grep -E "^package:|^targetSdkVersion|^application-label:"
           unzip -l "$src" | grep -E "lib/(arm64-v8a|x86_64|armeabi-v7a)/libreactnative" || true
 
+          suffix=""
+          [[ "$ABIS" == "arm64-v8a" ]] || suffix="-${ABIS//,/+}"
           if [[ "$SIGNED" == "true" ]]; then
-            file="EmployeeCalling-${NAME}.apk"
+            file="EmployeeCalling-${NAME}${suffix}.apk"
           else
-            file="EmployeeCalling-${NAME}-TEST-debug-signed.apk"
+            file="EmployeeCalling-${NAME}${suffix}-TEST-debug-signed.apk"
           fi
           cp "$src" "$file"
           sha256sum "$file" > "$file.sha256"

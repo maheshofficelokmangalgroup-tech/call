@@ -23,6 +23,8 @@ git push origin v1.0.1
 GitHub builds the APK and publishes the Release `v1.0.1` by itself (about 8-25 minutes). Or use the web page:
 **Actions -> Android APK -> Run workflow**, type a version (for example `1.0.1`), optionally a server address, tick **publish**.
 
+* **Testing on a PC emulator:** *Run workflow* with `abis` = `x86_64` builds an emulator-only APK (never published). The default
+  `arm64-v8a` APK is for phones; an x86_64 emulator cannot start it.
 * The version name comes from the tag (`v1.0.1` -> `1.0.1`); the version code is the run number, so every build is newer than the
   previous one and installs **over** the old app (same signing key = no uninstall, no data loss).
 * A Release is created only from an APK signed with the release key. If the signing secrets are missing the run stops at the first
