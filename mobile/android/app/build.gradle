@@ -72,6 +72,10 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// CI passes -PversionName=1.2.3 -PversionCode=<run number>; a local build keeps 1.0.0 / 1
+def appVersionCode = (project.findProperty('versionCode') ?: '1').toString().toInteger()
+def appVersionName = (project.findProperty('versionName') ?: '1.0.0').toString()
+
 // Release signing: android/keystore.properties (git-ignored) points at the release keystore.
 def releaseKeystore = rootProject.file("keystore.properties")
 def releaseKeystoreProps = new Properties()
@@ -100,9 +104,8 @@ android {
         applicationId "com.employeecalling"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // CI passes -PversionName=1.2.3 -PversionCode=<run number>; a local build keeps 1.0.0 / 1
-        versionCode (project.findProperty('versionCode') ?: '1').toString().toInteger()
-        versionName (project.findProperty('versionName') ?: '1.0.0').toString()
+        versionCode appVersionCode
+        versionName appVersionName
         // The server address the app starts with; employees can change it on the login screen (tap the server address).
         //   ./gradlew assembleRelease -PapiUrl=http://192.168.1.8:8000
         buildConfigField "String", "DEFAULT_API_URL", "\"${project.findProperty('apiUrl') ?: 'https://api.example.com'}\""
