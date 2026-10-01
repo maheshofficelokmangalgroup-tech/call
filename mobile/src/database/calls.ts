@@ -3,7 +3,11 @@ import type { Scalar } from '@op-engineering/op-sqlite';
 import type { CallStatus } from '../services/api/types';
 import { query, run } from './db';
 
-export type RecordingState = 'pending' | 'uploading' | 'available' | 'failed';
+/**
+ * pending / uploading / available / failed: a recording file exists and is on its way to the server (or failed to get there).
+ * unavailable: nothing was recorded - `recordingError` then holds the reason (see services/telephony/recordingStatus.ts).
+ */
+export type RecordingState = 'pending' | 'uploading' | 'available' | 'failed' | 'unavailable';
 
 /** A call made from this phone. It is the local record first; the server copy is created by the sync queue. */
 export interface LocalCall {

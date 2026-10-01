@@ -539,6 +539,7 @@ class CallingModule(private val reactContext: ReactApplicationContext) : ReactCo
         if (session.isNull("recordingStatus")) map.putNull("recordingStatus") else map.putString("recordingStatus", session.optString("recordingStatus"))
         if (session.isNull("recordingPath")) map.putNull("recordingPath") else map.putString("recordingPath", session.optString("recordingPath"))
         map.putDouble("recordingDurationMs", session.optLong("recordingDurationMs").toDouble())
+        if (session.isNull("recordingDetail")) map.putNull("recordingDetail") else map.putString("recordingDetail", session.optString("recordingDetail"))
         return map
     }
 

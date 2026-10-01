@@ -1,6 +1,7 @@
 /**
  * The call lifecycle: permission/wrap-up guards, phone-state transitions, call-log reconciliation, outcome, recovery.
  */
+import { RECORDING_SCAN_TRIES } from '../src/config/env';
 import type { LocalCall } from '../src/database/calls';
 import * as callsDb from '../src/database/calls';
 import {
@@ -12,6 +13,7 @@ import {
   onPhoneState,
   recoverSession,
   restorePendingWrapup,
+  scanForRecording,
   startCall,
   submitOutcome,
 } from '../src/services/telephony/callFlow';
@@ -222,13 +224,67 @@ describe('phone-state handling', () => {
       expect(enqueue).toHaveBeenCalledWith('recording_upload', { name: `call-${uuid}.m4a` }, uuid);
     });
 
-    it('does not claim a recording when the service could not capture one', async () => {
+    it('does not claim a recording when the service could not capture one - it keeps the reason instead', async () => {
       const uuid = await dialing();
-      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: 'silent' }));
+      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: 'silent', recordingDetail: 'source MIC, loudest sound 0 of 32767, 14 s' }));
       await onPhoneState({ state: 'OFFHOOK', timestampMs: 1_002_000, sessionId: uuid, sessionChanged: true });
       await onPhoneState({ state: 'IDLE', timestampMs: 1_070_000, sessionId: uuid, sessionChanged: true });
       await flush();
       expect(enqueue).not.toHaveBeenCalledWith('recording_meta', expect.anything(), uuid);
+      expect(enqueue).not.toHaveBeenCalledWith('recording_upload', expect.anything(), uuid);
+      expect(db.updateCall).toHaveBeenCalledWith(uuid, { recordingState: 'unavailable', recordingError: 'silent|source MIC, loudest sound 0 of 32767, 14 s' });
+    });
+
+    it('remembers a missing microphone permission as the reason', async () => {
+      const uuid = await dialing();
+      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: 'no_permission' }));
+      await onPhoneState({ state: 'OFFHOOK', timestampMs: 1_002_000, sessionId: uuid, sessionChanged: true });
+      await onPhoneState({ state: 'IDLE', timestampMs: 1_070_000, sessionId: uuid, sessionChanged: true });
+      expect(db.updateCall).toHaveBeenCalledWith(uuid, { recordingState: 'unavailable', recordingError: 'no_permission' });
+    });
+
+    it('has the reason on the call before the outcome screen opens', async () => {
+      const uuid = await dialing();
+      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: 'failed', recordingDetail: 'MIC refused (IllegalStateException)' }));
+      const order: string[] = [];
+      db.updateCall.mockImplementation(async (_uuid, patch) => {
+        if (patch.recordingState === 'unavailable') order.push('reason saved');
+      });
+      const unsubscribe = useCallStore.subscribe((state) => {
+        if (state.active?.phase === 'needs_outcome') order.push('outcome screen');
+      });
+      await onPhoneState({ state: 'OFFHOOK', timestampMs: 1_002_000, sessionId: uuid, sessionChanged: true });
+      await onPhoneState({ state: 'IDLE', timestampMs: 1_070_000, sessionId: uuid, sessionChanged: true });
+      unsubscribe();
+      expect(order).toEqual(['reason saved', 'outcome screen']);
+    });
+
+    it('does not mention a recording for a call that was never recorded (recording off, personal or unanswered)', async () => {
+      const uuid = await dialing();
+      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: null }));
+      await onPhoneState({ state: 'OFFHOOK', timestampMs: 1_002_000, sessionId: uuid, sessionChanged: true });
+      await onPhoneState({ state: 'IDLE', timestampMs: 1_070_000, sessionId: uuid, sessionChanged: true });
+      expect(db.updateCall).not.toHaveBeenCalledWith(uuid, expect.objectContaining({ recordingState: expect.anything() }));
+    });
+
+    it('tells the server what the recording did, so an administrator can see why a call has none', async () => {
+      const uuid = await dialing();
+      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: 'silent', recordingDetail: 'source MIC, loudest sound 3 of 32767, 14 s' }));
+      await onPhoneState({ state: 'OFFHOOK', timestampMs: 1_002_000, sessionId: uuid, sessionChanged: true });
+      await onPhoneState({ state: 'IDLE', timestampMs: 1_070_000, sessionId: uuid, sessionChanged: true });
+      const sent = enqueue.mock.calls.find((c) => c[0] === 'call_events' && c[1].events.some((e: { type: string }) => e.type === 'ended')) as unknown[];
+      const ended = (sent[1] as { events: { type: string; payload: Record<string, unknown> }[] }).events.find((e) => e.type === 'ended');
+      expect(ended?.payload).toMatchObject({ source: 'in_call_service', recording: 'silent', recording_detail: 'source MIC, loudest sound 3 of 32767, 14 s' });
+    });
+
+    it('treats a recording file that vanished as "not recorded", not as a recording', async () => {
+      const uuid = await dialing();
+      tel.getActiveSession.mockResolvedValue(dialerSession(uuid, { recordingStatus: 'saved', recordingPath: '/data/files/recordings/x.m4a', recordingDurationMs: 60_000 }));
+      tel.getFileInfo.mockResolvedValue({ exists: false, size: 0 });
+      await onPhoneState({ state: 'OFFHOOK', timestampMs: 1_002_000, sessionId: uuid, sessionChanged: true });
+      await onPhoneState({ state: 'IDLE', timestampMs: 1_070_000, sessionId: uuid, sessionChanged: true });
+      expect(enqueue).not.toHaveBeenCalledWith('recording_meta', expect.anything(), uuid);
+      expect(db.updateCall).toHaveBeenCalledWith(uuid, { recordingState: 'unavailable', recordingError: 'failed|the recording file is missing or empty' });
     });
   });
 
@@ -278,5 +334,47 @@ describe('recovery after the app was closed', () => {
     const call = await restorePendingWrapup();
     expect(call?.uuid).toBe('late');
     expect(active()).toMatchObject({ uuid: 'late', phase: 'needs_outcome', suggested: 'CONNECTED' });
+  });
+});
+
+describe("the phone's own call recorder (calls placed through the phone's dialer)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    db.getCall.mockResolvedValue(stored({ endedAt: 1_070_000, durationSec: 60, status: 'completed', reconciled: true }));
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it('queues the file the phone recorded', async () => {
+    tel.findRecentRecording.mockResolvedValue({ uri: 'content://media/audio/1', mimeType: 'audio/mpeg', sizeBytes: 90_000, displayName: 'call.mp3' });
+    const done = scanForRecording('u1');
+    await jest.advanceTimersByTimeAsync(1_000);
+    await done;
+    expect(db.updateCall).toHaveBeenCalledWith('u1', expect.objectContaining({ recordingUri: 'content://media/audio/1', recordingState: 'pending' }));
+    expect(enqueue).toHaveBeenCalledWith('recording_meta', { sizeBytes: 90_000 }, 'u1');
+    expect(enqueue).toHaveBeenCalledWith('recording_upload', { name: 'call.mp3' }, 'u1');
+  });
+
+  it('remembers that no file turned up once the search is over - and creates no recording', async () => {
+    tel.findRecentRecording.mockResolvedValue(null);
+    const done = scanForRecording('u1');
+    await jest.advanceTimersByTimeAsync(120_000);
+    await done;
+    expect(tel.findRecentRecording).toHaveBeenCalledTimes(RECORDING_SCAN_TRIES);
+    expect(db.updateCall).toHaveBeenCalledWith('u1', { recordingState: 'unavailable', recordingError: 'no_file' });
+    expect(enqueue).not.toHaveBeenCalledWith('recording_meta', expect.anything(), 'u1');
+  });
+
+  it('says so when the app is not allowed to look for the file', async () => {
+    tel.findRecentRecording.mockRejectedValue({ code: 'NO_PERMISSION' });
+    await scanForRecording('u1');
+    expect(tel.findRecentRecording).toHaveBeenCalledTimes(1);
+    expect(db.updateCall).toHaveBeenCalledWith('u1', { recordingState: 'unavailable', recordingError: 'no_media_access' });
+  });
+
+  it('leaves a call that already has a recording alone', async () => {
+    db.getCall.mockResolvedValue(stored({ endedAt: 1_070_000, recordingUri: 'file:///x.m4a', recordingState: 'pending' }));
+    await scanForRecording('u1');
+    expect(tel.findRecentRecording).not.toHaveBeenCalled();
+    expect(db.updateCall).not.toHaveBeenCalled();
   });
 });

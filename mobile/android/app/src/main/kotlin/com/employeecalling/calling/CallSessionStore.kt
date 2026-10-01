@@ -39,6 +39,7 @@ object CallSessionStore {
             .put("recordingStatus", JSONObject.NULL)
             .put("recordingPath", JSONObject.NULL)
             .put("recordingDurationMs", 0)
+            .put("recordingDetail", JSONObject.NULL)
         save(ctx, json)
     }
 
@@ -102,10 +103,12 @@ object CallSessionStore {
         true
     }
 
-    fun setRecording(ctx: Context, id: String, status: String, path: String?, durationMs: Long) = update(ctx, id) {
+    /** [detail] is a short technical line (microphone source, loudest sound, why the recorder failed) shown on the call details. */
+    fun setRecording(ctx: Context, id: String, status: String, path: String?, durationMs: Long, detail: String? = null) = update(ctx, id) {
         it.put("recordingStatus", status)
         it.put("recordingPath", path ?: JSONObject.NULL)
         it.put("recordingDurationMs", durationMs)
+        it.put("recordingDetail", detail ?: JSONObject.NULL)
         true
     }
 

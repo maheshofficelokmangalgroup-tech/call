@@ -16,10 +16,11 @@ interface ChipProps {
   tone?: string;
   toneSoft?: string;
   size?: 'md' | 'sm';
+  testID?: string;
 }
 
 /** Selectable pill. The fill colour, border and scale animate when the selection changes. */
-export function Chip({ label, selected = false, onPress, icon, tone = colors.green, toneSoft = colors.greenSoft, size = 'md' }: ChipProps) {
+export function Chip({ label, selected = false, onPress, icon, tone = colors.green, toneSoft = colors.greenSoft, size = 'md', testID }: ChipProps) {
   const progress = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
     progress.value = withTiming(selected ? 1 : 0, { duration: motion.fast });
@@ -33,7 +34,7 @@ export function Chip({ label, selected = false, onPress, icon, tone = colors.gre
 
   const fg = selected ? tone : colors.inkSoft;
   return (
-    <PressableScale onPress={onPress} scaleTo={0.94}>
+    <PressableScale onPress={onPress} scaleTo={0.94} testID={testID}>
       <Animated.View style={[styles.chip, size === 'sm' ? styles.sm : null, animated]}>
         {icon ? <Icon name={icon} size={size === 'sm' ? 14 : 16} color={fg} /> : null}
         <Text variant={size === 'sm' ? 'caption' : 'smallMedium'} color={fg} style={selected ? styles.bold : undefined}>

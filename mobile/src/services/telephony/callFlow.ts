@@ -22,6 +22,7 @@ import type { DispositionCode } from '../api/types';
 import { suggestDisposition } from './callOutcome';
 import { nativeErrorCode, telephony, type NativeSession, type PhoneStateEvent } from './native';
 import { readPermissionStatus } from './permissions';
+import { encodeMissing, missingCodeForSession, type MissingRecordingCode } from './recordingStatus';
 
 export class PermissionRequired extends Error {
   constructor() {
@@ -277,7 +278,12 @@ export async function finishCall(uuid: string, endedAtMs: number): Promise<void>
     if (offhookAt) events.push({ type: 'dialing', at: offhookAt });
     if (answeredAt) events.push({ type: 'connected', at: answeredAt });
     const source = native ? 'in_call_service' : entry ? 'call_log' : 'phone_state';
-    events.push({ type: 'ended', at: endedAt, payload: { source, ...(native && session?.causeReason ? { reason: session.causeReason } : {}) } });
+    // The server keeps what the microphone recording did too, so an administrator can see why a call has no recording.
+    const recordingNote =
+      native && session?.recordingStatus
+        ? { recording: session.recordingStatus, ...(session.recordingDetail ? { recording_detail: session.recordingDetail.slice(0, 240) } : {}) }
+        : {};
+    events.push({ type: 'ended', at: endedAt, payload: { source, ...(native && session?.causeReason ? { reason: session.causeReason } : {}), ...recordingNote } });
     await syncEngine.enqueue('call_events', { events }, uuid);
     await syncEngine.enqueue('call_update', { externalRef: entry?.id ? `calllog-${entry.id}` : null }, uuid);
     await telephony.clearSession(uuid).catch(() => undefined);
@@ -287,13 +293,14 @@ export async function finishCall(uuid: string, endedAtMs: number): Promise<void>
       : answered
         ? 'CONNECTED'
         : 'NO_ANSWER';
+
+    // The in-call service's own recording is already finished: attach it (or the reason there is none) before the outcome
+    // screen opens, so that screen already knows whether this call was recorded.
+    if (native && session) await attachOwnRecording(uuid, session);
     store().patchActive(uuid, { phase: 'needs_outcome', durationSec, answered, endedAt, suggested });
 
-    if (native) {
-      if (session) void attachOwnRecording(uuid, session);
-    } else if (answered && useAuth.getState().config?.recording.enabled) {
-      void scanForRecording(uuid);
-    }
+    // The phone's own recorder may need a few seconds to write its file: look for it in the background.
+    if (!native && answered && useAuth.getState().config?.recording.enabled) void scanForRecording(uuid);
   } finally {
     finishing.delete(uuid);
   }
@@ -362,24 +369,43 @@ export async function submitOutcome(uuid: string, input: OutcomeInput): Promise<
 }
 
 // ---------------------------------------------------------------- recordings
-/** The microphone recording the in-call service made (phone-app mode): queue it for upload like any other recording. */
-export async function attachOwnRecording(uuid: string, session: NativeSession): Promise<void> {
-  if (session.recordingStatus !== 'saved' || !session.recordingPath) return;
+/** Remembers, on the call, that nothing was recorded and why - the call details and the outcome screen show it. */
+async function markNotRecorded(uuid: string, code: MissingRecordingCode, detail?: string | null): Promise<void> {
   try {
-    const info = await telephony.getFileInfo(session.recordingPath);
-    if (!info.exists || info.size < 1024) return;
-    await updateCall(uuid, {
-      recordingUri: `file://${session.recordingPath}`,
-      recordingMime: 'audio/mp4',
-      recordingSize: info.size,
-      recordingState: 'pending',
-      recordingError: null,
-    });
-    await syncEngine.enqueue('recording_meta', { sizeBytes: info.size }, uuid);
-    await syncEngine.enqueue('recording_upload', { name: `call-${uuid}.m4a` }, uuid);
+    await updateCall(uuid, { recordingState: 'unavailable', recordingError: encodeMissing(code, detail) });
   } catch {
-    // the file stays on the phone; nothing is claimed about it
+    // only an explanation is lost
   }
+}
+
+/**
+ * The microphone recording the in-call service made (phone-app mode): queue it for upload like any other recording. When the
+ * service could not record, the reason is stored instead - never a recording that does not exist.
+ */
+export async function attachOwnRecording(uuid: string, session: NativeSession): Promise<void> {
+  if (session.recordingStatus === 'saved' && session.recordingPath) {
+    try {
+      const info = await telephony.getFileInfo(session.recordingPath);
+      if (!info.exists || info.size < 1024) {
+        await markNotRecorded(uuid, 'failed', 'the recording file is missing or empty');
+        return;
+      }
+      await updateCall(uuid, {
+        recordingUri: `file://${session.recordingPath}`,
+        recordingMime: 'audio/mp4',
+        recordingSize: info.size,
+        recordingState: 'pending',
+        recordingError: null,
+      });
+      await syncEngine.enqueue('recording_meta', { sizeBytes: info.size }, uuid);
+      await syncEngine.enqueue('recording_upload', { name: `call-${uuid}.m4a` }, uuid);
+    } catch {
+      // the file stays on the phone; nothing is claimed about it
+    }
+    return;
+  }
+  const code = missingCodeForSession(session.recordingStatus);
+  if (code) await markNotRecorded(uuid, code, session.recordingDetail);
 }
 
 /** Look for the file the phone's own call recorder produced (it may take a few seconds to appear). */
@@ -402,11 +428,16 @@ export async function scanForRecording(uuid: string): Promise<void> {
         return;
       }
     } catch (error) {
-      if (nativeErrorCode(error) === 'NO_PERMISSION') return;
+      if (nativeErrorCode(error) === 'NO_PERMISSION') {
+        await markNotRecorded(uuid, 'no_media_access');
+        return;
+      }
     }
     await sleep(RECORDING_SCAN_INTERVAL_MS);
   }
-  // Nothing found: the device did not record this call. No recording record is created (section 7.7).
+  // Nothing found: the device did not record this call. No recording record is created on the server (section 7.7); the
+  // call only remembers why, so the employee is not left looking for a recording that does not exist.
+  await markNotRecorded(uuid, 'no_file');
 }
 
 /** Re-queue an upload that failed (user tapped Retry). */

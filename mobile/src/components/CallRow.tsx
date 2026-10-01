@@ -54,6 +54,7 @@ export function CallRow({ row, onPress, showName = true }: Props) {
         <View style={styles.meta}>
           {row.recording === 'available' ? <Icon name="headphones" size={14} color={colors.green} /> : null}
           {row.recording === 'pending' || row.recording === 'uploading' ? <Icon name="upload" size={14} color={colors.blue} /> : null}
+          {row.recording === 'unavailable' ? <Icon name="mic-off" size={14} color={colors.faint} /> : null}
           {!row.synced ? <Icon name="cloud-off" size={14} color={colors.orange} /> : null}
         </View>
       </View>

@@ -18,6 +18,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { api } from '../services/api/endpoints';
 import type { ServerCall } from '../services/api/types';
 import { retryRecordingUpload } from '../services/telephony/callFlow';
+import { decodeMissing, type MissingRecording } from '../services/telephony/recordingStatus';
 import { useAuth } from '../store/authStore';
 import { toast } from '../store/toastStore';
 import { colors, radius } from '../theme';
@@ -134,6 +135,8 @@ export function CallDetailScreen() {
               </View>
               {recordingState === 'available' && recordingId ? (
                 <RecordingPlayer recordingId={recordingId} durationSec={duration || null} />
+              ) : recordingState === 'unavailable' ? (
+                <NotRecorded info={decodeMissing(local?.recordingError)} onFix={() => navigation.navigate('Permissions')} />
               ) : recordingState === 'failed' ? (
                 <View style={styles.gap}>
                   <Text variant="small" color={colors.red}>
@@ -236,12 +239,38 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** A call that has no recording says why, so nobody goes looking for a file that was never made. */
+function NotRecorded({ info, onFix }: { info: MissingRecording | null; onFix: () => void }) {
+  if (!info) {
+    return (
+      <Text variant="small" color="muted">
+        This call was not recorded.
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.gap} testID="not-recorded">
+      <Text variant="bodyMedium">{info.title}</Text>
+      <Text variant="small" color="muted">
+        {info.advice}
+      </Text>
+      {info.detail ? (
+        <Text variant="caption" color="faint">
+          {`Technical: ${info.detail}`}
+        </Text>
+      ) : null}
+      {info.fixInSetup ? <Button title="Open phone setup" icon="shield-check" size="sm" variant="outline" onPress={onFix} testID="recording-fix" /> : null}
+    </View>
+  );
+}
+
 function RecordingBadge({ state }: { state: string }) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
     available: { label: 'Available', color: colors.greenDark, bg: colors.greenSoft },
     pending: { label: 'Pending', color: colors.blue, bg: colors.blueSoft },
     uploading: { label: 'Uploading', color: colors.blue, bg: colors.blueSoft },
     failed: { label: 'Failed', color: colors.red, bg: colors.redSoft },
+    unavailable: { label: 'Not recorded', color: colors.muted, bg: '#EEF0F3' },
   };
   const look = map[state] ?? map.pending;
   return <Tag label={look.label} color={look.color} background={look.bg} />;

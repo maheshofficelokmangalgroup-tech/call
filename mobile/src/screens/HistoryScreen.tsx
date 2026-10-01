@@ -26,14 +26,18 @@ import { colors } from '../theme';
 import { formatDayLabel } from '../utils/time';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-type Filter = 'all' | 'connected' | 'missed' | 'pending';
+type Filter = 'all' | 'connected' | 'missed' | 'pending' | 'recordings';
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'connected', label: 'Connected' },
   { key: 'missed', label: 'Not answered' },
   { key: 'pending', label: 'Needs outcome' },
+  { key: 'recordings', label: 'Recordings' },
 ];
+
+/** A recording exists (or is on its way to the server): the row shows a headphones / upload icon. */
+const hasRecording = (row: CallRowModel) => row.recording === 'available' || row.recording === 'pending' || row.recording === 'uploading';
 
 function group(rows: CallRowModel[]): { title: string; data: CallRowModel[] }[] {
   const sections: { title: string; data: CallRowModel[] }[] = [];
@@ -83,12 +87,14 @@ export function HistoryScreen() {
         if (filter === 'connected') return r.status === 'completed' || r.status === 'connected';
         if (filter === 'missed') return r.status === 'no_answer' || r.status === 'failed';
         if (filter === 'pending') return r.needsOutcome;
+        if (filter === 'recordings') return hasRecording(r);
         return true;
       }),
     [rows, filter],
   );
   const sections = useMemo(() => group(filtered), [filtered]);
   const pendingCount = rows.filter((r) => r.needsOutcome).length;
+  const recordingCount = rows.filter(hasRecording).length;
 
   const onRefresh = useCallback(async () => {
     await syncEngine.syncNow();
@@ -103,9 +109,10 @@ export function HistoryScreen() {
           Call history
         </Text>
         <View style={styles.filters}>
-          {FILTERS.map((f) => (
-            <Chip key={f.key} label={f.key === 'pending' && pendingCount ? `${f.label} (${pendingCount})` : f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} size="sm" />
-          ))}
+          {FILTERS.map((f) => {
+            const count = f.key === 'pending' ? pendingCount : f.key === 'recordings' ? recordingCount : 0;
+            return <Chip key={f.key} label={count ? `${f.label} (${count})` : f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} size="sm" testID={`history-filter-${f.key}`} />;
+          })}
         </View>
       </View>
 
@@ -125,7 +132,17 @@ export function HistoryScreen() {
               <RowSkeleton />
             </View>
           ) : (
-            <EmptyState icon="history" title="No calls yet" message={filter === 'all' ? 'Calls you make will be listed here with their outcome.' : 'No calls match this filter.'} />
+            <EmptyState
+              icon={filter === 'recordings' ? 'headphones' : 'history'}
+              title={filter === 'recordings' ? 'No recordings yet' : 'No calls yet'}
+              message={
+                filter === 'all'
+                  ? 'Calls you make will be listed here with their outcome.'
+                  : filter === 'recordings'
+                    ? 'A recorded call shows a headphones icon here and a play button on its details page. A call that could not be recorded says why on its details page.'
+                    : 'No calls match this filter.'
+              }
+            />
           )
         }
         renderSectionHeader={({ section }) => (

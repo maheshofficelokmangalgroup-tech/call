@@ -21,6 +21,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { DEFAULT_DISPOSITIONS } from '../services/api/defaults';
 import type { Disposition, DispositionCode } from '../services/api/types';
 import { submitOutcome } from '../services/telephony/callFlow';
+import { decodeMissing } from '../services/telephony/recordingStatus';
 import { useAuth } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
 import { toast } from '../store/toastStore';
@@ -105,6 +106,7 @@ export function OutcomeScreen() {
   }, [callUuid, active?.phase]);
 
   const answered = (call?.durationSec ?? 0) > 0;
+  const notRecorded = call?.recordingState === 'unavailable' ? decodeMissing(call.recordingError) : null;
   const suggested: DispositionCode = active?.uuid === callUuid && active.suggested ? active.suggested : answered ? 'CONNECTED' : 'NO_ANSWER';
 
   // pre-select the suggestion so the common case is one tap on Save
@@ -167,8 +169,17 @@ export function OutcomeScreen() {
               ) : (
                 <Tag label="Not answered" icon="phone-missed" color={colors.red} background={colors.redSoft} />
               )}
-              {call?.recordingState ? <Tag label="Recording found" icon="headphones" color={colors.blue} background={colors.blueSoft} /> : null}
+              {call?.recordingState === 'unavailable' ? (
+                <Tag label="Not recorded" icon="mic-off" color={colors.muted} background="#EEF0F3" />
+              ) : call?.recordingState ? (
+                <Tag label="Recording found" icon="headphones" color={colors.blue} background={colors.blueSoft} />
+              ) : null}
             </View>
+            {notRecorded ? (
+              <Text variant="caption" color="muted" style={styles.notRecorded} testID="not-recorded-note">
+                {notRecorded.title}. Details are in History.
+              </Text>
+            ) : null}
           </View>
         </Animated.View>
 
@@ -266,6 +277,7 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingBottom: 40 },
   summary: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, backgroundColor: colors.white, borderRadius: radius.xl, ...(shadow.card as object), marginBottom: 20 },
   summaryTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  notRecorded: { marginTop: 6 },
   heading: { marginBottom: 12, marginLeft: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 },
   cardSlot2: { width: '50%', padding: 5 },

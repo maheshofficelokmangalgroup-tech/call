@@ -74,7 +74,7 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
           {call.hd ? <Chip label="HD" /> : null}
           {call.wifi ? <Chip label="Wi-Fi call" /> : null}
         </View>
-        {call.recording === 'recording' ? <RecChip /> : null}
+        {call.recording === 'recording' ? <RecChip /> : call.recording === 'failed' ? <Chip icon="mic-off" label="Not recording" /> : null}
       </View>
 
       {keypad ? (

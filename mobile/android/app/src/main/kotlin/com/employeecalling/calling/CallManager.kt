@@ -306,7 +306,7 @@ object CallManager {
                 if (t.recording != "starting") return@post // already handled
                 t.recording = if (ok) "recording" else "failed"
                 if (!ok) recordingNow = false
-                CallSessionStore.setRecording(ctx, sessionId, if (ok) "recording" else "failed", null, 0)
+                CallSessionStore.setRecording(ctx, sessionId, if (ok) "recording" else "failed", null, 0, if (ok) null else CallRecorder.lastFailure() ?: "the phone refused every microphone source")
                 refresh()
             }
         }
@@ -318,16 +318,16 @@ object CallManager {
         when {
             result == null -> {
                 t.recording = "failed"
-                if (sessionId != null) CallSessionStore.setRecording(ctx, sessionId, "failed", null, 0)
+                if (sessionId != null) CallSessionStore.setRecording(ctx, sessionId, "failed", null, 0, "the recorder finished without usable audio (call too short, or the phone stopped it)")
             }
             result.silent -> {
                 File(result.path).delete() // nothing but silence was captured: do not pretend it is a recording
                 t.recording = "silent"
-                if (sessionId != null) CallSessionStore.setRecording(ctx, sessionId, "silent", null, result.durationMs)
+                if (sessionId != null) CallSessionStore.setRecording(ctx, sessionId, "silent", null, result.durationMs, result.detail())
             }
             else -> {
                 t.recording = "saved"
-                if (sessionId != null) CallSessionStore.setRecording(ctx, sessionId, "saved", result.path, result.durationMs)
+                if (sessionId != null) CallSessionStore.setRecording(ctx, sessionId, "saved", result.path, result.durationMs, result.detail())
             }
         }
     }

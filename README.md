@@ -41,6 +41,22 @@ Built from the project documentation `Employee_Calling_CRM_Platform_Project_Docu
 > Demo contacts चे नंबर **काल्पनिक** (+1 xxx 555-01xx) आहेत, म्हणून खऱ्या SIM वर "Call" दाबलं तरी कोणत्याही खऱ्या
 > व्यक्तीला फोन जाणार नाही. खरा data import करताना आधी एका छोट्या group वर pilot करा.
 
+### Call recording कुठे दिसतं
+
+* **App मध्ये:** **History** tab -> वरचा **Recordings** chip (किंवा कोणताही call) -> call वर tap -> **Call details** -> **Recording**
+  card -> Play. Recording असलेल्या call वर list मध्ये headphones icon दिसतो.
+* **Recording नसेल तर** तेच card **कारण** सांगतं (उदा. "The microphone captured only silence" / "The microphone permission is off")
+  आणि call संपल्यावर Outcome screen वर "Not recorded" tag दिसतो. Call च्या `ended` event मध्ये (server, `GET /api/v1/calls/<id>`)
+  `recording` आणि `recording_detail` ही माहितीही जाते, म्हणून administrator ला कारण दिसतं.
+* **PC / server वर:** recordings private storage मध्ये राहतात - local dev मध्ये
+  `backend\var\storage\recordings\<वर्ष>\<महिना>\<employee-id>\<call-id>.m4a`. Admin साठी
+  `GET /api/v1/recordings/<id>/playback-url?mode=download` (Swagger: `http://<PC-IP>:8000/docs`). Recordings चं list/player असलेला
+  Admin Web App पुढच्या phase मध्ये येतो.
+* **मर्यादा:** Android सामान्य app ला समोरच्या व्यक्तीचा आवाज record करू देत नाही. App **microphone** record करतो (speaker on
+  असेल तर समोरचा आवाज येऊ शकतो) आणि काही phones call दरम्यान mic बंद करतात - तेव्हा "silent" recording जतन/upload केलं जात नाही.
+  Xiaomi/HyperOS वर हे अजून तपासलेलं नाही; प्रत्येक model वर एक test call करा. 100% खात्रीशीर recording हवी असेल तर cloud telephony
+  (Exotel / Knowlarity / Twilio) लागते.
+
 ## Developers: कसं चालवायचं / build करायचं
 
 ```powershell

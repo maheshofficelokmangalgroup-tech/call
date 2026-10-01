@@ -76,12 +76,36 @@ Android does not give normal apps the other person's voice (`VOICE_CALL` is bloc
 administrator enables `settings.recording.enabled`, mode B records the **microphone** of the employee's phone during CRM
 calls only (`CallRecorder`, foreground service type `microphone`, AAC/m4a, ~6 KB/s):
 
-* the employee's voice is always captured; the customer is captured **when the speaker is on** and the phone lets apps use
-  the microphone during a call. Many phones (especially Xiaomi/HyperOS) do; some silence it - test each model;
+* the employee's voice is captured when the phone lets apps use the microphone during a call; the customer is captured
+  **when the speaker is on**. Phones differ (some give apps nothing but silence while a call is on) and this has **not been
+  verified on Xiaomi/HyperOS** - test each model;
 * the amplitude is sampled during the call: a recording that is silent is **deleted and never uploaded** (section 7.7:
   no recording record unless a real recording exists);
-* a red **REC** chip is on the call screen while it records, and the consent notice from the server is shown in Phone setup;
+* a red **REC** chip is on the call screen while it records ("Not recording" when the recorder could not start), and the
+  consent notice from the server is shown in Phone setup;
 * the file is uploaded through the same private, signed pipeline as before, then deleted from the phone.
+
+#### Where a recording shows up - and what a missing one says
+
+* **Employee app:** History -> the **Recordings** chip (or any call) -> the call -> **Call details** -> **Recording** card with a play
+  button. A recorded call has a headphones icon in the list.
+* **A call without a recording says why.** The call keeps the reason (`recording_state = unavailable`, reason in
+  `recording_error`) and shows it on the Outcome screen ("Not recorded") and in the Recording card, with what to do:
+
+  | Reason | Meaning | Advice shown |
+  |---|---|---|
+  | `no_permission` | microphone permission off | Open Phone setup |
+  | `silent` | the microphone delivered only silence (loudest sound below the threshold) | keep the speaker on; some phones block the mic during calls |
+  | `failed` | the recorder could not start or finish (or the file vanished) | try the next call; run the Device & telephony check |
+  | `no_file` | phone's own dialer mode: the phone's call recorder left no file | turn on auto call recording in the Phone app, or make calls through this app |
+  | `no_media_access` | phone's own dialer mode: no permission to look for that file | allow audio-file access in Phone setup |
+
+* **For the administrator:** the call's `ended` event on the server carries `recording` (the in-call service's status) and
+  `recording_detail` (microphone source, loudest sound 0-32767, seconds) - `GET /api/v1/calls/<id>` shows them in `events`.
+* **Files on the server:** local development storage is `backend/var/storage/recordings/<year>/<month>/<employee id>/<call id>.m4a`
+  (private S3 bucket in production). Administrators fetch a short-lived link with
+  `GET /api/v1/recordings/<id>/playback-url?mode=download` (Swagger UI: `http://<server>:8000/docs`); every link issued is logged.
+  The admin web app (next phase) gets a Recordings page.
 
 In mode A the app does not record: it looks in the media library for a file made by the phone's built-in call recorder
 (`Recordings/Call`, `MIUI/sound_recorder/call_rec`, `Call`...) and uploads that. If none exists, no recording record is

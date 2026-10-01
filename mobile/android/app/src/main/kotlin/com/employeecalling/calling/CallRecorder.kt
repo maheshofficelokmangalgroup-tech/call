@@ -20,13 +20,18 @@ object CallRecorder {
     private const val SILENT_PEAK = 120 // MediaRecorder amplitude is 0..32767; speech is in the thousands, silence near 0
     private const val MIN_DURATION_MS = 1_500L
 
-    class Result(val path: String, val durationMs: Long, val peak: Int, val silent: Boolean)
+    class Result(val path: String, val durationMs: Long, val peak: Int, val silent: Boolean, val source: String) {
+        /** One short line for the call details screen: which microphone source was used and how loud the loudest sound was. */
+        fun detail(): String = "source $source, loudest sound $peak of 32767, ${durationMs / 1000} s"
+    }
 
     private val main = Handler(Looper.getMainLooper())
     private var recorder: MediaRecorder? = null
     private var file: File? = null
     private var startedAt = 0L
     private var peak = 0
+    private var activeSource = ""
+    private var failures = ""
     private val sampler = object : Runnable {
         override fun run() {
             val active = recorder ?: return
@@ -40,6 +45,18 @@ object CallRecorder {
     }
 
     val isRecording: Boolean get() = recorder != null
+
+    /** Why the last [start] failed (one entry per microphone source that was refused), for the call details screen. */
+    @Synchronized
+    fun lastFailure(): String? = failures.ifEmpty { null }
+
+    private fun sourceName(source: Int): String = when (source) {
+        MediaRecorder.AudioSource.VOICE_CALL -> "VOICE_CALL"
+        MediaRecorder.AudioSource.VOICE_COMMUNICATION -> "VOICE_COMMUNICATION"
+        MediaRecorder.AudioSource.VOICE_RECOGNITION -> "VOICE_RECOGNITION"
+        MediaRecorder.AudioSource.MIC -> "MIC"
+        else -> "source $source"
+    }
 
     private fun newRecorder(ctx: Context): MediaRecorder =
         if (Build.VERSION.SDK_INT >= 31) MediaRecorder(ctx) else @Suppress("DEPRECATION") MediaRecorder()
@@ -57,6 +74,7 @@ object CallRecorder {
     @Synchronized
     fun start(ctx: Context, sessionId: String): Boolean {
         if (recorder != null) return true
+        failures = ""
         val dir = File(ctx.applicationContext.filesDir, "recordings").apply { mkdirs() }
         val target = File(dir, "$sessionId.m4a")
         for (source in sources()) {
@@ -75,6 +93,7 @@ object CallRecorder {
                 }
                 recorder = candidate
                 file = target
+                activeSource = sourceName(source)
                 startedAt = System.currentTimeMillis()
                 peak = 0
                 main.postDelayed(sampler, 400)
@@ -82,6 +101,7 @@ object CallRecorder {
                 return true
             } catch (e: Exception) {
                 Log.w(TAG, "audio source $source unusable: ${e.javaClass.simpleName} ${e.message}")
+                failures += (if (failures.isEmpty()) "" else "; ") + "${sourceName(source)} refused (${e.javaClass.simpleName})"
                 try {
                     candidate?.release()
                 } catch (_: Exception) {
@@ -121,6 +141,6 @@ object CallRecorder {
             out.delete()
             return null
         }
-        return Result(out.absolutePath, duration, peak, peak < SILENT_PEAK)
+        return Result(out.absolutePath, duration, peak, peak < SILENT_PEAK, activeSource)
     }
 }

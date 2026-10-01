@@ -86,6 +86,8 @@ export interface NativeSession {
   recordingStatus: 'recording' | 'saved' | 'silent' | 'failed' | 'no_permission' | null;
   recordingPath: string | null;
   recordingDurationMs: number;
+  /** one technical line about the recording (microphone source, loudest sound, why the recorder failed) */
+  recordingDetail?: string | null;
 }
 
 export interface CallLogEntry {
