@@ -29,10 +29,11 @@ Built from the project documentation `Employee_Calling_CRM_Platform_Project_Docu
 
    शेवटी `Phone (Wi-Fi) server URL:  http://192.168.x.x:8000` असं दिसेल. **फोन आणि PC एकाच Wi-Fi वर** असावेत.
    Windows Firewall ने port 8000 अडवला तर script मध्ये दिलेली एक ओळ (Administrator PowerShell मध्ये) चालवा.
-2. APK फोनवर कॉपी करा (USB / WhatsApp / Drive) आणि उघडा -> "Install unknown apps" ला परवानगी द्या -> Install.
+2. APK फोनवर डाउनलोड करा (वरची लिंक) आणि उघडा -> "Install unknown apps" ला परवानगी द्या -> Install. Play Protect ने इशारा दिला
+   (APK Play Store चा नाही) तर **Install anyway** निवडा.
 3. App उघडा. Login screen च्या **तळाशी server address** दिसतो (GitHub वर `API_URL` variable मध्ये जो PC IP ठेवला तो). वेगळा असल्यास
    त्यावर tap करा -> `http://<तुमच्या-PC-चा-IP>:8000` टाका -> **Test** -> **Save**.
-4. Login: Employee ID `EMP001`, password `Employee@123` (demo). Admin: `admin@example.com` / `Admin@12345`.
+4. Login: Employee ID `EMP001` ... `EMP010`, password `Employee@123` (demo). Admin: `admin@example.com` / `Admin@12345`.
 5. पहिल्यांदा **Phone setup** wizard आपोआप उघडतो (Profile -> Phone setup मधूनही उघडता येतो):
    * Stage 1: Default phone app (**रेकमेंडेड**), Phone & SIM, Contacts, Call history, Call notifications -> **Grant all essential**.
    * Stage 2: lock screen / pop-up (Xiaomi), Auto-start, Floating call bubble, Battery, Microphone -> **Enable recommended**.
