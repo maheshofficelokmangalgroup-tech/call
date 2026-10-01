@@ -1,0 +1,111 @@
+"""Prepare a database for use: run migrations, ensure reference data, optionally create the first admin.
+
+    python -m scripts.bootstrap
+    python -m scripts.bootstrap --admin-email admin@company.com --admin-password '<strong password>'
+
+Idempotent, so it is safe to run on every deployment (the Docker entrypoint does).
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+import time
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
+
+from app.core.config import get_settings
+from app.core.database import get_engine, new_session
+from app.core.security import hash_password, validate_password_strength
+from app.core.timeutils import utcnow
+from app.models.employee import Employee, Role
+from app.services.reference_data import ensure_reference_data
+
+log = logging.getLogger("bootstrap")
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def wait_for_database(timeout_seconds: int) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            with get_engine().connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return
+        except OperationalError as exc:
+            if time.monotonic() >= deadline:
+                raise SystemExit(f"Database is not reachable: {exc.orig}") from exc
+            log.info("Waiting for the database...")
+            time.sleep(2)
+
+
+def run_migrations() -> None:
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    command.upgrade(cfg, "head")
+
+
+def ensure_admin(email: str, password: str) -> str:
+    problems = validate_password_strength(password, forbidden=[email.split("@")[0]])
+    if problems:
+        raise SystemExit("Admin password rejected: " + " ".join(problems))
+    db = new_session()
+    try:
+        existing_admin = db.scalars(select(Employee).join(Role, Role.id == Employee.role_id).where(Role.name == "admin")).first()
+        if existing_admin is not None:
+            return f"an administrator already exists ({existing_admin.email}); nothing created"
+        role = db.scalars(select(Role).where(Role.name == "admin")).one()
+        db.add(
+            Employee(
+                employee_code="ADMIN",
+                email=email.strip().lower(),
+                full_name="Administrator",
+                password_hash=hash_password(password),
+                role_id=role.id,
+                daily_target=0,
+                must_change_password=False,
+                password_changed_at=utcnow(),
+            )
+        )
+        db.commit()
+        return f"administrator {email.strip().lower()} created"
+    finally:
+        db.close()
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    settings = get_settings()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--admin-email", default=settings.bootstrap_admin_email)
+    parser.add_argument("--admin-password", default=settings.bootstrap_admin_password)
+    parser.add_argument("--wait-db", type=int, default=60, help="seconds to wait for the database (default 60)")
+    parser.add_argument("--skip-migrate", action="store_true")
+    args = parser.parse_args()
+
+    log.info("Database: %s", get_engine().url.render_as_string(hide_password=True))
+    wait_for_database(args.wait_db)
+    if not args.skip_migrate:
+        run_migrations()
+        log.info("Migrations are up to date")
+
+    db = new_session()
+    try:
+        ensure_reference_data(db)
+    finally:
+        db.close()
+    log.info("Reference data (roles, outcomes, default settings) is in place")
+
+    if args.admin_email and args.admin_password:
+        log.info("Admin: %s", ensure_admin(args.admin_email, args.admin_password))
+    else:
+        log.info("No BOOTSTRAP_ADMIN_EMAIL/BOOTSTRAP_ADMIN_PASSWORD given - skipping admin creation")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

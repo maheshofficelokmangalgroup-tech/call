@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Plain HTTP is allowed at the platform level so a pilot server on the office Wi-Fi (http://192.168.x.x:8000) works.
+  The app itself refuses http:// for any address outside the local network (see src/services/api/serverUrl.ts), so
+  production servers must use https://.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

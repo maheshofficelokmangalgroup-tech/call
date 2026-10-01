@@ -1,0 +1,124 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Telephony (section 4 of the documentation). All are requested at run time with an explanation (Phone setup screen). -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Phone-app mode: call screen above the lock screen, floating call bubble, keep calls alive, microphone recording. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Only used to find the recording file made by the phone's own call recorder (when recording is enabled). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
+
+    <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:networkSecurityConfig="@xml/network_security_config"
+      android:supportsRtl="true">
+
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:screenOrientation="portrait"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+
+        <!-- What makes this app eligible to be the phone app: it can handle "dial this number". -->
+        <intent-filter>
+            <action android:name="android.intent.action.DIAL" />
+            <category android:name="android.intent.category.DEFAULT" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.DIAL" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:scheme="tel" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="tel" />
+        </intent-filter>
+
+        <!-- Tapping the system's "Missed call" notification asks the phone app to show the call log. -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="vnd.android.cursor.dir/calls" />
+        </intent-filter>
+      </activity>
+
+      <!-- The call screen: its own task, may appear above the lock screen. -->
+      <activity
+        android:name=".calling.InCallActivity"
+        android:exported="false"
+        android:launchMode="singleTask"
+        android:taskAffinity="com.employeecalling.incall"
+        android:showWhenLocked="true"
+        android:turnScreenOn="true"
+        android:screenOrientation="portrait"
+        android:theme="@style/InCallTheme"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:windowSoftInputMode="adjustResize" />
+
+      <!-- Telecom binds this when the app is the phone app; it is told about every call. -->
+      <service
+        android:name=".calling.AppInCallService"
+        android:exported="true"
+        android:foregroundServiceType="phoneCall|microphone"
+        android:permission="android.permission.BIND_INCALL_SERVICE">
+        <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="true" />
+        <intent-filter>
+            <action android:name="android.telecom.InCallService" />
+        </intent-filter>
+      </service>
+
+      <!-- Decline / Hang up buttons of the call notification. -->
+      <receiver
+        android:name=".calling.CallActionReceiver"
+        android:exported="false" />
+
+      <!-- Keeps track of our outgoing call even if the JS runtime was killed while the call was in progress. -->
+      <receiver
+        android:name=".calling.PhoneStateReceiver"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.PHONE_STATE" />
+        </intent-filter>
+      </receiver>
+    </application>
+</manifest>

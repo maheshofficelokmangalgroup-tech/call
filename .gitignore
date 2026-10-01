@@ -1,0 +1,58 @@
+# ---- secrets: never commit these (documentation section 16 / 27) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+# the standard public React Native debug key is needed for debug builds
+!mobile/android/app/debug.keystore
+credentials.json
+secrets/
+# passwords of the release keystore (the keystore file itself is covered by *.keystore)
+mobile/android/keystore.properties
+
+# ---- backend ----
+backend/.venv/
+backend/var/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.db
+*.db-wal
+*.db-shm
+var/
+
+# ---- mobile ----
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/app/.cxx/
+mobile/android/local.properties
+.kotlin/
+*.apk
+*.aab
+# built APKs and the local copy of the signing values for the GitHub secrets
+release/
+*.hprof
+
+# ---- admin web (next phase) ----
+admin-web/node_modules/
+admin-web/.next/
+
+# ---- the project's business documents stay on the owner's PC ----
+*.docx
+~$*
+
+# ---- editors / OS ----
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log

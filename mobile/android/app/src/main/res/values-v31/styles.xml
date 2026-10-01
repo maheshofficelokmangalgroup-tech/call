@@ -1,0 +1,16 @@
+<resources>
+
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_green</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+    </style>
+
+    <style name="InCallTheme" parent="AppTheme">
+        <item name="android:windowBackground">@color/call_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_green_deep</item>
+    </style>
+
+</resources>

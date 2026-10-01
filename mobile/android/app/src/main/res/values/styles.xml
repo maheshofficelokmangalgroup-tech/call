@@ -1,0 +1,15 @@
+<resources>
+
+    <!-- The app is light-only: its own colours are explicit, so the system dark mode must not recolour inputs or windows. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+
+    <!-- The call screen paints its own deep-green backdrop; this avoids a white flash while it loads. -->
+    <style name="InCallTheme" parent="AppTheme">
+        <item name="android:windowBackground">@color/call_bg</item>
+    </style>
+
+</resources>
