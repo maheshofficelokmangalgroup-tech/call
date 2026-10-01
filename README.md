@@ -52,10 +52,12 @@ Built from the project documentation `Employee_Calling_CRM_Platform_Project_Docu
   `backend\var\storage\recordings\<वर्ष>\<महिना>\<employee-id>\<call-id>.m4a`. Admin साठी
   `GET /api/v1/recordings/<id>/playback-url?mode=download` (Swagger: `http://<PC-IP>:8000/docs`). Recordings चं list/player असलेला
   Admin Web App पुढच्या phase मध्ये येतो.
-* **मर्यादा:** Android सामान्य app ला समोरच्या व्यक्तीचा आवाज record करू देत नाही. App **microphone** record करतो (speaker on
-  असेल तर समोरचा आवाज येऊ शकतो) आणि काही phones call दरम्यान mic बंद करतात - तेव्हा "silent" recording जतन/upload केलं जात नाही.
-  Xiaomi/HyperOS वर हे अजून तपासलेलं नाही; प्रत्येक model वर एक test call करा. 100% खात्रीशीर recording हवी असेल तर cloud telephony
-  (Exotel / Knowlarity / Twilio) लागते.
+* **मर्यादा (महत्त्वाची):** Android च्या official documentation नुसार call चालू असताना सामान्य app ला microphone चा आवाज मिळत नाही
+  ("the call always receives audio" - फक्त phone चा स्वतःचा recorder आणि accessibility service ला मिळतो). म्हणून बहुतेक phones वर
+  app ला फक्त **silence** मिळतो; तेव्हा रिकामी फाईल जतन/upload केली जात नाही आणि call वर कारण दिसतं. Xiaomi/HyperOS वर हे अजून
+  तपासलेलं नाही - एक test call करून call details बघा. Accessibility वाला उपाय मुद्दाम घातलेला नाही: भारतात Google Play Protect
+  तसा APK browser मधून install होऊ देत नाही. **प्रत्येक call ची खात्रीशीर recording** हवी असेल तर cloud telephony (Exotel /
+  Knowlarity / MyOperator / Twilio) लागते - call त्यांच्या server वरून जोडली जाते आणि ते दोन्ही बाजूंचा आवाज record करतात.
 
 ## Developers: कसं चालवायचं / build करायचं
 
@@ -136,11 +138,12 @@ npx tsc --noEmit ; npx eslint src                          # type check + lint
 
 ## Important notes (please read)
 
-* **Recording & privacy.** Android does not let normal apps capture the other person's voice. In phone-app mode the app records
-  the **microphone** during CRM calls only (the employee always; the customer when the speaker is on and the phone allows it),
-  deletes a silent recording instead of uploading it, shows a red REC chip, and personal calls are never recorded. Without
-  phone-app mode it only uploads a file produced by the phone's own recorder. Recording stays off until an administrator
-  enables `recording` in settings. Define consent and retention first (documentation, section 24) and test your phone models.
+* **Recording & privacy.** Android does not let normal apps capture a phone call: while a call is on, most phones give an ordinary
+  app only silence from the microphone. In phone-app mode the app *tries* to record the **microphone** during CRM calls only, deletes
+  a silent recording instead of uploading it, says on the call why there is none, shows a red REC chip while the recorder runs, and
+  personal calls are never recorded. Without phone-app mode it only uploads a file produced by the phone's own recorder. Recording
+  stays off until an administrator enables `recording` in settings. Define consent and retention first (documentation, section 24).
+  For recordings of **every** call use a cloud-telephony provider (see [docs/TELEPHONY.md](docs/TELEPHONY.md)).
 * **Not verified on real hardware yet.** Everything was tested on an Android emulator (virtual SIM/modem) and by unit tests. Real
   SIM calls, dual-SIM, Bluetooth, the proximity sensor, microphone capture during a real call and the Xiaomi lock-screen /
   pop-up / auto-start pages need to be checked on your actual phones (Profile -> Device & telephony check).

@@ -36,6 +36,12 @@ describe('which steps a phone sees', () => {
     expect(ids(build())).toEqual(['dialer', 'phone', 'contacts', 'callLog', 'notifications', 'bubble', 'battery', 'microphone']);
   });
 
+  it('the microphone is only "recommended" once the company turned recording on', () => {
+    const tag = (recordingEnabled: boolean) => build({ recordingEnabled }).find((s) => s.id === 'microphone')?.tag;
+    expect(tag(false)).toBe('optional');
+    expect(tag(true)).toBe('recommended');
+  });
+
   it('a Xiaomi phone adds the lock-screen / pop-up switches and auto-start', () => {
     const steps = build({ native: native({ isXiaomi: true, needsAutostart: true, fullScreenApplicable: true }) });
     expect(stepsOfStage(steps, 2).map((s) => s.id)).toEqual(['lockscreen', 'popups', 'fullscreen', 'autostart', 'bubble', 'battery', 'microphone']);

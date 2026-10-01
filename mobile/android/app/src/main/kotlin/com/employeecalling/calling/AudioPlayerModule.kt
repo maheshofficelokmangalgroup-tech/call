@@ -10,7 +10,13 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.module.annotations.ReactModule
 
-/** Streams a recording from its short-lived signed URL. One player at a time. */
+/**
+ * Streams a recording from its short-lived signed URL. One player at a time.
+ *
+ * MediaPlayer is a state machine and must not be asked for its position or duration before it is prepared: the platform answers a
+ * call in the wrong state by posting MEDIA_ERROR (-38) to the player itself, which puts it into the error state for good. So the
+ * state is tracked here ([prepared]) and position / duration are only read from a prepared player.
+ */
 @ReactModule(name = AudioPlayerModule.NAME)
 class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -20,6 +26,7 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
     private val main = Handler(Looper.getMainLooper())
     private var player: MediaPlayer? = null
+    private var prepared = false
     private var ticker: Runnable? = null
 
     override fun getName() = NAME
@@ -30,10 +37,11 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
     }
 
     private fun emit(state: String, message: String? = null) {
+        val current = player?.takeIf { prepared }
         val params = Arguments.createMap()
         params.putString("state", state)
-        params.putDouble("positionMs", (player?.let { safe { it.currentPosition } } ?: 0).toDouble())
-        params.putDouble("durationMs", (player?.let { safe { it.duration } } ?: 0).toDouble())
+        params.putDouble("positionMs", (current?.let { safe { it.currentPosition } } ?: 0).toDouble())
+        params.putDouble("durationMs", (current?.let { safe { it.duration } } ?: 0).toDouble())
         if (message != null) params.putString("message", message)
         PhoneEvents.emit("AudioPlayerState", params)
     }
@@ -49,7 +57,7 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
         val task = object : Runnable {
             override fun run() {
                 val p = player ?: return
-                if (safe { p.isPlaying } == true) emit("playing")
+                if (prepared && safe { p.isPlaying } == true) emit("playing")
                 main.postDelayed(this, 250)
             }
         }
@@ -64,6 +72,7 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
     private fun release() {
         stopTicker()
+        prepared = false
         player?.let {
             safe { it.reset() }
             safe { it.release() }
@@ -83,22 +92,29 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
                 )
                 mp.setDataSource(url)
                 mp.setOnPreparedListener {
+                    if (player !== it) return@setOnPreparedListener // a newer play() replaced this player
+                    prepared = true
                     it.start()
                     emit("playing")
                     startTicker()
                 }
                 mp.setOnCompletionListener {
+                    if (player !== it) return@setOnCompletionListener
                     stopTicker()
                     emit("completed")
                 }
-                mp.setOnErrorListener { _, what, extra ->
-                    stopTicker()
-                    emit("error", "Playback failed ($what/$extra)")
+                mp.setOnErrorListener { failed, what, extra ->
+                    if (player === failed) {
+                        // an errored player is unusable: report it and let go of it (never ask it for its position)
+                        release()
+                        emit("error", "Playback failed ($what/$extra)")
+                    }
                     true
                 }
                 emit("preparing")
                 mp.prepareAsync()
             } catch (e: Exception) {
+                release()
                 emit("error", e.message ?: "Playback failed")
             }
         }
@@ -107,7 +123,7 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun pause() {
         main.post {
-            player?.let { if (safe { it.isPlaying } == true) safe { it.pause() } }
+            player?.let { if (prepared && safe { it.isPlaying } == true) safe { it.pause() } }
             stopTicker()
             emit("paused")
         }
@@ -117,6 +133,7 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
     fun resume() {
         main.post {
             player?.let {
+                if (!prepared) return@post
                 safe { it.start() }
                 emit("playing")
                 startTicker()
@@ -128,6 +145,7 @@ class AudioPlayerModule(reactContext: ReactApplicationContext) : ReactContextBas
     fun seekTo(positionMs: Double) {
         main.post {
             player?.let {
+                if (!prepared) return@post
                 safe { it.seekTo(positionMs.toInt()) }
                 emit(if (safe { it.isPlaying } == true) "playing" else "paused")
             }

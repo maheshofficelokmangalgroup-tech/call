@@ -34,9 +34,9 @@ const TEXT: Record<MissingRecordingCode, { title: string; advice: string; fixInS
     fixInSetup: true,
   },
   silent: {
-    title: 'The microphone captured only silence',
+    title: 'The phone gave the app only silence',
     advice:
-      'Many phones switch the microphone off for apps while a call is on. Keep the speaker on during calls so the other person can be heard. A silent file is never saved or uploaded.',
+      'Android lets only the phone itself record while a call is on - most phones give other apps no sound at all, so nothing is wrong with your settings. A silent file is never saved or uploaded. If your company needs every call recorded, it needs a cloud-telephony recording service.',
     fixInSetup: false,
   },
   failed: {

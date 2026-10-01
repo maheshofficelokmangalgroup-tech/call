@@ -72,16 +72,28 @@ Telecom ---- onCallAdded / onStateChanged / onCallRemoved ---> AppInCallService
 
 ### Recording (microphone) - what it can and cannot do
 
-Android does not give normal apps the other person's voice (`VOICE_CALL` is blocked since Android 10). When an
-administrator enables `settings.recording.enabled`, mode B records the **microphone** of the employee's phone during CRM
-calls only (`CallRecorder`, foreground service type `microphone`, AAC/m4a, ~6 KB/s):
+**Read this first: on current Android a normal app is usually given silence while a call is on.** Android's own documentation
+([Sharing audio input](https://developer.android.com/media/platform/sharing-audio-input)) says that during a voice call "the call
+always receives audio", and that only a pre-installed app holding `CAPTURE_AUDIO_OUTPUT` (the phone's own recorder) or an
+*accessibility service* can capture it. The `VOICE_CALL` source is blocked for ordinary apps since Android 10. So the app tries,
+and when the microphone delivers only silence the call says so instead of keeping an empty file.
 
-* the employee's voice is captured when the phone lets apps use the microphone during a call; the customer is captured
-  **when the speaker is on**. Phones differ (some give apps nothing but silence while a call is on) and this has **not been
-  verified on Xiaomi/HyperOS** - test each model;
+* **Why there is no accessibility-service workaround here:** call-recorder apps use one, but Google Play Protect's *enhanced fraud
+  protection* (live in India) blocks installing an APK that declares an accessibility service when it comes from a browser,
+  messaging app or file manager - so adding one could stop employees from installing the app at all. Google Play itself bans it too.
+* **Dependable recording on every phone needs a cloud-telephony provider** (Exotel, Knowlarity, MyOperator, Twilio ...): the call
+  is bridged through the provider, which records both sides on its server; the backend then stores the file with the call. That is
+  the production answer for a CRM that must record every call (documentation section 4).
+
+When an administrator enables `settings.recording.enabled`, mode B tries to record the **microphone** during CRM calls only
+(`CallRecorder`, foreground service type `microphone`, AAC/m4a, ~6 KB/s):
+
+* what is captured depends on the phone: some give the app the employee's voice (and the customer when the speaker is on), most
+  give silence. Nothing is assumed per brand - **it has not been verified on Xiaomi/HyperOS**; make one test call per model and
+  read the result on the call details;
 * the amplitude is sampled during the call: a recording that is silent is **deleted and never uploaded** (section 7.7:
   no recording record unless a real recording exists);
-* a red **REC** chip is on the call screen while it records ("Not recording" when the recorder could not start), and the
+* a red **REC** chip is on the call screen while the recorder runs ("Not recording" when it could not start), and the
   consent notice from the server is shown in Phone setup;
 * the file is uploaded through the same private, signed pipeline as before, then deleted from the phone.
 
@@ -95,7 +107,7 @@ calls only (`CallRecorder`, foreground service type `microphone`, AAC/m4a, ~6 KB
   | Reason | Meaning | Advice shown |
   |---|---|---|
   | `no_permission` | microphone permission off | Open Phone setup |
-  | `silent` | the microphone delivered only silence (loudest sound below the threshold) | keep the speaker on; some phones block the mic during calls |
+  | `silent` | the microphone delivered only silence (loudest sound below the threshold) | Android gives most apps no sound during a call; recording every call needs cloud telephony |
   | `failed` | the recorder could not start or finish (or the file vanished) | try the next call; run the Device & telephony check |
   | `no_file` | phone's own dialer mode: the phone's call recorder left no file | turn on auto call recording in the Phone app, or make calls through this app |
   | `no_media_access` | phone's own dialer mode: no permission to look for that file | allow audio-file access in Phone setup |
