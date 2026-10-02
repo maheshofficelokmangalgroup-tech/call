@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { colors, motion, radius } from '../theme';
+import { colors, radius } from '../theme';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
 
@@ -12,26 +11,19 @@ interface Props<T extends string> {
   onChange: (key: T) => void;
 }
 
-/** Two/three-way switch with a pill that springs between the options. */
+/** Two/three-way switch; the pill jumps straight to the chosen option (no animation). */
 export function SegmentedControl<T extends string>({ options, value, onChange }: Props<T>) {
   const [width, setWidth] = useState(0);
   const index = Math.max(0, options.findIndex((o) => o.key === value));
   const slot = width / options.length;
-  const x = useSharedValue(0);
-
-  useEffect(() => {
-    if (slot > 0) x.value = withSpring(index * slot, motion.spring);
-  }, [index, slot, x]);
-
-  const pill = useAnimatedStyle(() => ({ width: slot - 8, transform: [{ translateX: x.value + 4 }] }));
 
   return (
     <View style={styles.wrap} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
-      <Animated.View style={[styles.pill, pill]} />
+      <View style={[styles.pill, { width: Math.max(0, slot - 8), transform: [{ translateX: index * slot + 4 }] }]} />
       {options.map((option) => {
         const active = option.key === value;
         return (
-          <PressableScale key={option.key} onPress={() => onChange(option.key)} haptic={false} scaleTo={0.96} style={styles.option}>
+          <PressableScale key={option.key} onPress={() => onChange(option.key)} haptic={false} style={styles.option}>
             <Text variant="bodyMedium" color={active ? colors.white : colors.inkSoft} style={active ? styles.active : undefined}>
               {option.label}
             </Text>

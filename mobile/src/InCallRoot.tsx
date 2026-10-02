@@ -21,7 +21,7 @@ export function InCallRoot() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#074F13' }}>
-      <ReducedMotionConfig mode={ReduceMotion.Never} />
+      <ReducedMotionConfig mode={ReduceMotion.Always} />
       <SafeAreaProvider>
         <LiveCallScreen variant="activity" />
         <ToastHost />

@@ -16,7 +16,7 @@ export function Card({ style, onPress, padded = true, tint, children, ...rest }:
   const body = [styles.card, padded ? styles.padded : null, tint ? { backgroundColor: tint } : null, style];
   if (onPress) {
     return (
-      <PressableScale onPress={onPress} scaleTo={0.98} style={body}>
+      <PressableScale onPress={onPress} style={body}>
         {children}
       </PressableScale>
     );

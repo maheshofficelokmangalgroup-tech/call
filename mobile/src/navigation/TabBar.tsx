@@ -1,19 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '../components/Icon';
-import { PulseRing } from '../components/PulseRing';
 import { PressableScale } from '../components/PressableScale';
 import { Text } from '../components/Text';
 import { useQueue } from '../hooks/data';
-import { colors, motion, shadow } from '../theme';
+import { colors, shadow } from '../theme';
 
 const META: Record<string, { label: string; icon: IconName }> = {
   Home: { label: 'Home', icon: 'home' },
-  Queue: { label: 'Queue', icon: 'list-checks' },
+  Queue: { label: 'Calls', icon: 'list-checks' },
   Dialer: { label: 'Dial', icon: 'phone' },
   History: { label: 'History', icon: 'history' },
   Profile: { label: 'Profile', icon: 'user' },
@@ -21,16 +19,6 @@ const META: Record<string, { label: string; icon: IconName }> = {
 
 function TabItem({ routeName, focused, badge, onPress, onLongPress }: { routeName: string; focused: boolean; badge?: number; onPress: () => void; onLongPress: () => void }) {
   const meta = META[routeName] ?? { label: routeName, icon: 'home' as IconName };
-  const bounce = useSharedValue(focused ? 1 : 0);
-
-  useEffect(() => {
-    bounce.value = focused ? withSequence(withTiming(0.0, { duration: 0 }), withSpring(1, motion.springBouncy)) : withTiming(0, { duration: 160 });
-  }, [focused, bounce]);
-
-  const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(bounce.value, [0, 1], [0, -3]) }, { scale: interpolate(bounce.value, [0, 1], [1, 1.14]) }],
-  }));
-
   const color = focused ? colors.green : colors.faint;
   const isCenter = routeName === 'Dialer';
 
@@ -40,14 +28,12 @@ function TabItem({ routeName, focused, badge, onPress, onLongPress }: { routeNam
         <PressableScale
           onPress={onPress}
           onLongPress={onLongPress}
-          scaleTo={0.9}
           style={styles.fabWrap}
           accessibilityRole="tab"
           accessibilityLabel="Dial"
           accessibilityState={{ selected: focused }}
           testID="tab-Dialer"
         >
-          <PulseRing size={58} color={colors.green} active={!focused} duration={2400} maxScale={1.5} />
           <View style={[styles.fab, focused ? styles.fabActive : null]}>
             <Icon name="phone" size={26} color={colors.white} />
           </View>
@@ -61,14 +47,13 @@ function TabItem({ routeName, focused, badge, onPress, onLongPress }: { routeNam
       onPress={onPress}
       onLongPress={onLongPress}
       haptic={false}
-      scaleTo={0.92}
       style={styles.item}
       accessibilityRole="tab"
       accessibilityLabel={meta.label}
       accessibilityState={{ selected: focused }}
       testID={`tab-${routeName}`}
     >
-      <Animated.View style={iconStyle}>
+      <View>
         <Icon name={meta.icon} size={24} color={color} strokeWidth={focused ? 2.6 : 2.1} />
         {badge ? (
           <View style={styles.badge}>
@@ -77,7 +62,7 @@ function TabItem({ routeName, focused, badge, onPress, onLongPress }: { routeNam
             </Text>
           </View>
         ) : null}
-      </Animated.View>
+      </View>
       <Text variant="caption" color={color} style={focused ? styles.labelActive : undefined}>
         {meta.label}
       </Text>
@@ -85,23 +70,17 @@ function TabItem({ routeName, focused, badge, onPress, onLongPress }: { routeNam
   );
 }
 
-/** Bottom navigation: bouncing icons, a sliding pill under the active tab and a pulsing dial button in the middle. */
+/** Bottom navigation: a bar under the active tab and a dial button in the middle. Nothing in it moves or animates. */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const due = useQueue().data?.due_callbacks ?? 0;
   const [width, setWidth] = useState(0);
   const slot = width / state.routes.length;
-  const x = useSharedValue(0);
-
-  useEffect(() => {
-    if (slot > 0) x.value = withSpring(state.index * slot + (slot - 26) / 2, motion.spring);
-  }, [state.index, slot, x]);
-
-  const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], opacity: state.routes[state.index]?.name === 'Dialer' ? 0 : 1 }));
+  const pillX = state.index * slot + (slot - 26) / 2;
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
-      <Animated.View style={[styles.pill, pill]} />
+      <View style={[styles.pill, { transform: [{ translateX: slot > 0 ? pillX : 0 }], opacity: state.routes[state.index]?.name === 'Dialer' ? 0 : 1 }]} />
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         return (

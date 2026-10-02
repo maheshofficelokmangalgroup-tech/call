@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeIn, FadeInDown, LinearTransition, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
@@ -69,12 +68,12 @@ export function QueueScreen() {
           value={segment}
           onChange={setSegment}
           options={[
-            { key: 'today', label: "Today's queue", badge: queue.data?.due_callbacks || undefined },
+            { key: 'today', label: "Today's calls", badge: queue.data?.due_callbacks || undefined },
             { key: 'all', label: 'All contacts' },
           ]}
         />
         {segment === 'all' ? (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.searchWrap}>
+          <View style={styles.searchWrap}>
             <Icon name="search" size={20} color={colors.muted} />
             <TextInput
               value={search}
@@ -87,11 +86,11 @@ export function QueueScreen() {
               testID="contact-search"
             />
             {search ? (
-              <PressableScale onPress={() => setSearch('')} haptic={false} scaleTo={0.85} hitSlop={10}>
+              <PressableScale onPress={() => setSearch('')} haptic={false} hitSlop={10}>
                 <Icon name="x" size={18} color={colors.muted} />
               </PressableScale>
             ) : null}
-          </Animated.View>
+          </View>
         ) : null}
       </View>
 
@@ -132,9 +131,7 @@ export function QueueScreen() {
             )
           }
           renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 45).duration(360)} layout={LinearTransition.springify().damping(18)}>
-              <QueueCard item={item} highlight={index === 0} onOpen={() => open(item.contact)} onCall={() => callQueueItem(item)} />
-            </Animated.View>
+            <QueueCard item={item} highlight={index === 0} showTags={false} onOpen={() => open(item.contact)} onCall={() => callQueueItem(item)} />
           )}
         />
       ) : (
@@ -174,16 +171,12 @@ export function QueueScreen() {
             )
           }
           ListFooterComponent={contacts.loadingMore ? <ActivityIndicator color={colors.green} style={styles.footer} /> : undefined}
-          renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)}>
-              <ContactRow contact={item} onOpen={() => open(item)} onCall={() => callContact(item)} />
-            </Animated.View>
-          )}
+          renderItem={({ item }) => <ContactRow contact={item} onOpen={() => open(item)} onCall={() => callContact(item)} />}
         />
       )}
 
       {segment === 'today' && first ? (
-        <Animated.View entering={SlideInDown.delay(300).springify().damping(16)} style={styles.nextBar}>
+        <View style={styles.nextBar}>
           <Avatar name={first.contact.name} size={42} />
           <View style={styles.nextText}>
             <Text variant="caption" color="rgba(255,255,255,0.75)">
@@ -196,8 +189,8 @@ export function QueueScreen() {
               {formatPhone(first.contact.phone)}
             </Text>
           </View>
-          <Button title="Call" icon="phone" variant="accent" size="md" onPress={() => callQueueItem(first)} testID="next-call" />
-        </Animated.View>
+          <Button title="Call" icon="phone" variant="white" size="md" onPress={() => callQueueItem(first)} testID="next-call" />
+        </View>
       ) : null}
     </View>
   );
@@ -235,7 +228,7 @@ const styles = StyleSheet.create({
     padding: 10,
     paddingLeft: 12,
     borderRadius: radius.xl,
-    backgroundColor: colors.green,
+    backgroundColor: colors.orangeBold,
     ...(shadow.floating as object),
   },
   nextText: { flex: 1 },

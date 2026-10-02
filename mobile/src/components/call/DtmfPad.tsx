@@ -21,7 +21,6 @@ export function DtmfPad({ onDigit, size = 62 }: { onDigit: (digit: string) => vo
             <PressableScale
               key={key.digit}
               onPress={() => onDigit(key.digit)}
-              scaleTo={0.88}
               style={[styles.key, { width: size, height: size, borderRadius: size / 2 }]}
               testID={`dtmf-${key.digit}`}
             >

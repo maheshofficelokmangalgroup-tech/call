@@ -24,7 +24,7 @@ export function ScreenHeader({ title, subtitle, back = false, right, onBrand = f
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + 8 }]}>
       {back ? (
-        <PressableScale onPress={() => navigation.goBack()} style={[styles.back, onBrand ? styles.backOnBrand : null]} scaleTo={0.9}>
+        <PressableScale onPress={() => navigation.goBack()} style={[styles.back, onBrand ? styles.backOnBrand : null]}>
           <Icon name="arrow-left" size={22} color={fg} />
         </PressableScale>
       ) : null}

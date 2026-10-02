@@ -1,34 +1,23 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Icon } from '../components/Icon';
-import { PulseRing } from '../components/PulseRing';
 import { Text } from '../components/Text';
-import { colors, motion } from '../theme';
+import { colors } from '../theme';
 
 export function SplashScreen() {
-  const pop = useSharedValue(0.6);
-  const wiggle = useSharedValue(0);
-  useEffect(() => {
-    pop.value = withSpring(1, motion.springBouncy);
-    wiggle.value = withRepeat(withSequence(withTiming(-12, { duration: 140 }), withTiming(12, { duration: 140 }), withTiming(0, { duration: 140 })), 2);
-  }, [pop, wiggle]);
-  const logo = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }, { rotate: `${wiggle.value}deg` }] }));
-
   return (
     <View style={styles.root}>
       <View style={styles.center}>
-        <PulseRing size={104} color={colors.white} duration={1600} maxScale={1.8} />
-        <Animated.View style={[styles.logo, logo]}>
+        <View style={styles.logo}>
           <Icon name="phone-call" size={46} color={colors.green} />
-        </Animated.View>
+        </View>
       </View>
-      <Animated.View entering={FadeIn.delay(250).duration(400)}>
+      <View>
         <Text variant="title" color={colors.ink} align="center" style={styles.name}>
           Employee Calling
         </Text>
-      </Animated.View>
+      </View>
     </View>
   );
 }

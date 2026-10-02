@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
@@ -93,11 +92,11 @@ function ClassicInCall() {
       <View style={[styles.bubble, styles.bubbleA]} />
       <View style={[styles.bubble, styles.bubbleB]} />
 
-      <Animated.View entering={FadeIn.duration(300)} style={styles.top}>
+      <View style={styles.top}>
         <Text variant="smallMedium" color="rgba(255,255,255,0.75)">
           {call.phase === 'failed' ? 'PROBLEM' : 'OUTGOING CALL'}
         </Text>
-      </Animated.View>
+      </View>
 
       <View style={styles.center}>
         <View style={styles.avatarWrap}>
@@ -110,7 +109,7 @@ function ClassicInCall() {
           ) : null}
           <Avatar name={call.contactName ?? call.phone} size={132} />
         </View>
-        <Animated.View entering={FadeInDown.delay(120).duration(360)} style={styles.info}>
+        <View style={styles.info}>
           <Text variant="title" color={colors.white} align="center" numberOfLines={2}>
             {call.contactName ?? formatPhone(call.phone)}
           </Text>
@@ -130,18 +129,18 @@ function ClassicInCall() {
               {formatDuration(call.phase === 'finishing' && call.endedAt ? (call.endedAt - (call.offhookAt ?? call.startedAt)) / 1000 : elapsed)}
             </Text>
           ) : null}
-        </Animated.View>
+        </View>
       </View>
 
       {call.phase === 'failed' ? (
-        <Animated.View entering={FadeInDown.duration(300)} style={styles.bottom}>
+        <View style={styles.bottom}>
           <Text variant="body" color="rgba(255,255,255,0.9)" align="center" style={styles.note}>
             {call.error ?? 'The call could not be placed.'}
           </Text>
           <Button title="Close" variant="accent" onPress={() => { useCallStore.getState().setActive(null); navigation.goBack(); }} />
-        </Animated.View>
+        </View>
       ) : (
-        <Animated.View entering={FadeInDown.delay(200).duration(360)} style={styles.bottom}>
+        <View style={styles.bottom}>
           <Text variant="small" color="rgba(255,255,255,0.8)" align="center" style={styles.note}>
             {live
               ? phoneApp
@@ -150,7 +149,7 @@ function ClassicInCall() {
               : 'Checking how the call went…'}
           </Text>
           {live ? (
-            <PressableScale onPress={endCall} scaleTo={0.92} style={styles.endButton} testID="end-call">
+            <PressableScale onPress={endCall} style={styles.endButton} testID="end-call">
               <Icon name="phone-off" size={30} color={colors.white} />
             </PressableScale>
           ) : null}
@@ -159,7 +158,7 @@ function ClassicInCall() {
               End call
             </Text>
           ) : null}
-        </Animated.View>
+        </View>
       )}
     </View>
   );

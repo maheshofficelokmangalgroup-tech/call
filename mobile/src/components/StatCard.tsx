@@ -18,20 +18,23 @@ interface Props {
   testID?: string;
 }
 
+/** Compact stat tile: the icon sits beside the number and its label. */
 export function StatCard({ label, value, icon, tone, toneSoft, onPress, format, testID }: Props) {
   const body = (
     <>
       <View style={[styles.icon, { backgroundColor: toneSoft }]}>
         <Icon name={icon} size={20} color={tone} />
       </View>
-      <AnimatedNumber value={value} variant="number" format={format} style={styles.number} />
-      <Text variant="smallMedium" color="muted" numberOfLines={1}>
-        {label}
-      </Text>
+      <View style={styles.text}>
+        <AnimatedNumber value={value} variant="number" format={format} style={styles.number} />
+        <Text variant="small" color="muted" numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
     </>
   );
   return onPress ? (
-    <PressableScale onPress={onPress} scaleTo={0.96} style={styles.card} testID={testID}>
+    <PressableScale onPress={onPress} style={styles.card} testID={testID}>
       {body}
     </PressableScale>
   ) : (
@@ -44,14 +47,18 @@ export function StatCard({ label, value, icon, tone, toneSoft, onPress, format, 
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    padding: 14,
-    gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     ...(shadow.card as object),
   },
-  icon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  number: { fontSize: 26, lineHeight: 32 },
+  icon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  text: { flex: 1 },
+  number: { fontSize: 26, lineHeight: 30 },
 });

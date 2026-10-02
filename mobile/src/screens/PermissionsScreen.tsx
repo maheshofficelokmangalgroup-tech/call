@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Animated, { FadeInDown, FadeInRight, FadeOutLeft, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '../components/Button';
@@ -15,7 +14,7 @@ import { telephony } from '../services/telephony/native';
 import { missingEssential, readyToCall, recommendedQueue, stageProgress, stepsOfStage, type Step, type StepTag } from '../services/telephony/setupModel';
 import { useAuth } from '../store/authStore';
 import { toast } from '../store/toastStore';
-import { colors, motion, radius } from '../theme';
+import { colors, radius } from '../theme';
 
 const TAG: Record<StepTag, { label: string; color: string; background: string }> = {
   required: { label: 'Required', color: colors.red, background: colors.redSoft },
@@ -43,11 +42,7 @@ export function PermissionsScreen() {
   const working = setup.busy !== null;
 
   // thin progress bar under the title
-  const fill = useSharedValue(0);
-  useEffect(() => {
-    fill.value = withSpring(progress.total ? progress.granted / progress.total : 0, motion.springSoft);
-  }, [progress.granted, progress.total, fill]);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
+  const fillPercent = Math.round((progress.total ? progress.granted / progress.total : 0) * 100);
 
   const leave = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -74,18 +69,18 @@ export function PermissionsScreen() {
         </View>
       </View>
       <View style={styles.barTrack}>
-        <Animated.View style={[styles.barFill, fillStyle]} />
+        <View style={[styles.barFill, { width: `${fillPercent}%` }]} />
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 190 }]} showsVerticalScrollIndicator={false}>
-        <Animated.View key={`intro-${stage}`} entering={FadeInDown.duration(260)}>
+        <View key={`intro-${stage}`}>
           <Text variant="body" color={colors.inkSoft} style={styles.intro}>
             {INTRO[stage]}
           </Text>
-        </Animated.View>
+        </View>
 
-        {list.map((step, index) => (
-          <Animated.View key={`${stage}-${step.id}`} entering={FadeInRight.delay(index * 55).duration(300)} exiting={FadeOutLeft.duration(140)}>
+        {list.map((step) => (
+          <View key={`${stage}-${step.id}`}>
             <SetupRow
               step={step}
               busy={setup.busy === step.id || (setup.busy === 'essential' && step.stage === 1 && step.action.kind === 'permission' && step.state !== 'granted')}
@@ -94,16 +89,16 @@ export function PermissionsScreen() {
               onPress={() => (step.action.kind === 'permission' && setup.blocked.has(step.action.key) ? void telephony.openAppSettings() : void setup.run(step))}
               onReopen={() => void setup.run({ ...step, state: 'missing' })}
             />
-          </Animated.View>
+          </View>
         ))}
 
         {stage === 2 && recording?.enabled ? (
-          <Animated.View entering={FadeInDown.delay(300).duration(300)} style={styles.notice}>
+          <View style={styles.notice}>
             <Icon name="shield" size={20} color={colors.blue} />
             <Text variant="small" color={colors.blue} style={styles.flex}>
               {recording.notice_text}
             </Text>
-          </Animated.View>
+          </View>
         ) : null}
       </ScrollView>
 
@@ -171,7 +166,7 @@ function SetupRow({ step, busy, blocked, disabled, onPress, onReopen }: { step: 
         <View style={styles.tagRow}>
           <Tag label={tag.label} color={tag.color} background={tag.background} />
           {confirmedByHand ? (
-            <PressableScale onPress={onReopen} haptic={false} scaleTo={0.95}>
+            <PressableScale onPress={onReopen} haptic={false}>
               <Text variant="caption" color={colors.green} style={styles.reopen}>
                 Open again
               </Text>
@@ -188,7 +183,7 @@ function SetupRow({ step, busy, blocked, disabled, onPress, onReopen }: { step: 
 
 function TextLink({ label, onPress, disabled, strong, testID }: { label: string; onPress: () => void; disabled?: boolean; strong?: boolean; testID?: string }) {
   return (
-    <PressableScale onPress={onPress} disabled={disabled} haptic={false} scaleTo={0.95} style={styles.link} testID={testID}>
+    <PressableScale onPress={onPress} disabled={disabled} haptic={false} style={styles.link} testID={testID}>
       <Text variant="bodyMedium" color={strong ? colors.green : colors.muted} style={strong ? styles.linkStrong : undefined}>
         {label}
       </Text>

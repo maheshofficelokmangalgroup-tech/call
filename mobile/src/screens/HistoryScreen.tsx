@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CallRow } from '../components/CallRow';
@@ -15,7 +15,7 @@ import { Text } from '../components/Text';
 import { listRecentCalls, type LocalCall } from '../database/calls';
 import { getUnsyncedCallUuids } from '../database/syncOps';
 import { useCachedQuery } from '../hooks/useCachedQuery';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootStackParamList, TabParamList } from '../navigation/types';
 import { api } from '../services/api/endpoints';
 import type { ServerCall } from '../services/api/types';
 import { mergeCalls, type CallRowModel } from '../services/data/callModels';
@@ -55,7 +55,9 @@ export function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const employeeId = useAuth((s) => s.employee?.id ?? null);
   const pendingOps = useSyncStore((s) => s.pending);
-  const [filter, setFilter] = useState<Filter>('all');
+  const route = useRoute<RouteProp<TabParamList, 'History'>>();
+  const tabNavigation = useNavigation<BottomTabNavigationProp<TabParamList, 'History'>>();
+  const [filter, setFilter] = useState<Filter>(route.params?.filter ?? 'all');
   const [local, setLocal] = useState<LocalCall[]>([]);
   const [unsynced, setUnsynced] = useState<Set<string>>(new Set());
 
@@ -63,6 +65,14 @@ export function HistoryScreen() {
     topics: ['history'],
     enabled: employeeId !== null,
   });
+
+  // the dashboard cards open this list with a filter: apply it, then clear it so the same card works again next time
+  const requestedFilter = route.params?.filter;
+  useEffect(() => {
+    if (!requestedFilter) return;
+    setFilter(requestedFilter);
+    tabNavigation.setParams({ filter: undefined });
+  }, [requestedFilter, tabNavigation]);
 
   const loadLocal = useCallback(async () => {
     if (employeeId === null) return;
@@ -84,8 +94,10 @@ export function HistoryScreen() {
   const filtered = useMemo(
     () =>
       rows.filter((r) => {
-        if (filter === 'connected') return r.status === 'completed' || r.status === 'connected';
-        if (filter === 'missed') return r.status === 'no_answer' || r.status === 'failed';
+        // the outcome the employee recorded counts too: a call saved as "Connected" is a connected call
+        const connected = r.status === 'completed' || r.status === 'connected' || r.disposition === 'CONNECTED';
+        if (filter === 'connected') return connected;
+        if (filter === 'missed') return !connected && (r.status === 'no_answer' || r.status === 'failed');
         if (filter === 'pending') return r.needsOutcome;
         if (filter === 'recordings') return hasRecording(r);
         return true;
@@ -150,10 +162,10 @@ export function HistoryScreen() {
             {section.title}
           </Text>
         )}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 35).duration(300)} layout={LinearTransition}>
+        renderItem={({ item }) => (
+          <View>
             <CallRow row={item} onPress={() => navigation.navigate('CallDetail', item.localUuid ? { callUuid: item.localUuid } : { serverId: item.serverId ?? undefined })} />
-          </Animated.View>
+          </View>
         )}
       />
     </View>
