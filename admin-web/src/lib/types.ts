@@ -46,6 +46,16 @@ export type CampaignCreate = S["CampaignCreate"];
 export type CampaignUpdate = S["CampaignUpdate"];
 export type ImportJob = S["ImportOut"];
 export type ImportRow = S["ImportRowOut"];
+export type ImportPlan = S["ImportPlanOut"];
+export type PlanEmployee = S["PlanEmployee"];
+export type DistributionChoice = S["DistributionIn"];
+export type WorkState = S["EmployeeStateOut"]["state"];
+export type EmployeeWorkState = S["EmployeeStateOut"];
+export type ActivityOverview = S["ActivityOverviewOut"];
+export type RebalanceRequest = S["RebalanceIn"];
+export type RebalancePlan = S["RebalancePlanOut"];
+export type RebalanceRun = S["RebalanceRunOut"];
+export type Credential = S["CredentialOut"];
 
 export type Page<T> = { items: T[]; total: number; page: number; page_size: number };
 

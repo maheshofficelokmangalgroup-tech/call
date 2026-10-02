@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileUp, Phone, Search, Target, UserPlus, Users, X } from "lucide-react";
+import { Download, FileUp, KeyRound, Phone, Search, Target, UserPlus, Users, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -23,7 +23,7 @@ import { SortHead, Table, TableWrap, TD, TH, THead, TR } from "@/components/ui/t
 import { downloadUrl } from "@/lib/api";
 import { useDebounced, usePageReset } from "@/lib/hooks";
 import { useUrlParam } from "@/lib/use-url-param";
-import { useEmployeeStats, useMe, useTeams } from "@/lib/queries";
+import { credentialSheetUrl, useEmployeeStats, useMe, useTeams } from "@/lib/queries";
 import { useRange } from "@/lib/range";
 import { PRESENCE_ORDER } from "@/lib/status";
 import type { EmployeeMetrics, Presence } from "@/lib/types";
@@ -147,6 +147,8 @@ export function EmployeesView() {
   const open = (id: number) => router.push(`/employees/${id}`);
 
   const exportHref = downloadUrl("analytics/employees.csv", { date_from: range.from, date_to: range.to, q: q || undefined, team_id: teamId, role: role === "all" ? undefined : role, state });
+  // the login details (employee id, e-mail, the password handed out) of the people in this list, as an Excel sheet - at most 300 at a time
+  const sheetHref = credentialSheetUrl(visible.slice(0, 300).map((p) => p.id));
   const loading = stats.isPending;
 
   return (
@@ -168,6 +170,11 @@ export function EmployeesView() {
             </Button>
             {isAdmin ? (
               <>
+                <Button asChild variant="secondary" disabled={visible.length === 0}>
+                  <a href={sheetHref} download data-testid="login-sheet" title="Employee id, e-mail and the password you gave each person - for the people in this list">
+                    <KeyRound className="size-4" /> Login sheet
+                  </a>
+                </Button>
                 <Button variant="secondary" onClick={() => setBulkOpen(true)} data-testid="bulk-open">
                   <FileUp className="size-4" /> Import sheet
                 </Button>

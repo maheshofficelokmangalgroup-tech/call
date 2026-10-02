@@ -106,6 +106,51 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return (await res.json()) as T;
 }
 
+export interface UploadOptions {
+  form: FormData;
+  /** called while the file travels: bytes sent so far, and the total */
+  onProgress?: (sent: number, total: number) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * POST a form with a big file and report how far it is. (`fetch` cannot say how much of a request body has been sent; a sheet of a
+ * hundred megabytes takes a while, and a progress bar is the difference between "working" and "frozen".)
+ */
+export function upload<T>(path: string, { form, onProgress, signal }: UploadOptions): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `/api/backend/${path.replace(/^\//, "")}`);
+    request.setRequestHeader("accept", "application/json");
+    request.setRequestHeader("x-requested-with", "admin-web");
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded, event.total);
+    };
+    request.onerror = () => reject(new ApiError(0, "network_error", "Cannot reach the server. Check your internet connection."));
+    request.ontimeout = () => reject(new ApiError(0, "network_error", "The upload took too long. Try again, or use a smaller file."));
+    request.onabort = () => reject(new DOMException("Aborted", "AbortError"));
+    request.onload = () => {
+      let data: { error?: { code?: string; message?: string; details?: unknown } } | undefined;
+      try {
+        data = JSON.parse(request.responseText) as typeof data;
+      } catch {
+        /* not JSON */
+      }
+      if (request.status === 401) {
+        goToLogin();
+        reject(new ApiError(401, data?.error?.code ?? "unauthenticated", data?.error?.message ?? "Please sign in."));
+      } else if (request.status >= 200 && request.status < 300) {
+        resolve(data as T);
+      } else {
+        const retry = Number(request.getResponseHeader("retry-after"));
+        reject(new ApiError(request.status, data?.error?.code ?? "http_error", data?.error?.message ?? `The server answered ${request.status}.`, data?.error?.details, Number.isFinite(retry) && retry > 0 ? retry : undefined));
+      }
+    };
+    signal?.addEventListener("abort", () => request.abort(), { once: true });
+    request.send(form);
+  });
+}
+
 /** URL of a file download (CSV export, recording) served through the proxy - opened by the browser, which sends the cookies. */
 export function downloadUrl(path: string, params?: Params): string {
   return `/api/backend/${path.replace(/^\//, "")}${buildQuery(params)}`;

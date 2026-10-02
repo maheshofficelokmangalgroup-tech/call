@@ -1,6 +1,6 @@
 "use client";
 
-import { BookUser, FileUp, Plus, Search, Send, UserMinus, X } from "lucide-react";
+import { BookUser, FileUp, Loader2, Plus, Search, Send, UserMinus, X } from "lucide-react";
 import { motion } from "motion/react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -22,10 +22,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { Table, TableWrap, TD, TH, THead, TR } from "@/components/ui/table";
 import { useDebounced, useKeyedState, usePageReset } from "@/lib/hooks";
-import { useCampaigns, useContactMutations, useContacts, useEmployeeList, useMe } from "@/lib/queries";
+import { useCampaigns, useContactMutations, useContacts, useEmployeeList, useImports, useMe } from "@/lib/queries";
 import { PRIORITY_LABEL, contactStatus, CONTACT_STATUS } from "@/lib/status";
 import { useCallParam } from "@/lib/use-call-param";
-import { cn, formatPhone, pluralize, timeAgo } from "@/lib/utils";
+import { cn, formatNumber, formatPhone, pluralize, timeAgo } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
 const NO_CONTACTS = new Set<number>();
@@ -47,6 +47,7 @@ export function ContactsView() {
   const [allMatching, setAllMatching] = useKeyedState(false, selectionKey);
   const [formOpen, setFormOpen] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+  const [resumeId, setResumeId] = React.useState<number | null>(null);
   const [assignOpen, setAssignOpen] = React.useState(false);
   const [unassignOpen, setUnassignOpen] = React.useState(false);
   const [contactId, setContactId] = React.useState<number | null>(null);
@@ -56,6 +57,9 @@ export function ContactsView() {
   const employees = useEmployeeList({ isActive: true, role: "employee" });
   const campaigns = useCampaigns();
   const { unassign } = useContactMutations();
+  // a sheet that is being checked or added (maybe started in another window, or before the page was closed) can be looked at again
+  const imports = useImports(isAdmin);
+  const running = imports.data?.items.find((i) => i.status === "validating" || i.status === "applying" || i.status === "previewed");
   const list = useContacts({
     q: q || undefined,
     status: status === "all" ? undefined : status,
@@ -119,6 +123,31 @@ export function ContactsView() {
           ) : undefined
         }
       />
+
+      {isAdmin && running && !importOpen ? (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brand/30 bg-brand-soft/50 px-4 py-3" data-testid="import-banner">
+          {running.status === "previewed" ? <FileUp className="size-4 text-brand" /> : <Loader2 className="size-4 animate-spin text-brand" />}
+          <p className="min-w-0 flex-1 text-sm text-ink-soft">
+            <b className="text-ink">{running.filename}</b>{" "}
+            {running.status === "validating"
+              ? `is being checked (${formatNumber(running.scanned_rows)} lines read)`
+              : running.status === "applying"
+                ? `is being added: ${formatNumber(running.applied_rows)} of ${formatNumber(running.valid_rows)} contacts`
+                : "has been checked and is waiting for you to add it"}
+            .
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setResumeId(running.id);
+              setImportOpen(true);
+            }}
+          >
+            Open
+          </Button>
+        </div>
+      ) : null}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
@@ -319,7 +348,14 @@ export function ContactsView() {
       {isAdmin ? (
         <>
           <ContactFormDialog open={formOpen} onOpenChange={setFormOpen} />
-          <ImportWizard open={importOpen} onOpenChange={setImportOpen} />
+          <ImportWizard
+            open={importOpen}
+            resumeId={resumeId}
+            onOpenChange={(open) => {
+              setImportOpen(open);
+              if (!open) setResumeId(null);
+            }}
+          />
           <AssignDialog open={assignOpen} onOpenChange={setAssignOpen} count={count} request={request} onDone={() => { setSelected(new Set()); setAllMatching(false); }} />
           <ConfirmDialog
             open={unassignOpen}
