@@ -374,7 +374,7 @@ def test_calls_export_is_a_safe_spreadsheet_scoped_to_the_caller(client, db, as_
 def test_settings_can_be_read_and_changed_by_administrators_only(client, as_admin, as_a, emp_a):
     data = client.get("/api/v1/settings", headers=as_admin).json()
     assert data["recording"]["enabled"] is False and data["default_daily_target"] == 50 and data["duplicate_policy"] == "skip"
-    assert {i["key"] for i in data["items"]} == {"recording", "retry_rules", "default_daily_target", "duplicate_policy"}
+    assert {i["key"] for i in data["items"]} == {"recording", "retry_rules", "default_daily_target", "duplicate_policy", "inactive_after_days", "auto_rebalance"}
 
     notice = "Calls are recorded for quality and training. Recordings are private."
     updated = client.put("/api/v1/settings/recording", headers=as_admin, json={"value": {"enabled": True, "notice_text": notice}})

@@ -56,6 +56,15 @@ DEFAULT_SETTINGS: dict[str, tuple[object, str]] = {
     ),
     "default_daily_target": (50, "Daily calling target for newly created employees."),
     "duplicate_policy": ("skip", "Default handling of duplicate phone numbers during import: skip | update."),
+    "inactive_after_days": (
+        2,
+        "An employee who has not been seen for this many days is not given new contacts, and (with automatic rebalancing on) the "
+        "contacts they have not started on are given to the employees who are working.",
+    ),
+    "auto_rebalance": (
+        True,
+        "Automatically give the not-yet-called contacts of employees who are no longer working to the ones who are, every few minutes.",
+    ),
 }
 
 

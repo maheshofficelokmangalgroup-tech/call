@@ -27,7 +27,7 @@ from app.models.call import (
     Call,
     CallDisposition,
 )
-from app.models.contact import Contact, ContactAssignment
+from app.models.contact import ContactAssignment
 from app.models.cache_events import EVERYONE, employee_epoch
 from app.models.employee import Employee
 from app.schemas.misc import DashboardOut
@@ -74,6 +74,26 @@ def build_dashboard(db: Session, user: Employee, *, day: date | None, employee_i
     return DashboardOut.model_validate(payload)
 
 
+# from this many contacts handed out, the figures about what is left to call are not worked out for every look at the dashboard
+LARGE_ORGANISATION = 50_000
+
+
+def _contact_figures(ids: list[int] | None, db: Session | None = None, now=None) -> list[int]:
+    """[contacts still to be called, callbacks due now, callbacks later today] for these employees (None: all of them)."""
+    from app.core.database import new_session
+
+    own = db is None
+    session = db or new_session()
+    try:
+        moment = now or utcnow()
+        pending = queue_service.count_pending(session, ids, moment)
+        due_now, later = queue_service.callback_counts(session, ids, moment)
+        return [int(pending), int(due_now), int(later)]
+    finally:
+        if own:
+            session.close()
+
+
 def _compute(db: Session, scope: str, ids: list[int] | None, day: date | None) -> DashboardOut:
     now = utcnow()
     start, end = day_bounds_utc(day, now)
@@ -110,17 +130,16 @@ def _compute(db: Session, scope: str, ids: list[int] | None, day: date | None) -
         emp_stmt = emp_stmt.where(Employee.id.in_(ids))
     employee_count, active_employees, target = (int(v) for v in db.execute(emp_stmt).one())
 
-    assigned = (
-        db.scalar(
-            select(func.count(ContactAssignment.id))
-            .join(Contact, Contact.id == ContactAssignment.contact_id)
-            .where(ContactAssignment.status == "active", Contact.deleted_at.is_(None), *in_scope(ContactAssignment.employee_id))
-        )
-        or 0
-    )
-    pending_contacts = queue_service.count_pending(db, ids, now)
-
-    due_now, callbacks_later = queue_service.callback_counts(db, ids, now)
+    # (no join with the contacts: deleting a contact ends its assignment, so an active assignment is always a live contact - and this
+    # way it is one pass over an index, however many contacts there are)
+    assigned = db.scalar(select(func.count(ContactAssignment.id)).where(ContactAssignment.status == "active", *in_scope(ContactAssignment.employee_id))) or 0
+    if scope != "employee" and assigned >= LARGE_ORGANISATION:
+        # Working out what is still to be called reads every contact of everybody - seconds, with a million of them. A dashboard that
+        # is looked at all day does not need it to the second: the last answer is shown while a fresh one is worked out in the background.
+        key = f"dash:contacts:{scope}:{'all' if ids is None else cache.digest(*sorted(ids))}"
+        pending_contacts, due_now, callbacks_later = cache.stale_while_revalidate(key, 60, 3600, lambda: _contact_figures(ids))
+    else:
+        pending_contacts, due_now, callbacks_later = _contact_figures(ids, db, now)
     callbacks_due = due_now + callbacks_later  # everything the employee still has to call back today
 
     return DashboardOut(

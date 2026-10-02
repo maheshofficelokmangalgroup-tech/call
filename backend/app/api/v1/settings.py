@@ -36,6 +36,14 @@ def _validated(key: str, value: Any) -> Any:
         if value not in ("skip", "update"):
             raise ValidationFailed("Duplicate policy must be 'skip' or 'update'.", code="invalid_setting")
         return value
+    if key == "inactive_after_days":
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 90:
+            raise ValidationFailed("Enter a whole number of days from 1 to 90.", code="invalid_setting")
+        return value
+    if key == "auto_rebalance":
+        if not isinstance(value, bool):
+            raise ValidationFailed("Automatic rebalancing is either on or off.", code="invalid_setting")
+        return value
     raise NotFound("Unknown setting.")
 
 
@@ -55,6 +63,8 @@ def _all(db) -> SettingsOut:
         retry_rules=get_retry_rules(db),
         default_daily_target=int(get_setting(db, "default_daily_target") or 50),
         duplicate_policy=get_setting(db, "duplicate_policy") or "skip",  # type: ignore[arg-type]
+        inactive_after_days=int(get_setting(db, "inactive_after_days") or 2),
+        auto_rebalance=bool(get_setting(db, "auto_rebalance")),
         items=items,
     )
 

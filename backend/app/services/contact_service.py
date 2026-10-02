@@ -8,6 +8,7 @@ from fastapi import Request
 from sqlalchemy import Select, and_, exists, func, select, update
 from sqlalchemy.orm import Session
 
+from app.core import cache
 from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.timeutils import utcnow
 from app.models.call import Call, CallNote, Callback, CALLBACK_CANCELLED, CALLBACK_PENDING
@@ -19,6 +20,7 @@ from app.models.contact import (
     Contact,
     ContactAssignment,
 )
+from app.models.cache_events import EVERYONE
 from app.models.employee import Employee
 from app.schemas.contact import (
     CampaignRef,
@@ -141,9 +143,6 @@ def list_contacts(
         )
     if unassigned is True and is_admin(user):
         stmt = stmt.where(~exists().where(and_(ContactAssignment.contact_id == Contact.id, ContactAssignment.status == "active")))
-    if q:
-        for token in q.strip().lower().split()[:5]:
-            stmt = stmt.where(Contact.search_text.like(f"%{escape_like(token)}%", escape="\\"))
     if status:
         stmt = stmt.where(Contact.status == status)
     if category:
@@ -155,18 +154,49 @@ def list_contacts(
     if campaign_id is not None:
         stmt = stmt.where(exists().where(and_(CampaignContact.contact_id == Contact.id, CampaignContact.campaign_id == campaign_id)))
 
-    total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    if q:
+        # A number written in full is found through the unique index on the phone number: one row however many contacts there are
+        # (the words of a search are matched inside every contact's text, which reads them all).
+        exact = normalize_phone(q) if page == 1 and len(digits_only(q)) >= 10 else None
+        if exact is not None:
+            found = list(db.scalars(stmt.where(Contact.normalized_phone == exact).limit(page_size)).all())
+            if found:
+                return found, len(found)
+        for token in q.strip().lower().split()[:5]:
+            stmt = stmt.where(Contact.search_text.like(f"%{escape_like(token)}%", escape="\\"))
+
+    total = _count(db, user, stmt, key=(q, status, category, priority, tag, campaign_id, employee_id, unassigned))
 
     if sort == "recent":
-        order = (Contact.created_at.desc(), Contact.id.desc())
+        order = (Contact.created_at.desc(), Contact.id.desc())  # (the first entries of an index, read backwards)
     elif sort == "priority":
         order = (Contact.priority, Contact.name, Contact.id)
     elif sort == "last_called":
         order = (Contact.last_called_at.is_(None).desc(), Contact.last_called_at.asc(), Contact.id)
     else:
-        order = (func.lower(Contact.name), Contact.id)
+        # MySQL compares text without regard to case (its collation), so the index on the name gives the order; SQLite does not
+        order = (Contact.name if db.get_bind().dialect.name == "mysql" else func.lower(Contact.name), Contact.id)
     rows = db.scalars(stmt.order_by(*order).limit(page_size).offset((page - 1) * page_size)).all()
     return list(rows), total
+
+
+# a count of a few thousand rows is nothing; of a million it is a second or more - and the same question is asked again for every page
+_BIG_COUNT = 20_000
+_COUNT_SECONDS = 60
+
+
+def _count(db: Session, user: Employee, stmt: Select, *, key: tuple) -> int:
+    """How many contacts match. Exact always; once the answer is big it is remembered for a minute (and forgotten when any contact
+    or assignment changes), so paging through a long list does not count it again for every page."""
+    visible = visible_employee_ids(db, user)
+    name = "contacts:total:" + cache.digest(None if visible is None else sorted(visible), *key)
+    cached = cache.stamped_get(name, EVERYONE)
+    if isinstance(cached, int):
+        return cached
+    total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    if total >= _BIG_COUNT:
+        cache.stamped_set(name, total, _COUNT_SECONDS, EVERYONE)
+    return total
 
 
 # ------------------------------------------------------------------- detail

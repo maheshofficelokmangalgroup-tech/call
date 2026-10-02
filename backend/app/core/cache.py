@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -217,6 +218,35 @@ def digest(*parts: object) -> str:
     import hashlib
 
     return hashlib.blake2b("|".join(str(p) for p in parts).encode("utf-8"), digest_size=8).hexdigest()  # 16 characters; a cache key, not a secret
+
+
+# ------------------------------------------------------------------------------------------------ stale while revalidate
+def _refresh_in_background(key: str, keep_seconds: int, compute: Callable[[], Any]) -> None:
+    try:
+        set_json(key, {"at": time.time(), "v": compute()}, keep_seconds)
+    except Exception:  # noqa: BLE001 - the old answer stays; the next look tries again
+        log.warning("Could not refresh %s in the background", key, exc_info=True)
+
+
+def stale_while_revalidate(key: str, fresh_seconds: int, keep_seconds: int, compute: Callable[[], Any]) -> Any:
+    """The last answer of `compute()`, however old (up to `keep_seconds`), at once. An answer older than `fresh_seconds` is still
+    given, and ONE caller (of all the workers) starts working out a new one in the background - so nobody ever waits for a slow
+    question except the very first time, when there is no answer yet. `compute` must not use the caller's database session: it runs
+    in a thread of its own after the request is over."""
+    if not enabled():
+        return compute()
+    entry = get_json(key)
+    if isinstance(entry, dict) and "v" in entry and "at" in entry:
+        try:
+            age = time.time() - float(entry["at"])
+        except (TypeError, ValueError):
+            age = fresh_seconds + 1
+        if age > fresh_seconds and once_per(f"swr:{key}", max(5, fresh_seconds)):
+            threading.Thread(target=_refresh_in_background, args=(key, keep_seconds, compute), name="swr-refresh", daemon=True).start()
+        return entry["v"]
+    value = compute()
+    set_json(key, {"at": time.time(), "v": value}, keep_seconds)
+    return value
 
 
 # ------------------------------------------------------------------------------------------------ single flight

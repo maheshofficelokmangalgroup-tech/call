@@ -26,6 +26,9 @@ os.environ.update(
         "LOG_LEVEL": "WARNING",
         "LOG_JSON": "false",
         "APP_TIMEZONE": "Asia/Kolkata",
+        "JOBS_INLINE": "true",  # an import / a rebalancing is done right where it is asked for: a test can look at the result at once
+        "BACKGROUND_JOBS": "false",  # (the scheduler is only started by the tests that are about it)
+        "IMPORT_CHUNK_PAUSE_MS": "0",
     }
 )
 

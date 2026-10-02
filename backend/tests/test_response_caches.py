@@ -51,7 +51,7 @@ def test_a_callback_shows_up_in_the_queue_at_once(client, make, emp_a, as_a):
     from app.core.timeutils import utcnow
     from tests.conftest import iso
 
-    done = dispose(client, as_a, call["id"], "CALLBACK", callback_at=iso(utcnow() + timedelta(hours=1)))
+    done = dispose(client, as_a, call["id"], "CALLBACK", callback_at=iso(utcnow() + timedelta(minutes=1)))
     assert done.status_code == 200, done.text
     item = client.get("/api/v1/queue", headers=as_a).json()["items"][0]
     assert item["reason"] == "callback" and item["callback"] is not None

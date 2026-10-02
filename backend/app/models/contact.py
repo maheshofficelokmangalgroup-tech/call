@@ -60,7 +60,9 @@ PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW = 1, 2, 3
 class Contact(Base, TimestampMixin):
     __tablename__ = "contacts"
     __table_args__ = (
-        Index("ix_contacts_status", "status"),
+        Index("ix_contacts_status", "status", "deleted_at"),  # counts per status are read from this index alone
+        Index("ix_contacts_created", "created_at"),  # "recently added" is the first page of this index, read backwards
+        Index("ix_contacts_name", "name"),  # "A to Z" is the first page of this index
         Index("ix_contacts_category", "category"),
         Index("ix_contacts_next_eligible_at", "next_eligible_at"),
         UniqueConstraint("normalized_phone", name="uq_contacts_normalized_phone"),

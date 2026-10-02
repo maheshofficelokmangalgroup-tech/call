@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.common import ORMModel
 from app.schemas.call import DispositionOut
+from app.schemas.distribution import DistributionIn
 from app.schemas.employee import EmployeeOut
 
 
@@ -45,6 +46,18 @@ class ImportOut(ORMModel):
     created_at: datetime
     confirmed_at: datetime | None
     completed_at: datetime | None
+    # progress of a big sheet (the check, then the adding) and what came of it
+    scanned_rows: int = 0
+    progress_percent: int = 0
+    file_duplicate_rows: int = 0  # the same number twice in the sheet
+    existing_rows: int = 0  # the number is a contact already
+    explicit_rows: int = 0  # rows that name their employee
+    applied_rows: int = 0
+    applied_existing: int = 0
+    distributed_rows: int = 0
+    attempts: int = 0
+    cancel_requested: bool = False
+    result: dict | None = None  # the stage, and how many went to whom
 
 
 class ImportRowOut(ORMModel):
@@ -61,6 +74,7 @@ class ImportRowOut(ORMModel):
 
 class ImportConfirm(BaseModel):
     mode: Literal["skip", "update"] | None = None
+    distribution: DistributionIn | None = None  # who receives the new contacts, and how many each (default: every employee who is working, equally)
 
 
 # ------------------------------------------------------------------- dashboard

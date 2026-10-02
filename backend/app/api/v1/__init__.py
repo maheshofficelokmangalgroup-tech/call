@@ -9,6 +9,7 @@ from app.api.v1 import (
     campaigns,
     contacts,
     dashboard,
+    distribution,
     employees,
     imports,
     me,
@@ -37,3 +38,4 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
+api_router.include_router(distribution.router, prefix="/distribution", tags=["distribution"])
