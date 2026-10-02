@@ -39,7 +39,11 @@ test.describe("overlays sit where they belong", () => {
 
   test("the search palette is centred across and near the top", async ({ page }) => {
     await page.goto("/dashboard");
-    await page.keyboard.press("Control+k");
+    // the shortcut only works once the page has been hydrated: a key pressed before that is lost, so press it again until it opens
+    await expect(async () => {
+      await page.keyboard.press("Control+k");
+      await expect(page.getByRole("dialog")).toBeVisible({ timeout: 2500 });
+    }).toPass({ timeout: 20_000 });
     const box = await whereIs(page.getByRole("dialog"));
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(box.width);

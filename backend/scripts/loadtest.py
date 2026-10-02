@@ -171,6 +171,10 @@ def report(rec: Recorder, seconds: float, args) -> int:
         problems.append(f"the slowest request has p95 {worst_p95:.0f} ms (limit {args.max_p95_ms} ms)")
     if login_p95 > args.max_login_p95_ms:
         problems.append(f"signing in has p95 {login_p95:.0f} ms (limit {args.max_login_p95_ms} ms)")
+    if args.min_throughput and total_requests / seconds < args.min_throughput:
+        problems.append(f"only {total_requests / seconds:.0f} requests per second were served (at least {args.min_throughput:g} expected)")
+    if total_requests < args.min_requests:
+        problems.append(f"only {total_requests} requests were made (at least {args.min_requests} expected)")
     if total_requests < args.phones * 3:
         problems.append("hardly any requests were made: the phones could not sign in or had nothing to call")
     for problem in problems:
@@ -198,12 +202,14 @@ def main() -> int:
     parser.add_argument("--think", type=float, default=2.0, help="seconds between two calls of a phone (a real employee: about 60)")
     parser.add_argument("--heartbeat", type=float, default=10.0, help="seconds between two heartbeats (a real phone: 60)")
     parser.add_argument("--viewer-pause", type=float, default=2.0, help="seconds between two refreshes of an administrator's live view (the panel: 8)")
+    parser.add_argument("--min-requests", type=int, default=0, help="fail when fewer requests than this were made (a test that asks for 10,000 operations must make them)")
     parser.add_argument("--first-employee", type=int, default=1)
     parser.add_argument("--password", default="LoadTest-9x7Qm")
     parser.add_argument("--admin-email", default="load-admin@example.com")
     parser.add_argument("--admin-password", default="LoadAdmin-4k8Zp")
     parser.add_argument("--max-p95-ms", type=float, default=1500)
     parser.add_argument("--max-login-p95-ms", type=float, default=8000, help="a sign-in is one bcrypt check of CPU; a burst of them is slower")
+    parser.add_argument("--min-throughput", type=float, default=0, help="requests per second the service must manage (for a run that asks more than it can give)")
     parser.add_argument("--max-error-percent", type=float, default=0.5)
     parser.add_argument("--insecure", action="store_true", help="do not verify the TLS certificate (a test server)")
     return asyncio.run(main_async(parser.parse_args()))
