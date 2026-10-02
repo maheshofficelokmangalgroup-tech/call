@@ -8,9 +8,27 @@ Built from the project documentation `Employee_Calling_CRM_Platform_Project_Docu
 |---|---|---|
 | Backend API (FastAPI, MySQL / SQLite, Redis) | **done** - 95 automated tests, run on SQLite **and** MySQL 8.4 | [backend/](backend) |
 | Employee Android app (React Native, Android only) | **done** - Blinkit-style animated UI, offline-first, own phone-app call screen | [mobile/](mobile) |
-| Admin Web App (Next.js) | next phase (the admin API it needs already exists) | - |
-| AWS deployment | next phase (Dockerfile, compose file and S3 storage are ready) | [docker-compose.yml](docker-compose.yml) |
-| CI/CD (GitHub Actions) | **done** - tests on every push; the signed release APK is built on GitHub and published as a Release | [.github/workflows/](.github/workflows), [docs/CICD.md](docs/CICD.md) |
+| **Admin panel** (Next.js, web) | **done** - live dashboard, every employee's calls / talk time / recordings, create employees, contacts, campaigns, audit log; light + dark, phone-friendly | [admin-web/](admin-web), [docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md) |
+| **Server deployment** | **done** - one command on a Linux server: HTTPS, panel, API, MySQL, Redis, nightly backups | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docker-compose.prod.yml](docker-compose.prod.yml), [deploy/](deploy) |
+| CI/CD (GitHub Actions) | **done** - API (SQLite + MySQL), app, panel (unit + real-browser tests), production Docker stack on every push; signed APK -> Releases; images; optional auto-deploy | [.github/workflows/](.github/workflows), [docs/CICD.md](docs/CICD.md) |
+
+---
+
+## Admin panel (मराठी + English)
+
+**Admin panel** madhe tumhala disate: kon employee kiti call kela, konala kela, kiti vel bolla, kadhi kela, recording aikta yete,
+ata kon call var ahe (live), nave employees banvta yetat (ek-ek kinva Excel/CSV sheet madhun), contacts/campaigns, audit log, settings.
+
+```powershell
+# 1) backend (demo data sobat)
+cd backend ; .\.venv\Scripts\python.exe -m scripts.seed_demo ; .\.venv\Scripts\python.exe -m scripts.seed_history --rename
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
+# 2) panel
+cd ..\admin-web ; npm install ; npm run dev          # -> http://localhost:3000   (admin@example.com / Admin@12345)
+```
+
+Server var deploy karayche: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) - `git clone ... && sudo bash deploy/install.sh` (domain + admin email vicharto, baki sagla apoaap).
+Panel kasa vaparaycha: [docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md).
 
 ---
 
@@ -114,13 +132,16 @@ cd mobile\android
 ## Project layout
 
 ```
-backend/        FastAPI app, Alembic migrations, tests, scripts (bootstrap, demo seed, sample CSV)
+backend/        FastAPI app, Alembic migrations, tests, scripts (bootstrap, demo data + history, reset_password, sample CSV)
 mobile/         React Native (Android only). src/ = TypeScript app, android/.../calling = Kotlin phone layer
-docs/           Architecture notes (telephony), CI/CD guide
+admin-web/      The admin panel: Next.js 16, React 19, Tailwind 4. src/ = app, tests/ = unit tests, e2e/ = browser tests
+deploy/         Server installer, update / backup / restore scripts, Caddyfile (HTTPS front door)
+docs/           Telephony notes, CI/CD guide, admin panel guide, deployment guide
 scripts/        dev-backend.ps1 - one-command backend for Windows
-.github/        GitHub Actions: ci.yml (tests) and android.yml (signed release APK -> Releases)
+.github/        GitHub Actions: ci.yml (all tests + Docker smoke test), android.yml (signed APK -> Releases), images.yml, deploy.yml
 release/        APKs built on this PC (git-ignored); the official APK is on the GitHub Releases page
-docker-compose.yml, .env.example    Local stack (FastAPI + MySQL 8 + Redis) as in the documentation
+docker-compose.yml, .env.example    Local stack (FastAPI + MySQL 8 + Redis)
+docker-compose.prod.yml             Production stack (+ admin panel + HTTPS), see docs/DEPLOYMENT.md
 ```
 
 ## Running the tests
@@ -134,6 +155,11 @@ $env:TEST_DATABASE_URL="mysql+pymysql://root@127.0.0.1:3306/calling_test?charset
 cd ..\mobile
 npm test                                                   # Jest: API client, sync engine, call flow, setup model, helpers
 npx tsc --noEmit ; npx eslint src                          # type check + lint
+
+cd ..\admin-web
+npm run typecheck ; npm run lint ; npm test                # panel: types, lint, unit tests (Vitest)
+npm run build                                              # production build
+# browser tests (Playwright) need the API with demo data and the built panel running - see admin-web/e2e/README.md
 ```
 
 ## Important notes (please read)
@@ -154,6 +180,5 @@ npx tsc --noEmit ; npx eslint src                          # type check + lint
 
 ## Next phases
 
-Admin Web App (Next.js + Amplify), analytics/reports, CI/CD, AWS deployment (EC2 + RDS + S3), load tests, logging of incoming
-customer calls in the CRM. The backend already has the admin endpoints these need (employees, teams, contacts, import,
-assignment, campaigns, calls, recordings, audit logs); see Swagger at `/docs`.
+Cloud telephony for recordings of every call ([docs/TELEPHONY.md](docs/TELEPHONY.md)), logging of incoming customer calls in the
+CRM, load tests, push notifications. Swagger for the API is at `/docs` (off in production).

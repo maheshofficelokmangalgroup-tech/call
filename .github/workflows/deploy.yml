@@ -1,0 +1,65 @@
+name: Deploy
+
+# Updates the server by running deploy/update.sh over SSH (see docs/DEPLOYMENT.md, "Updating automatically from GitHub").
+#   "Run workflow"                       -> deploy now
+#   push to main + variable AUTO_DEPLOY=true -> deploy after every change that touches the panel, the API or the deployment files
+# Needs the repository secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY and DEPLOY_PATH. Nothing runs without them.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'admin-web/**'
+      - 'backend/**'
+      - 'deploy/**'
+      - 'docker-compose.prod.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Update the server
+    # a push deploys only when the owner switched automatic deploys on; a manual run always does
+    if: github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Are the secrets there?
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$KEY" ]; then
+            echo "::error::DEPLOY_HOST and DEPLOY_SSH_KEY are not set. See docs/DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Update over SSH
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DIR: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ServerAliveInterval=30 "${USER_NAME:-root}@$HOST" \
+            "cd '${DIR:-/root/call}' && bash deploy/update.sh"
+
+      - name: Is the site answering?
+        if: ${{ vars.PUBLIC_URL != '' }}
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "${{ vars.PUBLIC_URL }}/api/health?deep=1"; then exit 0; fi
+            sleep 6
+          done
+          echo "::error::${{ vars.PUBLIC_URL }} does not answer after the update"
+          exit 1

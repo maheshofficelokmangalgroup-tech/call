@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+openapi.json
+test-results
+playwright-report
+coverage
+e2e
+tests
+*.md
+Dockerfile
+.dockerignore

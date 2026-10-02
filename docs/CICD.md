@@ -1,11 +1,21 @@
 # CI/CD - APK GitHub वर build होतो (PC चा RAM लागत नाही)
 
-Two workflows live in [.github/workflows/](../.github/workflows):
+Four workflows live in [.github/workflows/](../.github/workflows):
 
 | Workflow | When it runs | What it does | Time |
 |---|---|---|---|
-| `ci.yml` | every push to `main`, every pull request | backend tests (pytest) + app type-check, lint and Jest tests | ~3-4 min |
+| `ci.yml` | every push to `main`, every pull request | API tests on SQLite **and MySQL 8.4**; app type-check, lint, Jest; admin panel type-check, lint, unit tests and a production build; "panel and API agree" (generated types are current); the panel in a **real browser** (Playwright) against a real API with demo data; the **production Docker stack** started and used (sign in, data, backup) | ~10-15 min |
 | `android.yml` | push to `main` (app files), push of a `v*` tag, **Run workflow** button | builds the **signed release APK** (arm64) on GitHub's server | first build ~25 min, later ~8 min (cached) |
+| `images.yml` | push of a `v*` tag, **Run workflow** | builds the server images (panel + API) and stores them in the registry `ghcr.io/<owner>/<repo>/{admin,api}` so a small server can download instead of build | ~5 min |
+| `deploy.yml` | **Run workflow**; every push to `main` that touches the panel / API / deploy files **when** the variable `AUTO_DEPLOY` is `true` | logs in to the server over SSH and runs `deploy/update.sh` | ~2 min |
+
+Changes that only touch the panel, the server files or the docs do **not** start an APK build, and app-only changes do not start
+a deployment.
+
+### Server deployment secrets (only for `deploy.yml`)
+
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` (secrets) and optionally the variables `AUTO_DEPLOY=true` and
+`PUBLIC_URL=https://calling.example.com` (the workflow then checks the site answers after the update). See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## APK कुठे मिळतो
 

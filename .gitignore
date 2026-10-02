@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.*.example
 *.pem
 *.key
 *.p12
@@ -41,9 +42,11 @@ mobile/android/local.properties
 release/
 *.hprof
 
-# ---- admin web (next phase) ----
+# ---- admin web ----
 admin-web/node_modules/
 admin-web/.next/
+admin-web/test-results/
+admin-web/playwright-report/
 
 # ---- the project's business documents stay on the owner's PC ----
 *.docx

@@ -15,8 +15,15 @@ on:
       - 'docs/**'
       - 'scripts/**'
       - 'infra/**'
+      - 'admin-web/**'
+      - 'deploy/**'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'docker-compose*.yml'
       - '**.md'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/images.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       version:

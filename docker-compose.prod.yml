@@ -1,0 +1,110 @@
+# Production stack: HTTPS front door (Caddy) -> admin panel + API -> MySQL + Redis.
+#
+#   sudo bash deploy/install.sh                   # first time: installs Docker, makes the secrets, starts everything
+#   bash deploy/update.sh                         # later: get the new version and restart
+#   docker compose -f docker-compose.prod.yml --env-file .env.production ps
+#
+# Only Caddy is reachable from the internet (ports 80 and 443). The API, the panel, MySQL and Redis publish no ports: they
+# can only be reached by the other containers. Full guide: docs/DEPLOYMENT.md
+name: calling
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env.production}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.invalid}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+
+  admin:
+    image: ${ADMIN_IMAGE:-calling-admin:local}
+    build:
+      context: ./admin-web
+      args:
+        APP_NAME: ${APP_NAME:-Employee Calling}
+        APP_DOWNLOAD_URL: ${APP_DOWNLOAD_URL:-}
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://api:8000
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    image: ${API_IMAGE:-calling-api:local}
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      LOG_JSON: "true"
+      TRUST_PROXY_HEADERS: "true" # the client's address comes from Caddy; nothing else can reach this container
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}?charset=utf8mb4
+      REDIS_URL: redis://redis:6379/0
+      LOCAL_STORAGE_PATH: /app/var/storage
+      IMPORT_STORAGE_PATH: /app/var/imports
+      ADMIN_WEB_ORIGIN: ${PUBLIC_URL:-http://localhost}
+    volumes:
+      - api_data:/app/var
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --transaction-isolation=READ-COMMITTED
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-256M}
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  api_data:
+  mysql_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

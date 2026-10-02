@@ -1,0 +1,57 @@
+# The front door. Caddy gets and renews the HTTPS certificate by itself (Let's Encrypt) for the address in SITE_ADDRESS.
+#
+#   SITE_ADDRESS=calling.example.com   -> https://calling.example.com   (a real domain pointing at this server)
+#   SITE_ADDRESS=:80                   -> plain http on the office network (no domain; see docs/DEPLOYMENT.md)
+{
+	# only used when a domain is given; harmless otherwise
+	email {$ACME_EMAIL:admin@example.invalid}
+	servers {
+		timeouts {
+			read_header 30s
+			idle 2m
+		}
+	}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# The mobile app and anything else that speaks to the API directly. The health check is public; the readiness check
+	# (which reveals the state of the database) is not.
+	@api path /api/v1/* /health
+	handle @api {
+		reverse_proxy api:8000 {
+			# recordings are sent in one piece and can be large
+			transport http {
+				read_timeout 5m
+				write_timeout 5m
+			}
+		}
+	}
+
+	# Everything else is the admin panel (its own /api/backend and /api/auth routes included)
+	handle {
+		reverse_proxy admin:3000 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
+		}
+	}
+
+	request_body {
+		max_size 120MB
+	}
+
+	header {
+		# the panel sets its own CSP and framing headers; these cover the API side and the transport
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
