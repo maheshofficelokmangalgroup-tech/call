@@ -65,6 +65,10 @@ gh variable set API_URL -R <owner>/<repo> --body "http://192.168.0.103:8000"
 * The repository is public: never print secrets in a workflow, and add only people you trust as collaborators (anyone with write
   access can run workflows that can read the secrets). Fork pull requests never receive the secrets.
 
+## What CI checks on every pull request (`ci.yml`)
+
+API tests on SQLite and MySQL 8.4, the generated API types, the app (types, lint, unit tests), the admin panel (unit tests, build, 77 real-browser tests), the production Docker stack **and** the shared-server stack exactly as deployed, a vulnerability scan of both images (Trivy) and of the dependencies (`pip-audit`, `npm audit`, `bandit`), an **API fuzz test** on MySQL + Redis, and a **load test** with 500 employees and 100,000 contacts (see [PERFORMANCE_AND_SECURITY.md](PERFORMANCE_AND_SECURITY.md)). A pull request does not deploy anything; only a push to `main` does.
+
 ## Why it is fast
 
 * Only the 64-bit ARM code is compiled (`-PreactNativeArchitectures=arm64-v8a`); every current phone is arm64.
