@@ -44,7 +44,8 @@ COMPOSE=(docker compose --env-file .env)
 
 say "Checking the files"
 "${COMPOSE[@]}" config -q
-[ -f "letsencrypt/live/$(env_get PUBLIC_HOST)/fullchain.pem" ] || { echo "No certificate yet: run issue-cert.sh first." >&2; exit 1; }
+# the certificate folder belongs to root (it holds the private key), so ask certbot instead of looking into it
+docker run --rm -v "$PWD/letsencrypt:/etc/letsencrypt" certbot/certbot certificates 2>/dev/null | grep -q "Certificate Name: $(env_get PUBLIC_HOST)"   || { echo "No certificate yet: run issue-cert.sh first." >&2; exit 1; }
 
 say "Downloading the images (tag $(env_get IMAGE_TAG))"
 "${COMPOSE[@]}" pull --quiet
