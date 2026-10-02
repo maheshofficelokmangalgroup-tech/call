@@ -254,6 +254,9 @@ jobs:
           sudo apt-get install -y shellcheck >/dev/null
           shellcheck -S warning deploy/*.sh deploy/shared/*.sh
 
+      - name: The deploy script goes back to the running version when the new one is not healthy (a pretend Docker, no server needed)
+        run: bash deploy/shared/test-deploy.sh
+
       - name: Settings for a throw-away stack on plain http
         run: |
           cat > .env.production <<EOF
