@@ -42,10 +42,20 @@ if [ -n "$TOKEN" ]; then
   printf '%s' "$TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR:-ci}" --password-stdin >/dev/null
 fi
 
-# what runs now: the way back when the new version does not become healthy
+# what runs now: the way back when the new version does not become healthy. The running container is the truth, not the files and .env:
+# an attempt that stopped early (before anything was started) may already have moved those forward.
 PREVIOUS_SHA=""
 if [ -d "$ROOT/.git" ]; then PREVIOUS_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"; fi
 PREVIOUS_TAG="$(env_get IMAGE_TAG)"
+RUNNING_IMAGE="$(docker ps --filter "label=com.docker.compose.project=calling" --filter "label=com.docker.compose.service=api" --format '{{.Image}}' 2>/dev/null | head -1 || true)"
+RUNNING_TAG="${RUNNING_IMAGE##*:}"
+if [[ "$RUNNING_TAG" == sha-* ]]; then
+  PREVIOUS_TAG="$RUNNING_TAG"
+  if [ -d "$ROOT/.git" ]; then
+    RUNNING_SHA="$(git -C "$ROOT" rev-parse --verify --quiet "${RUNNING_TAG#sha-}^{commit}" 2>/dev/null || true)"
+    [ -z "$RUNNING_SHA" ] || PREVIOUS_SHA="$RUNNING_SHA"
+  fi
+fi
 
 if [ -n "$SHA" ] && [ -d "$ROOT/.git" ]; then
   say "Files for commit ${SHA:0:7}"
