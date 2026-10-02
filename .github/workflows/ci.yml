@@ -512,12 +512,12 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Prepare the database and fill it with employees and contacts
+      - name: Prepare the database - 500 employees, 100,000 contacts handed out to them
         env:
           APP_ENV: development
         run: |
           python -m scripts.bootstrap
-          python -m scripts.seed_load --employees 150 --contacts-per-employee 400
+          python -m scripts.seed_load --employees 500 --contacts-per-employee 200
 
       - name: Start the API like production does (two workers, a small database pool, Redis)
         env:
@@ -532,10 +532,24 @@ jobs:
           nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2 > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:8000/ready && break || sleep 1; done
 
-      - name: Run it
+      - name: 500 employees working for a few minutes (a call every ~40 s each - busier than a real day), 5 administrators watching
         run: |
-          python -m scripts.loadtest --base-url http://127.0.0.1:8000 --phones ${{ vars.LOAD_PHONES || 120 }} --viewers 4 \
-            --seconds ${{ vars.LOAD_SECONDS || 60 }} --think 2.5 --heartbeat 10 --viewer-pause 2 --max-p95-ms 1500 --max-error-percent 0.5
+          python -m scripts.loadtest --base-url http://127.0.0.1:8000 --phones 500 --viewers 5 --ramp 45 --seconds 150 \
+            --think 40 --heartbeat 30 --viewer-pause 8 --first-employee 1 \
+            --min-requests 10000 --max-p95-ms 1000 --max-login-p95-ms 6000 --max-error-percent 0.1
+
+      - name: Far more than a real day (150 phones, a call every ~2.5 s) - what does the service do when it cannot keep up?
+        run: |
+          python -m scripts.loadtest --base-url http://127.0.0.1:8000 --phones 150 --viewers 4 --ramp 5 --seconds 40 \
+            --think 2.5 --heartbeat 10 --viewer-pause 2 --first-employee 1 \
+            --min-throughput 60 --max-p95-ms 10000 --max-login-p95-ms 10000 --max-error-percent 0.5
+
+      - name: What the machine was doing
+        if: always()
+        run: |
+          ps -eo pid,etime,pcpu,rss,args --sort=-pcpu | head -8 | cut -c1-150
+          echo "--- MySQL connections now / most ever / allowed ---"
+          mysql -h 127.0.0.1 -uroot -proot -N -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Max_used_connections'); SHOW VARIABLES LIKE 'max_connections';" 2>/dev/null || true
 
       - name: What the server saw
         if: always()
