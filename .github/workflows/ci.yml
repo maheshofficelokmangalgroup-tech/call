@@ -546,17 +546,35 @@ jobs:
           grep -cE '-> 5[0-9][0-9]' "$RUNNER_TEMP/api.log" || true
 
   api-fuzz:
-    name: API fuzz test (thousands of odd requests generated from the API's own description; none may cause a server error)
+    name: API fuzz test (thousands of odd requests generated from the API's own description, on MySQL and Redis; none may cause a server error)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: calling_fuzz
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=10
     env:
-      DATABASE_URL: sqlite:///${{ runner.temp }}/fuzz.db
-      LOCAL_STORAGE_PATH: ${{ runner.temp }}/fuzz-storage
-      IMPORT_STORAGE_PATH: ${{ runner.temp }}/fuzz-imports
-      REDIS_URL: ''
+      # the same database and cache as production: MySQL has limits SQLite does not (column lengths, number ranges, text encodings)
+      DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/calling_fuzz?charset=utf8mb4
+      REDIS_URL: redis://127.0.0.1:6379/0
+      LOCAL_STORAGE_PATH: /tmp/fuzz-storage
+      IMPORT_STORAGE_PATH: /tmp/fuzz-imports
       APP_ENV: development
       BCRYPT_ROUNDS: '4'
       LOG_LEVEL: WARNING
