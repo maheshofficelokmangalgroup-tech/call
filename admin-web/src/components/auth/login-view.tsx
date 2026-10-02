@@ -68,7 +68,7 @@ export function LoginView() {
   }
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.08fr_1fr]">
+    <div className="grid grid-cols-1 min-h-dvh lg:grid-cols-[1.08fr_1fr]">
       {/* brand panel */}
       <section className="mesh relative hidden overflow-hidden text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="grid-fade absolute inset-0 opacity-60" />

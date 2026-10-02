@@ -169,7 +169,7 @@ function ImportBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
                 </p>
               ) : null}
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-[13px] font-semibold text-ink-soft">If a phone number already exists</p>
                   <Segmented
@@ -262,7 +262,7 @@ function ImportBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
             </motion.div>
           ) : step === "preview" && j ? (
             <motion.div key="preview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <Stat label="lines in the sheet" value={j.total_rows} tone="neutral" />
                 <Stat label="ready to add" value={j.valid_rows} tone="brand" />
                 <Stat label="already exist" value={j.duplicate_rows} tone="warn" />

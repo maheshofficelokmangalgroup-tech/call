@@ -34,7 +34,7 @@ export function RecordingRow({ call, expanded, onToggle, onOpen, canDownload, sh
           {rec.upload_status === "uploading" || rec.upload_status === "pending" ? <Loader2 className="size-5 animate-spin" /> : rec.upload_status === "failed" ? <TriangleAlert className="size-5" /> : <Play className="ml-0.5 size-5 fill-current" />}
         </button>
 
-        <div className="grid min-w-0 flex-1 gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_200px]">
+        <div className="grid grid-cols-1 min-w-0 flex-1 gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_200px]">
           {showEmployee ? <EmployeeCell id={call.employee_id} name={call.employee_name ?? `Employee ${call.employee_id}`} size="sm" /> : <span className="hidden sm:block" />}
           <div className="min-w-0 leading-tight">
             <p className="truncate text-sm font-semibold text-ink">{call.contact_name ?? formatPhone(call.phone_number)}</p>

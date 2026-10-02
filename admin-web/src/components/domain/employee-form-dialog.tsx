@@ -193,7 +193,7 @@ function EmployeeFormBody({ employee, selfId, onOpenChange }: { employee?: Emplo
   </DialogHeader>
 
   <DialogBody className="space-y-5">
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Field label="Full name" htmlFor="ef-name" required error={errors.full_name?.message}>
         <Input id="ef-name" autoComplete="off" autoFocus placeholder="e.g. Rahul Patil" aria-invalid={!!errors.full_name} {...form.register("full_name")} />
       </Field>

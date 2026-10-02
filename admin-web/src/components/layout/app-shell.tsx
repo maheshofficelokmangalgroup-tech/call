@@ -44,7 +44,7 @@ function ShellSkeleton() {
       </div>
       <div className="flex-1 p-8">
         <Skeleton className="h-12 w-full max-w-md" />
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-36" />
           ))}
@@ -124,10 +124,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setDrawer(true)} aria-label="Open menu">
                 <Menu className="size-5" />
               </Button>
-              <PaletteTrigger onClick={() => setPalette(true)} className="max-w-sm flex-1 lg:max-w-md" />
+              <PaletteTrigger onClick={() => setPalette(true)} className="sm:max-w-sm lg:max-w-md" />
               <div className="ml-auto flex items-center gap-2">
                 {current?.usesRange ? <RangePicker /> : null}
-                <ThemeToggle />
+                {/* (on a phone the same choice is in the account menu: the top bar has no room for one more button) */}
+                <div className="hidden sm:block">
+                  <ThemeToggle />
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button type="button" className="ml-1 rounded-full outline-none ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-brand/40 focus-visible:ring-2 focus-visible:ring-brand" aria-label="Account menu" data-testid="user-menu">

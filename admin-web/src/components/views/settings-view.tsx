@@ -151,7 +151,7 @@ function RetrySection({ settings, index }: { settings: Settings; index: number }
     >
       <div className="space-y-3">
         {RETRY_KEYS.map(({ key, label, hint }) => (
-          <div key={key} className="grid items-end gap-3 rounded-2xl border border-line p-4 sm:grid-cols-[1fr_150px_150px]">
+          <div key={key} className="grid grid-cols-1 items-end gap-3 rounded-2xl border border-line p-4 sm:grid-cols-[1fr_150px_150px]">
             <div>
               <p className="text-sm font-bold text-ink">{label}</p>
               <p className="text-xs text-muted">{hint}</p>

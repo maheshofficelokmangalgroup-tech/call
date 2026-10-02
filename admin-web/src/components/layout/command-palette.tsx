@@ -120,13 +120,16 @@ export function PaletteTrigger({ onClick, className }: { onClick: () => void; cl
       type="button"
       onClick={onClick}
       data-testid="palette-trigger"
+      aria-label="Search employees and pages"
       className={cn(
-        "group flex h-10 w-full max-w-md items-center gap-2.5 rounded-xl border border-line bg-surface px-3.5 text-sm text-faint shadow-card transition-colors hover:border-line-strong hover:text-muted",
+        // a phone has no room for the words: a square search button, so the period, theme and account buttons stay on the screen
+        "group flex h-10 w-10 shrink-0 items-center justify-center gap-2.5 rounded-xl border border-line bg-surface text-sm text-faint shadow-card transition-colors hover:border-line-strong hover:text-muted",
+        "sm:w-full sm:max-w-md sm:flex-1 sm:shrink sm:justify-start sm:px-3.5",
         className,
       )}
     >
       <Search className="size-4" />
-      <span className="flex-1 truncate text-left">Search employees, pages...</span>
+      <span className="hidden flex-1 truncate text-left sm:block">Search employees, pages...</span>
       <kbd className="hidden rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[11px] font-semibold text-muted sm:block">Ctrl K</kbd>
     </button>
   );

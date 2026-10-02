@@ -2,9 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { login, panelGet } from "./helpers";
 
-/** On a phone nothing may be wider than the screen: a sideways scroll is the clearest sign of a broken layout. */
+/**
+ * On a phone nothing may be wider than the screen: a sideways scroll is the clearest sign of a broken layout.
+ * The comparison is with the real screen: when something sticks out, a phone's browser widens its layout, so window.innerWidth
+ * grows with the page and would always agree with it.
+ */
 async function expectNoSidewaysScroll(page: Page, label: string) {
-  const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, view: window.innerWidth }));
+  const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, view: window.screen.width }));
   expect(overflow.scroll, `${label}: the page is ${overflow.scroll}px wide on a ${overflow.view}px screen`).toBeLessThanOrEqual(overflow.view + 1);
 }
 
@@ -49,7 +53,9 @@ test.describe("on a phone", () => {
   test("a call opens as a full-screen panel with the player", async ({ page }) => {
     await login(page);
     await page.goto("/recordings");
-    await page.getByTestId("recording-row").first().getByRole("button", { name: "Details" }).click();
+    // the newest recordings may still be uploading (no player yet): take one that can be played
+    const playable = page.getByTestId("recording-row").filter({ has: page.locator('[data-testid="recording-play"]:not([disabled])') }).first();
+    await playable.getByRole("button", { name: "Details" }).click();
     const drawer = page.getByTestId("call-drawer");
     await expect(drawer).toBeVisible();
     const box = await drawer.boundingBox();

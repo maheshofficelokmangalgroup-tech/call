@@ -86,7 +86,7 @@ export function DashboardView() {
       ) : (
         <div className={cn("space-y-5 transition-opacity duration-300", refreshing && "opacity-70")}>
           {/* headline numbers */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="kpis">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="kpis">
             <StatCard index={0} loading={loading} label="Calls made" icon={PhoneCall} tone="brand" value={t?.calls ?? 0} previous={prev?.calls} trend={series.map((d) => d.calls)} caption={t ? `${formatNumber(t.unique_contacts)} different people called` : undefined} testId="kpi-calls" />
             <StatCard index={1} loading={loading} label="Answered" icon={PhoneIncoming} tone="info" value={t?.connected ?? 0} previous={prev?.connected} trend={series.map((d) => d.connected)} caption={t ? `${formatPercent(t.answer_rate, 1)} of calls were picked up` : undefined} testId="kpi-answered" />
             <StatCard index={2} loading={loading} label="Talk time" icon={Clock} tone="violet" value={t?.talk_seconds ?? 0} format={(n) => formatDuration(n, { compact: true })} previous={prev?.talk_seconds} trend={series.map((d) => d.talk_seconds)} caption={t ? `longest call ${formatDuration(t.longest_call_seconds, { compact: true })}` : undefined} testId="kpi-talk" />
@@ -98,7 +98,7 @@ export function DashboardView() {
           </div>
 
           {/* right now */}
-          <div className="grid gap-5 lg:grid-cols-12">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
             <div className="lg:col-span-7">
               <LivePanel onOpenCall={setOpenCall} />
             </div>
@@ -108,7 +108,7 @@ export function DashboardView() {
           </div>
 
           {/* trends */}
-          <div className="grid gap-5 lg:grid-cols-12">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
             {singleDay ? (
               <ChartCard className="lg:col-span-8" title="Calls through the day" description="One bar for every hour of the selected day." delay={0.1}>
                 {loading ? <ChartSkeleton /> : <HourlyChart hourly={data.hourly} minHeight={300} />}
@@ -130,7 +130,7 @@ export function DashboardView() {
             </ChartCard>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-12">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
             <ChartCard className="lg:col-span-5" title="Top callers" description="Who made the most calls in this period." delay={0.2}>
               {loading ? <ChartSkeleton height={320} /> : <Leaderboard people={data.leaderboard} />}
             </ChartCard>
@@ -146,7 +146,7 @@ export function DashboardView() {
           </div>
 
           {!singleDay ? (
-            <div className="grid gap-5 lg:grid-cols-12">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
               <ChartCard className="lg:col-span-7" title="Weekly rhythm" description="Calls by weekday and hour - the darker the square, the busier the time." delay={0.3}>
                 {loading ? <ChartSkeleton height={260} /> : <Heatmap values={data.heatmap} />}
               </ChartCard>

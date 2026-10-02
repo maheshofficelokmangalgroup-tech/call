@@ -181,7 +181,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
                   </div>
                 ) : null}
               </div>
-              <div className="mt-6 grid gap-5 border-t border-line pt-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-6 grid grid-cols-1 gap-5 border-t border-line pt-5 sm:grid-cols-2 lg:grid-cols-4">
                 <InfoItem icon={Mail} label="Email">
                   {m.email}
                 </InfoItem>
@@ -202,7 +202,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
       </motion.section>
 
       {/* numbers */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" data-testid="employee-kpis">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" data-testid="employee-kpis">
         <StatCard index={0} loading={loading} label="Calls made" icon={PhoneCall} tone="brand" value={m?.calls ?? 0} caption={m ? `on ${m.active_days} of ${days} days` : undefined} testId="ekpi-calls" />
         <StatCard index={1} loading={loading} label="Answered" icon={PhoneIncoming} tone="info" value={m?.connected ?? 0} caption={m ? `${formatPercent(m.answer_rate, 1)} answer rate` : undefined} />
         <StatCard index={2} loading={loading} label="Talk time" icon={Clock} tone="violet" value={m?.talk_seconds ?? 0} format={(n) => formatDuration(n, { compact: true })} caption={m ? `longest ${formatDuration(m.longest_call_seconds, { compact: true })}` : undefined} testId="ekpi-talk" />
@@ -212,7 +212,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
       </div>
 
       {/* today + working pattern */}
-      <div className="mt-5 grid gap-5 lg:grid-cols-12">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-12">
         <ChartCard className="lg:col-span-5" title="Today" description="Calls made since midnight against the daily target." delay={0.1}>
           {loading ? <Skeleton className="h-40 w-full" /> : <TargetRing calls={m.today_calls} target={m.daily_target} />}
         </ChartCard>
@@ -222,7 +222,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
       </div>
 
       {/* charts */}
-      <div className="mt-5 grid gap-5 lg:grid-cols-12">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-12">
         <ChartCard
           className="lg:col-span-8"
           title="Activity"
@@ -236,7 +236,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
           {loading ? <Skeleton className="h-[260px] w-full" /> : <OutcomeDonut outcomes={data.outcomes} />}
         </ChartCard>
       </div>
-      <div className="mt-5 grid gap-5 lg:grid-cols-12">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-12">
         <ChartCard className="lg:col-span-7" title="Busiest hours" description="When in the day the calls were made." delay={0.3}>
           {loading ? <Skeleton className="h-[260px] w-full" /> : <HourlyChart hourly={data.hourly} />}
         </ChartCard>

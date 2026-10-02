@@ -116,7 +116,7 @@ function ContactFormBody({ contact, onOpenChange }: { contact?: ContactDetail | 
             <DialogDescription>{editing ? "Change what the employees see when they call this person." : "A person your employees will call. For many at once, use Import sheet."}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Name" htmlFor="cf-name" required error={errors.name?.message}>
                 <Input id="cf-name" autoFocus aria-invalid={!!errors.name} {...form.register("name")} data-testid="contact-name" />
               </Field>
@@ -180,7 +180,7 @@ function ContactFormBody({ contact, onOpenChange }: { contact?: ContactDetail | 
             </div>
 
             {!editing ? (
-              <div className="grid gap-4 rounded-2xl border border-line bg-surface-2 p-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-line bg-surface-2 p-4 sm:grid-cols-2">
                 <Field label="Give to employee" htmlFor="cf-employee" hint="Optional. The contact appears in this person's call list.">
                   <Controller
                     control={form.control}

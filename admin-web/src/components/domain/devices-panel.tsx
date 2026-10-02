@@ -47,7 +47,7 @@ export function DevicesPanel({ employeeId, employeeName, devices, bound, isAdmin
         {devices.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-line-strong bg-surface-2 p-6 text-center text-sm text-muted">This person has not signed in on any phone yet.</p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {devices.map((d, i) => (
               <div key={d.id} className="flex items-start gap-3.5 rounded-2xl border border-line bg-surface p-4 shadow-card" data-testid="device-card">
                 <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", i === 0 ? "bg-brand-soft text-brand" : "bg-surface-3 text-muted")}>

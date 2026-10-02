@@ -106,7 +106,7 @@ function CampaignForm({ campaign, onOpenChange }: { campaign: Campaign | null; o
             <Field label="Description" htmlFor="cm-desc" error={errors.description?.message}>
               <Textarea id="cm-desc" rows={3} {...form.register("description")} />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Status" htmlFor="cm-status" hint="Only running campaigns show contacts to employees.">
                 <Controller
                   control={form.control}
@@ -408,7 +408,7 @@ export function CampaignsView() {
           <ErrorState message="The campaigns could not be loaded." onRetry={() => campaigns.refetch()} />
         </div>
       ) : campaigns.isPending ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-56 rounded-2xl" />
           ))}
@@ -418,7 +418,7 @@ export function CampaignsView() {
           <EmptyState icon={Megaphone} title={list.length === 0 ? "No campaigns yet" : "No campaigns in this group"} description={list.length === 0 ? "Create one, add contacts to it and choose who calls." : "Choose another status above."} action={isAdmin && list.length === 0 ? <Button onClick={() => setDialog(true)}><Plus className="size-4" /> New campaign</Button> : undefined} />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="campaign-grid">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="campaign-grid">
           {visible.map((c, i) => {
             const st = CAMPAIGN_STATUS[c.status] ?? { label: c.status, tone: "neutral" as const };
             return (

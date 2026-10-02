@@ -144,7 +144,7 @@ export function TeamsView() {
           <ErrorState message="The teams could not be loaded." onRetry={() => teams.refetch()} />
         </div>
       ) : teams.isPending ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-44 rounded-2xl" />
           ))}
@@ -165,7 +165,7 @@ export function TeamsView() {
           />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="team-grid">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="team-grid">
           {teams.data.map((team, i) => {
             const hue = hueOf(team.name);
             return (
