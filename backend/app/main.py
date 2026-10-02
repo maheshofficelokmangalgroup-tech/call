@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.database import get_engine
 from app.core.errors import install_error_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
+from app.core.protection import BodyLimitMiddleware, PathSanityMiddleware, SecurityHeadersMiddleware, configure_upload_slots
 from app.core.redis_client import get_redis, redis_status
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ async def lifespan(_: FastAPI):
     configure_logging(settings.log_level, settings.log_json)
     log.info("Starting %s v%s (env=%s, db=%s)", settings.app_name, __version__, settings.app_env, get_engine().dialect.name)
     get_redis()  # connect early so a missing Redis is reported at boot, not on the first login
+    configure_upload_slots()
     yield
     log.info("Shutting down")
 
@@ -51,6 +53,11 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID", "Retry-After"],
     )
+    # (the one added last is the outermost) request id + access log around everything, then the security headers - so that even an
+    # answer given before the application is reached (a body that is too big, an impossible id) carries them
+    app.add_middleware(BodyLimitMiddleware)
+    app.add_middleware(PathSanityMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
     install_error_handlers(app)
 

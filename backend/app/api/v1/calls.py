@@ -20,7 +20,7 @@ def create_call(payload: CallCreate, request: Request, response: Response, db: D
     call, created = call_service.create_call(db, employee=user, data=payload, device_id=getattr(request.state, "device_id", None))
     if not created:
         response.status_code = status.HTTP_200_OK
-    return call_service.to_out(db, call)
+    return call_service.to_out(db, call, known_names={user.id: user.full_name}, brand_new=created)
 
 
 def _day_range(day: date | None, from_day: date | None, to_day: date | None, date_from: datetime | None, date_to: datetime | None):
@@ -123,7 +123,7 @@ def update_call(call_id: int, payload: CallUpdate, db: DbSession, user: CurrentE
     """Sync device-measured metadata (answered/ended time, duration, final status)."""
     call = call_service.get_call_for(db, user, call_id, owner_only=True)
     call = call_service.update_call(db, user=user, call=call, data=payload)
-    return call_service.to_out(db, call)
+    return call_service.to_out(db, call, known_names={user.id: user.full_name})
 
 
 @router.post("/{call_id}/events")
@@ -139,7 +139,7 @@ def set_disposition(call_id: int, payload: DispositionIn, db: DbSession, user: C
     """Record the outcome of a call. Replaying the same outcome is a no-op; a different one returns 409."""
     call = call_service.get_call_for(db, user, call_id, owner_only=True)
     call = call_service.set_disposition(db, user=user, call=call, data=payload)
-    return call_service.to_out(db, call, detail=True)
+    return call_service.to_out(db, call, detail=True, known_names={user.id: user.full_name})
 
 
 @router.post("/{call_id}/recording", response_model=RecordingOut, status_code=status.HTTP_201_CREATED)

@@ -18,8 +18,8 @@ from datetime import date
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from app.core import cache
 from app.core.config import get_settings
-from app.core.redis_client import cache_get_or_set
 from app.core.timeutils import business_tz, day_bounds_utc, utcnow
 from app.models.call import (
     CALL_ANSWERED_STATUSES,
@@ -28,12 +28,11 @@ from app.models.call import (
     CallDisposition,
 )
 from app.models.contact import Contact, ContactAssignment
+from app.models.cache_events import EVERYONE, employee_epoch
 from app.models.employee import Employee
 from app.schemas.misc import DashboardOut
 from app.services import queue_service
 from app.services.scope import is_admin, visible_employee_ids
-
-ORG_CACHE_SECONDS = 15
 
 
 def _scope_ids(db: Session, user: Employee, employee_id: int | None, team_id: int | None) -> tuple[str, list[int] | None]:
@@ -56,12 +55,23 @@ def _scope_ids(db: Session, user: Employee, employee_id: int | None, team_id: in
 
 def build_dashboard(db: Session, user: Employee, *, day: date | None, employee_id: int | None, team_id: int | None) -> DashboardOut:
     scope, ids = _scope_ids(db, user, employee_id, team_id)
+    ttl = get_settings().dashboard_cache_seconds
+    key = f"dash:{scope}:{'all' if ids is None else cache.digest(*sorted(ids))}:{day or 'today'}"
 
-    if scope == "organization" and is_admin(user):
-        key = f"dash:org:{day or 'today'}"
-        payload = cache_get_or_set(key, ORG_CACHE_SECONDS, lambda: _compute(db, scope, ids, day).model_dump_json())
-        return DashboardOut.model_validate(json.loads(payload))
-    return _compute(db, scope, ids, day)
+    def compute() -> dict:
+        return _compute(db, scope, ids, day).model_dump(mode="json")
+
+    if scope == "employee" and ids and len(ids) == 1:
+        # one person's figures change when their own calls, callbacks or contacts do: those clear it at once (the seconds are a net)
+        epochs = (EVERYONE, employee_epoch(ids[0]))
+        payload = cache.stamped_get(key, *epochs)
+        if payload is None:
+            payload = compute()
+            cache.stamped_set(key, payload, ttl, *epochs)
+    else:
+        # a team or the whole organisation changes all the time: computed once per few seconds however many people look
+        payload = cache.single_flight(key, ttl, compute)
+    return DashboardOut.model_validate(payload)
 
 
 def _compute(db: Session, scope: str, ids: list[int] | None, day: date | None) -> DashboardOut:

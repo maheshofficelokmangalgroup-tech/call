@@ -82,6 +82,16 @@ class EmployeeDevice(Base):
     first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
     last_ip: Mapped[str | None] = mapped_column(String(64))
+    # what the phone last said about itself (POST /me/heartbeat); the freshest copy lives in Redis
+    battery_percent: Mapped[int | None] = mapped_column(Integer)
+    charging: Mapped[bool | None] = mapped_column(Boolean)
+    network_type: Mapped[str | None] = mapped_column(String(16))
+    app_state: Mapped[str | None] = mapped_column(String(16))
+    permissions_ok: Mapped[bool | None] = mapped_column(Boolean)
+    missing_permissions: Mapped[str | None] = mapped_column(String(255))
+    pending_sync: Mapped[int | None] = mapped_column(Integer)
+    clock_skew_seconds: Mapped[int | None] = mapped_column(Integer)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
 
 class EmployeeSession(Base):

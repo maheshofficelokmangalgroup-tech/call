@@ -108,6 +108,15 @@ class DeviceOut(ORMModel):
     is_approved: bool
     first_seen_at: datetime
     last_seen_at: datetime
+    battery_percent: int | None = None
+    charging: bool | None = None
+    network_type: str | None = None
+    app_state: str | None = None
+    permissions_ok: bool | None = None
+    missing_permissions: str | None = None
+    pending_sync: int | None = None
+    clock_skew_seconds: int | None = None
+    last_heartbeat_at: datetime | None = None
 
 
 class SessionOut(ORMModel):

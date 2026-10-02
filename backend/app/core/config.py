@@ -67,6 +67,23 @@ class Settings(BaseSettings):
     rate_limit_login_per_identifier: int = 10  # per 5 minutes
     rate_limit_sensitive_per_minute: int = 30
 
+    # --- speed: what is remembered in Redis instead of being asked of the database again ----------------------
+    # (0 switches a cache off. Every cache is cleared by the change it depends on; the time is only the safety net.)
+    auth_cache_seconds: int = 60  # a signed-in session and its employee: 0 database queries per request while it is warm
+    config_cache_seconds: int = 300  # settings and outcome list the phones download
+    queue_cache_seconds: int = 20  # an employee's calling queue
+    dashboard_cache_seconds: int = 15
+    analytics_cache_seconds: int = 8  # the admin panel's live view and reports (computed once per few seconds, not per viewer)
+
+    # --- protection of the service itself -------------------------------------------------------------------------
+    rate_limit_user_per_minute: int = 600  # requests one signed-in person may make per minute (a runaway app cannot flood the API)
+    max_json_body_kb: int = 1024  # every request except an upload must be smaller than this
+    max_concurrent_uploads: int = 6  # recording uploads one worker handles at the same time (the rest wait their turn with a 429)
+
+    # --- what the phones are told to do (they ask /me, nothing is fixed in the app) ----------------------------------
+    heartbeat_seconds: int = 60  # how often a phone that is open reports that it is alive (and how its battery / network are)
+    sync_interval_seconds: int = 45  # how often a phone retries what it could not send
+
     # --- storage / recordings --------------------------------------------------
     storage_backend: Literal["local", "s3"] = "local"
     local_storage_path: str = str(BACKEND_DIR / "var" / "storage")
@@ -112,6 +129,13 @@ class Settings(BaseSettings):
                 raise ValueError("APP_DEBUG must be false in staging/production")
             if self.storage_backend == "s3" and not self.aws_s3_bucket:
                 raise ValueError("AWS_S3_BUCKET is required when STORAGE_BACKEND=s3")
+            if self.is_sqlite:
+                raise ValueError(
+                    f"SQLite is for development and tests only: set DATABASE_URL to a MySQL database in {self.app_env} "
+                    "(for example mysql+pymysql://user:password@host:3306/dbname?charset=utf8mb4)."
+                )
+            if not self.redis_url:
+                raise ValueError(f"REDIS_URL is required in {self.app_env}: the caches, the rate limits and the sign-in checks need it.")
         return self
 
     # --- helpers ---------------------------------------------------------------

@@ -202,6 +202,10 @@ def test_security_relevant_actions_leave_an_audit_trail_without_secrets(client, 
     assert logs["total"] >= 2 and all(i["action"].startswith("auth.") for i in logs["items"])
 
 
+PRODUCTION_DB = "mysql+pymysql://app:secret@db.example.com:3306/app?charset=utf8mb4"
+PRODUCTION_REDIS = "redis://redis:6379/0"
+
+
 def test_production_refuses_weak_secrets_and_debug():
     with pytest.raises(ValueError, match="JWT_SECRET"):
         Settings(app_env="production", jwt_secret="change-me", _env_file=None)
@@ -211,8 +215,20 @@ def test_production_refuses_weak_secrets_and_debug():
         Settings(app_env="production", jwt_secret="x" * 40, app_debug=True, _env_file=None)
     with pytest.raises(ValueError, match="AWS_S3_BUCKET"):
         Settings(app_env="production", jwt_secret="x" * 40, storage_backend="s3", _env_file=None)
-    ok = Settings(app_env="production", jwt_secret="x" * 40, _env_file=None)
+    ok = Settings(app_env="production", jwt_secret="x" * 40, database_url=PRODUCTION_DB, redis_url=PRODUCTION_REDIS, _env_file=None)
     assert ok.is_production
+
+
+def test_production_never_runs_on_sqlite_or_without_redis():
+    with pytest.raises(ValueError, match="SQLite is for development and tests only"):
+        Settings(app_env="production", jwt_secret="x" * 40, database_url="sqlite:///var/prod.db", redis_url=PRODUCTION_REDIS, _env_file=None)
+    with pytest.raises(ValueError, match="SQLite is for development and tests only"):
+        Settings(app_env="staging", jwt_secret="x" * 40, database_url="sqlite://", redis_url=PRODUCTION_REDIS, _env_file=None)
+    with pytest.raises(ValueError, match="REDIS_URL is required"):
+        Settings(app_env="production", jwt_secret="x" * 40, database_url=PRODUCTION_DB, redis_url="", _env_file=None)
+    # development and tests keep working on SQLite without Redis
+    dev = Settings(app_env="development", database_url="sqlite:///var/dev.db", redis_url=None, _env_file=None)
+    assert dev.is_sqlite and not dev.is_production
 
 
 def test_api_docs_are_disabled_in_production(monkeypatch):
@@ -221,6 +237,8 @@ def test_api_docs_are_disabled_in_production(monkeypatch):
 
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("JWT_SECRET", "p" * 48)
+    monkeypatch.setenv("DATABASE_URL", PRODUCTION_DB)
+    monkeypatch.setenv("REDIS_URL", PRODUCTION_REDIS)
     config.reset_settings_cache()
     try:
         app = create_app()

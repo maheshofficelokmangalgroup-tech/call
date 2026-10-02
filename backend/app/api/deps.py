@@ -7,8 +7,11 @@ from typing import Annotated
 
 from fastapi import Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.core import auth_cache, cache, rate_limit
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import Forbidden, Unauthorized
 from app.core.rate_limit import client_ip
@@ -20,19 +23,26 @@ _bearer = HTTPBearer(auto_error=False)
 
 PRESENCE_TOUCH_SECONDS = 60  # "last seen" is refreshed by authenticated requests, at most once a minute per session
 
+# A temporary password (a new employee's first one, or one an administrator reset) only opens these until it has been replaced.
+PASSWORD_CHANGE_PATHS = ("/api/v1/auth/change-password", "/api/v1/auth/logout", "/api/v1/me")
 
-def _touch_presence(db: Session, session: EmployeeSession, request: Request) -> None:
-    """Remember that this employee's phone / browser is alive (the admin panel shows who is online)."""
+
+def _touch_presence(db: Session, request: Request, session_id: str, device_id: int | None, session: EmployeeSession | None) -> None:
+    """Remember that this employee's phone / browser is alive (the admin panel shows who is online).
+
+    Redis decides, for all workers together, which request is the one that writes this minute - no row has to be read to find out.
+    """
     now = utcnow()
-    if (now - session.last_used_at).total_seconds() < PRESENCE_TOUCH_SECONDS:
+    if cache.enabled():
+        if not cache.once_per(f"presence:{session_id}", PRESENCE_TOUCH_SECONDS):
+            return
+    elif session is not None and (now - session.last_used_at).total_seconds() < PRESENCE_TOUCH_SECONDS:
         return
-    session.last_used_at = now
-    if session.device_id is not None:
-        device = db.get(EmployeeDevice, session.device_id)
-        if device is not None:
-            device.last_seen_at = now
-            device.last_ip = client_ip(request)
+    db.execute(update(EmployeeSession).where(EmployeeSession.id == session_id).values(last_used_at=now))
+    if device_id is not None:
+        db.execute(update(EmployeeDevice).where(EmployeeDevice.id == device_id).values(last_seen_at=now, last_ip=client_ip(request)))
     db.commit()
+
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -45,25 +55,41 @@ def get_current_employee(
     if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
         raise Unauthorized()
     claims = decode_access_token(credentials.credentials)
+    settings = get_settings()
+    session_id, employee_id = claims["sid"], str(claims["sub"])
 
-    session = db.get(EmployeeSession, claims["sid"])
-    if (
-        session is None
-        or session.revoked_at is not None
-        or session.expires_at <= utcnow()
-        or str(session.employee_id) != str(claims["sub"])
-    ):
-        raise Unauthorized("Your session has ended. Please sign in again.", code="session_revoked")
+    # one person cannot flood the service (a phone stuck in a retry loop, a script): the limit is per person, not per address
+    if settings.rate_limit_user_per_minute > 0:
+        rate_limit.enforce(f"user:{employee_id}", settings.rate_limit_user_per_minute, 60)
 
-    employee = db.get(Employee, session.employee_id)
-    if employee is None:
-        raise Unauthorized("Your session has ended. Please sign in again.", code="session_revoked")
-    if not employee.is_active:
-        raise Forbidden("Your account has been deactivated. Contact your administrator.", code="account_disabled")
+    session: EmployeeSession | None = None
+    snap = auth_cache.lookup(session_id, employee_id)
+    if snap is not None:
+        employee = auth_cache.principal(db, snap)  # no database query
+        device_id = snap["device"]
+    else:
+        session = db.get(EmployeeSession, session_id)
+        if (
+            session is None
+            or session.revoked_at is not None
+            or session.expires_at <= utcnow()
+            or str(session.employee_id) != employee_id
+        ):
+            raise Unauthorized("Your session has ended. Please sign in again.", code="session_revoked")
 
-    request.state.session_id = session.id
-    request.state.device_id = session.device_id
-    _touch_presence(db, session, request)
+        found = db.get(Employee, session.employee_id)
+        if found is None:
+            raise Unauthorized("Your session has ended. Please sign in again.", code="session_revoked")
+        if not found.is_active:
+            raise Forbidden("Your account has been deactivated. Contact your administrator.", code="account_disabled")
+        employee, device_id = found, session.device_id
+        auth_cache.store(employee, session)
+
+    request.state.session_id = session_id
+    request.state.device_id = device_id
+    if employee.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
+        raise Forbidden("Choose your own password before you continue.", code="password_change_required")
+    _touch_presence(db, request, session_id, device_id, session)
     return employee
 
 
@@ -76,6 +102,7 @@ def require_roles(*roles: str):
             raise Forbidden()
         return user
 
+    _dependency.required_roles = roles  # type: ignore[attr-defined]  (read by tests/test_authorization_matrix.py)
     return _dependency
 
 

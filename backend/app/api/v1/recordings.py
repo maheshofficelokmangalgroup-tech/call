@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.api.deps import AdminUser, CurrentEmployee, DbSession, Paging
 from app.core import rate_limit
 from app.core.errors import Forbidden, NotFound
+from app.core.protection import upload_slot
 from app.core.security import verify_playback
 from app.models.employee import Employee
 from app.models.recording import REC_AVAILABLE, Recording, RecordingAccessLog
@@ -48,7 +49,8 @@ def upload_recording(
     """Upload the audio for a recording created with POST /calls/{id}/recording."""
     rate_limit.enforce_sensitive(request, "recording_upload", user.id)
     rec = recording_service.get_recording_for(db, user, recording_id)
-    return RecordingOut.model_validate(recording_service.upload_content(db, user=user, rec=rec, upload=file))
+    with upload_slot():
+        return RecordingOut.model_validate(recording_service.upload_content(db, user=user, rec=rec, upload=file))
 
 
 @router.get("/{recording_id}/playback-url", response_model=PlaybackUrlOut)

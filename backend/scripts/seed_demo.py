@@ -19,6 +19,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.database import new_session
 from app.core.security import hash_password
 from app.core.timeutils import day_bounds_utc, utcnow
@@ -77,6 +78,9 @@ def main() -> int:
     parser.add_argument("--numbers", choices=["fictional", "india"], default="fictional")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+    if get_settings().app_env in ("production", "staging"):
+        print("Refusing to create demo accounts (with well-known passwords) in a production or staging environment.", file=sys.stderr)
+        return 2
 
     rng = random.Random(args.seed)
     db = new_session()

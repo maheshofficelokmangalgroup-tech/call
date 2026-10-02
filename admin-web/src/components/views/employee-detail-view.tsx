@@ -12,6 +12,7 @@ import { CallDrawer } from "@/components/domain/call-drawer";
 import { CallFiltersBar, useCallFilterState } from "@/components/domain/call-filters";
 import { CallsTable, NoCalls } from "@/components/domain/calls-table";
 import { ChartCard } from "@/components/domain/chart-card";
+import { DeviceHealth } from "@/components/domain/device-health";
 import { DevicesPanel } from "@/components/domain/devices-panel";
 import { EmployeeActions } from "@/components/domain/employee-actions";
 import { RecordingCoverage } from "@/components/domain/recording-coverage";
@@ -194,6 +195,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
                 </InfoItem>
                 <InfoItem icon={Smartphone} label="Phone">
                   {lastDevice ? `${lastDevice.device_name ?? "Unknown"} · app ${lastDevice.app_version ?? "?"}` : <span className="font-medium text-faint">no phone yet</span>}
+                  {lastDevice ? <DeviceHealth status={m.device_status} className="mt-1" /> : null}
                 </InfoItem>
               </div>
             </>
@@ -316,7 +318,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
         </TabsContent>
 
         <TabsContent value="phones">
-          {loading ? <Skeleton className="h-48 w-full" /> : <DevicesPanel employeeId={id} employeeName={m.full_name} devices={data.devices} bound={m.device_binding_enabled} isAdmin={isAdmin} />}
+          {loading ? <Skeleton className="h-48 w-full" /> : <DevicesPanel employeeId={id} employeeName={m.full_name} devices={data.devices} bound={m.device_binding_enabled} isAdmin={isAdmin} liveStatus={m.device_status} />}
         </TabsContent>
       </Tabs>
 

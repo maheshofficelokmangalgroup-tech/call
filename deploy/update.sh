@@ -11,6 +11,12 @@ COMPOSE=(docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE")
 env_get() { grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true; }
 say() { printf '\n\033[1;32m==> %s\033[0m\n' "$*"; }
 
+# an installation made before Redis had a password gets one now
+if ! grep -q '^REDIS_PASSWORD=.' "$ENV_FILE"; then
+  printf 'REDIS_PASSWORD=%s\n' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | cut -c1-40)" >> "$ENV_FILE"
+  echo "Added REDIS_PASSWORD to $ENV_FILE."
+fi
+
 say "Backing up first"
 bash deploy/backup.sh || echo "!!  The backup failed. Continuing, but check the disk space and /var/log/calling-backup.log."
 

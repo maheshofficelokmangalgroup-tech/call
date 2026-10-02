@@ -28,6 +28,7 @@ export type EmployeeUpdate = S["EmployeeUpdate"];
 export type BulkEmployeesResult = S["BulkEmployeesOut"];
 export type Team = S["TeamOut"];
 export type Device = S["DeviceOut"];
+export type DeviceStatus = S["DeviceStatus"];
 export type Session = S["SessionOut"];
 export type AuditLog = S["AuditLogOut"];
 export type Settings = S["SettingsOut"];

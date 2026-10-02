@@ -5,7 +5,7 @@
  */
 import { AppState, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 
-import { SYNC_INTERVAL_MS } from '../../config/env';
+import { SYNC_INTERVAL_MAX_MS, SYNC_INTERVAL_MIN_MS, SYNC_INTERVAL_MS } from '../../config/env';
 import { getCall, updateCall, type LocalCall } from '../../database/calls';
 import {
   completeOp,
@@ -226,18 +226,29 @@ class SyncEngine {
   private kickTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeTimer: ReturnType<typeof setTimeout> | null = null;
   private interval: ReturnType<typeof setInterval> | null = null;
+  private intervalMs = SYNC_INTERVAL_MS;
   private appStateSub: NativeEventSubscription | null = null;
   private listeners = new Set<Listener>();
 
-  start(employeeId: number): void {
+  start(employeeId: number, intervalSeconds?: number | null): void {
     this.stop();
     this.employeeId = employeeId;
-    this.interval = setInterval(() => this.kick(), SYNC_INTERVAL_MS);
+    this.intervalMs = clampSyncInterval(intervalSeconds);
+    this.interval = setInterval(() => this.kick(), this.intervalMs);
     this.appStateSub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'active') this.kick();
     });
     void this.refreshCounts();
     this.kick();
+  }
+
+  /** The server changed the pace (an administrator edited the setting): carry on at the new one. */
+  setIntervalSeconds(intervalSeconds: number | null | undefined): void {
+    const next = clampSyncInterval(intervalSeconds);
+    if (this.employeeId === null || next === this.intervalMs) return;
+    this.intervalMs = next;
+    if (this.interval) clearInterval(this.interval);
+    this.interval = setInterval(() => this.kick(), next);
   }
 
   stop(): void {
@@ -360,6 +371,13 @@ class SyncEngine {
     const delay = Math.max(1500, nextAttemptAt - Date.now());
     this.wakeTimer = setTimeout(() => this.kick(), Math.min(delay, 10 * 60_000));
   }
+}
+
+/** The server's pace, kept within sensible limits (a wrong setting must not make the phone hammer the server or go silent). */
+export function clampSyncInterval(seconds: number | null | undefined): number {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return SYNC_INTERVAL_MS;
+  return Math.min(SYNC_INTERVAL_MAX_MS, Math.max(SYNC_INTERVAL_MIN_MS, Math.round(value * 1000)));
 }
 
 export const syncEngine = new SyncEngine();

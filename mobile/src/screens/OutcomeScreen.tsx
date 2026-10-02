@@ -18,7 +18,6 @@ import { TextField } from '../components/TextField';
 import { getCall, type LocalCall } from '../database/calls';
 import { useQueue } from '../hooks/data';
 import type { RootStackParamList } from '../navigation/types';
-import { DEFAULT_DISPOSITIONS } from '../services/api/defaults';
 import type { Disposition, DispositionCode } from '../services/api/types';
 import { submitOutcome } from '../services/telephony/callFlow';
 import { decodeMissing } from '../services/telephony/recordingStatus';
@@ -86,8 +85,8 @@ export function OutcomeScreen() {
   const queue = useQueue();
 
   const dispositions = useMemo(() => {
-    const list = config?.dispositions?.length ? config.dispositions : DEFAULT_DISPOSITIONS;
-    return [...list].sort((a, b) => a.sort_order - b.sort_order);
+    // the list of outcomes belongs to the organisation: it is the server's, kept on the phone after the first sign-in
+    return [...(config?.dispositions ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   }, [config?.dispositions]);
 
   const [call, setCall] = useState<LocalCall | null>(null);

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -107,6 +107,29 @@ class ClientConfig(BaseModel):
     recording: RecordingConfig
     dispositions: list[DispositionOut]
     unread_notifications: int
+    heartbeat_seconds: int  # how often a phone that is open should report that it is alive (POST /me/heartbeat)
+    sync_interval_seconds: int  # how often a phone should retry what it could not send
+
+
+class HeartbeatIn(BaseModel):
+    """What an open app tells the server about the phone every minute or so (no location, nothing about other apps)."""
+
+    app_state: Literal["foreground", "background"] = "foreground"
+    battery_percent: int | None = Field(default=None, ge=0, le=100)
+    charging: bool | None = None
+    network: Literal["wifi", "cellular", "none", "other"] | None = None
+    app_version: str | None = Field(default=None, max_length=32)
+    os_version: str | None = Field(default=None, max_length=64)
+    pending_sync: int | None = Field(default=None, ge=0, le=1_000_000)  # things the phone could not send yet
+    permissions_ok: bool | None = None  # everything the app needs (phone, call log, microphone) is allowed
+    missing_permissions: list[Annotated[str, Field(max_length=32)]] = Field(default_factory=list, max_length=10)
+    on_call: bool | None = None
+    client_time: datetime | None = None  # the phone's own clock: a clock that is wrong makes call times wrong
+
+
+class HeartbeatOut(BaseModel):
+    server_time: datetime
+    next_in_seconds: int
 
 
 class MeOut(BaseModel):

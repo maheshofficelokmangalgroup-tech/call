@@ -916,6 +916,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Heartbeat
+         * @description An open app reports that it is alive, and how the phone is (battery, network, permissions, unsent work).
+         *
+         *     Costs the database nothing most of the time: the report is kept in Redis and copied into the device's row every few minutes.
+         */
+        post: operations["heartbeat_api_v1_me_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -994,6 +1016,9 @@ export interface paths {
         /**
          * My Queue
          * @description Today's calling queue for the signed-in employee: due callbacks, then priority contacts, then later callbacks.
+         *
+         *     The answer is remembered for a few seconds and forgotten the moment anything that decides it changes (a call, an outcome, a
+         *     callback, a contact handed over or taken back, a campaign switched on or off).
          */
         get: operations["my_queue_api_v1_queue_get"];
         put?: never;
@@ -1620,12 +1645,16 @@ export interface components {
             default_phone_region: string;
             /** Dispositions */
             dispositions: components["schemas"]["DispositionOut"][];
+            /** Heartbeat Seconds */
+            heartbeat_seconds: number;
             recording: components["schemas"]["RecordingConfig"];
             /**
              * Server Time
              * Format: date-time
              */
             server_time: string;
+            /** Sync Interval Seconds */
+            sync_interval_seconds: number;
             /** Timezone */
             timezone: string;
             /** Unread Notifications */
@@ -1880,8 +1909,16 @@ export interface components {
         };
         /** DeviceOut */
         DeviceOut: {
+            /** App State */
+            app_state?: string | null;
             /** App Version */
             app_version: string | null;
+            /** Battery Percent */
+            battery_percent?: number | null;
+            /** Charging */
+            charging?: boolean | null;
+            /** Clock Skew Seconds */
+            clock_skew_seconds?: number | null;
             /** Device Name */
             device_name: string | null;
             /** Device Uid */
@@ -1895,15 +1932,51 @@ export interface components {
             id: number;
             /** Is Approved */
             is_approved: boolean;
+            /** Last Heartbeat At */
+            last_heartbeat_at?: string | null;
             /**
              * Last Seen At
              * Format: date-time
              */
             last_seen_at: string;
+            /** Missing Permissions */
+            missing_permissions?: string | null;
+            /** Network Type */
+            network_type?: string | null;
             /** Os Version */
             os_version: string | null;
+            /** Pending Sync */
+            pending_sync?: number | null;
+            /** Permissions Ok */
+            permissions_ok?: boolean | null;
             /** Platform */
             platform: string;
+        };
+        /**
+         * DeviceStatus
+         * @description How the employee's phone is, from what the app last reported (see POST /me/heartbeat).
+         */
+        DeviceStatus: {
+            /** App State */
+            app_state: string | null;
+            /** Battery Percent */
+            battery_percent: number | null;
+            /** Charging */
+            charging: boolean | null;
+            /** Clock Skew Seconds */
+            clock_skew_seconds: number | null;
+            /** Last Heartbeat At */
+            last_heartbeat_at: string | null;
+            /** Live */
+            live: boolean;
+            /** Missing Permissions */
+            missing_permissions: string[];
+            /** Network */
+            network: string | null;
+            /** Pending Sync */
+            pending_sync: number | null;
+            /** Permissions Ok */
+            permissions_ok: boolean | null;
         };
         /** DispositionIn */
         DispositionIn: {
@@ -2057,6 +2130,7 @@ export interface components {
             device_name: string | null;
             /** Device Os */
             device_os: string | null;
+            device_status?: components["schemas"]["DeviceStatus"] | null;
             /** Email */
             email: string;
             /** Employee Code */
@@ -2177,6 +2251,48 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HeartbeatIn
+         * @description What an open app tells the server about the phone every minute or so (no location, nothing about other apps).
+         */
+        HeartbeatIn: {
+            /**
+             * App State
+             * @default foreground
+             * @enum {string}
+             */
+            app_state: "foreground" | "background";
+            /** App Version */
+            app_version?: string | null;
+            /** Battery Percent */
+            battery_percent?: number | null;
+            /** Charging */
+            charging?: boolean | null;
+            /** Client Time */
+            client_time?: string | null;
+            /** Missing Permissions */
+            missing_permissions?: string[];
+            /** Network */
+            network?: ("wifi" | "cellular" | "none" | "other") | null;
+            /** On Call */
+            on_call?: boolean | null;
+            /** Os Version */
+            os_version?: string | null;
+            /** Pending Sync */
+            pending_sync?: number | null;
+            /** Permissions Ok */
+            permissions_ok?: boolean | null;
+        };
+        /** HeartbeatOut */
+        HeartbeatOut: {
+            /** Next In Seconds */
+            next_in_seconds: number;
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
         };
         /** HourPoint */
         HourPoint: {
@@ -5029,6 +5145,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    heartbeat_api_v1_me_heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeartbeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

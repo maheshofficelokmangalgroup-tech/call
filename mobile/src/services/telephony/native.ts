@@ -27,6 +27,13 @@ export interface Capabilities {
   isDefaultDialer: boolean;
 }
 
+/** What the phone says about itself in the heartbeat (nothing about location or other apps). */
+export interface DeviceStatusReading {
+  batteryPercent?: number;
+  charging?: boolean;
+  network: 'wifi' | 'cellular' | 'none' | 'other';
+}
+
 export interface DeviceDetails {
   deviceUid: string;
   manufacturer: string;
@@ -177,6 +184,7 @@ export const EMPTY_SNAPSHOT: LiveSnapshot = { calls: [], primaryId: null, muted:
 interface CallingNative {
   getCapabilities(): Promise<Capabilities>;
   getDeviceInfo(): Promise<DeviceDetails>;
+  getDeviceStatus(): Promise<DeviceStatusReading>;
   getSetupStatus(): Promise<SetupStatus>;
   openSetting(kind: SettingKind): Promise<boolean>;
   requestDefaultDialer(): Promise<boolean>;
@@ -237,6 +245,7 @@ export const telephony = {
   isAvailable: () => Boolean(calling),
   getCapabilities: () => requireCalling().getCapabilities(),
   getDeviceInfo: () => requireCalling().getDeviceInfo(),
+  getDeviceStatus: () => requireCalling().getDeviceStatus(),
   getSetupStatus: () => requireCalling().getSetupStatus(),
   openSetting: (kind: SettingKind) => requireCalling().openSetting(kind),
   requestDefaultDialer: () => requireCalling().requestDefaultDialer(),

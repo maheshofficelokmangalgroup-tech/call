@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -26,11 +27,13 @@ type Values = z.infer<typeof schema>;
 function PasswordForm({ forced, onOpenChange }: { forced: boolean; onOpenChange: (open: boolean) => void }) {
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { current_password: "", new_password: "", confirm: "" } });
   const [error, setError] = React.useState<string | null>(null);
+  const queries = useQueryClient();
 
   async function submit(values: Values) {
     setError(null);
     try {
       await api("auth/change-password", { method: "POST", body: { current_password: values.current_password, new_password: values.new_password } });
+      await queries.invalidateQueries(); // everything the page was waiting for (the server answered only this screen until now)
       toast.success("Password changed", { description: "Your other sign-ins were signed out." });
       onOpenChange(false);
     } catch (e) {

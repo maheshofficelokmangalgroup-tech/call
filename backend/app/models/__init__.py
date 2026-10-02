@@ -7,6 +7,7 @@ from app.models.employee import Employee, EmployeeDevice, EmployeeSession, Role,
 from app.models.imports import Import, ImportRow
 from app.models.recording import Recording, RecordingAccessLog
 from app.models.system import AuditLog, Notification, Setting
+from app.models import cache_events  # noqa: F401  (registers the hooks that clear the queue caches when rows change)
 
 __all__ = [
     "AuditLog",

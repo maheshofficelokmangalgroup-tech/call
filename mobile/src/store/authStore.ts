@@ -14,6 +14,7 @@ import {
 } from '../services/api/client';
 import type { ClientConfig, Employee, Me } from '../services/api/types';
 import { serverUrlProblem } from '../services/api/serverUrl';
+import { heartbeat } from '../services/heartbeat/heartbeat';
 import { syncEngine } from '../services/sync/syncEngine';
 import { clearTokens, loadTokens, saveTokens } from '../services/storage/secureTokens';
 import { telephony } from '../services/telephony/native';
@@ -39,6 +40,13 @@ interface AuthState {
 
 const KV_SERVER_URL = 'server_url';
 const CACHE_ME = 'me';
+
+/** Start (or re-pace) everything that runs while somebody is signed in. A temporary password only opens the password screen. */
+function runSession(employee: Employee, config: ClientConfig | null): void {
+  syncEngine.start(employee.id, config?.sync_interval_seconds);
+  if (employee.must_change_password) heartbeat.stop();
+  else heartbeat.start(config?.heartbeat_seconds);
+}
 
 async function deviceForLogin() {
   if (!telephony.isAvailable()) return null;
@@ -77,6 +85,7 @@ export const useAuth = create<AuthState>((set, get) => ({
 
     setSessionEndedHandler((reason) => {
       syncEngine.stop();
+      heartbeat.stop();
       void clearServerCache().catch(() => undefined);
       set({ status: 'signedOut', employee: null, config: null, notice: MESSAGES[reason] ?? MESSAGES.session_ended });
     });
@@ -91,7 +100,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     const cached = await getCache<Me>(CACHE_ME);
     if (cached) {
       set({ status: 'signedIn', employee: cached.data.employee, config: cached.data.config });
-      syncEngine.start(cached.data.employee.id);
+      runSession(cached.data.employee, cached.data.config);
       void get().refreshMe();
       return;
     }
@@ -109,10 +118,13 @@ export const useAuth = create<AuthState>((set, get) => ({
     const device = await deviceForLogin();
     const pair = await api.login(identifier.trim(), password, device);
     await saveTokens(tokensFromPair(pair));
-    const me: Me = { employee: pair.employee, config: (await fetchConfigSafe()) ?? fallbackConfig(pair.employee) };
-    await setCache(CACHE_ME, me);
-    set({ status: 'signedIn', employee: me.employee, config: me.config, notice: null });
-    syncEngine.start(me.employee.id);
+    // The outcomes, the recording rules and the pace all come from the server (nothing is invented here): asked twice, because the
+    // first answer can be lost while the phone is still getting its network after the sign-in.
+    const config = (await fetchConfigSafe()) ?? (await fetchConfigSafe());
+    if (config) await setCache(CACHE_ME, { employee: pair.employee, config } satisfies Me);
+    set({ status: 'signedIn', employee: pair.employee, config, notice: null });
+    runSession(pair.employee, config);
+    if (!config) void get().refreshMe();
   },
 
   signOut: async () => {
@@ -122,6 +134,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       // offline or already expired: signing out locally is still the right outcome
     }
     syncEngine.stop();
+    heartbeat.stop();
     await clearTokens();
     await clearServerCache();
     set({ status: 'signedOut', employee: null, config: null, notice: null });
@@ -132,6 +145,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       const me = await api.me();
       await setCache(CACHE_ME, me);
       set({ employee: me.employee, config: me.config });
+      syncEngine.setIntervalSeconds(me.config.sync_interval_seconds);
+      heartbeat.setInterval(me.config.heartbeat_seconds);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) throw error;
       // offline: keep the cached profile
@@ -149,7 +164,11 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   markPasswordChanged: () => {
     const employee = get().employee;
-    if (employee) set({ employee: { ...employee, must_change_password: false } });
+    if (employee) {
+      const changed = { ...employee, must_change_password: false };
+      set({ employee: changed });
+      heartbeat.start(get().config?.heartbeat_seconds); // the server answers everything again: report in
+    }
   },
 
   clearNotice: () => set({ notice: null }),
@@ -161,16 +180,4 @@ async function fetchConfigSafe(): Promise<ClientConfig | null> {
   } catch {
     return null;
   }
-}
-
-function fallbackConfig(employee: Employee): ClientConfig {
-  return {
-    server_time: new Date().toISOString(),
-    timezone: 'Asia/Kolkata',
-    daily_target: employee.daily_target,
-    default_phone_region: 'IN',
-    recording: { enabled: false, notice_text: '', max_size_mb: 100, allowed_types: [] },
-    dispositions: [],
-    unread_notifications: 0,
-  };
 }

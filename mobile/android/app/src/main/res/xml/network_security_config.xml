@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Plain HTTP is allowed at the platform level so a pilot server on the office Wi-Fi (http://192.168.x.x:8000) works.
-  The app itself refuses http:// for any address outside the local network (see src/services/api/serverUrl.ts), so
-  production servers must use https://.
+  The rule of a build that talks to a server on the internet (its address starts with https://): nothing travels in plain text,
+  not even by a redirect. A build for a pilot server on the office network (an address starting with http://) uses
+  network_security_config_pilot.xml instead; app/build.gradle picks the one that fits the address given to the build.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

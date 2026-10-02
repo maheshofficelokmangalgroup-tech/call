@@ -7,6 +7,7 @@ import type {
   Contact,
   Dashboard,
   DeviceInfoPayload,
+  HeartbeatAnswer,
   Me,
   Note,
   Page,
@@ -48,6 +49,20 @@ export interface DispositionBody {
   note_client_ref?: string | null;
 }
 
+export interface HeartbeatBody {
+  app_state: 'foreground' | 'background';
+  battery_percent?: number;
+  charging?: boolean;
+  network?: 'wifi' | 'cellular' | 'none' | 'other';
+  app_version?: string;
+  os_version?: string;
+  pending_sync?: number;
+  permissions_ok?: boolean;
+  missing_permissions?: string[];
+  on_call?: boolean;
+  client_time?: string;
+}
+
 export const api = {
   // ---- auth
   login: (identifier: string, password: string, device: DeviceInfoPayload | null) =>
@@ -58,6 +73,7 @@ export const api = {
 
   // ---- profile / config
   me: () => http.get<Me>('/me'),
+  heartbeat: (body: HeartbeatBody) => http.post<HeartbeatAnswer>('/me/heartbeat', body),
 
   // ---- queue & contacts
   queue: (limit = 200) => http.get<QueueResponse>('/queue', { limit }),

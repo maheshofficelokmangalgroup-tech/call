@@ -17,6 +17,12 @@ cd "$HERE"
 TAG="${1:-}"
 SHA="${2:-}"
 env_get() { grep -E "^$1=" .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true; }
+
+# a server set up before the Redis password existed gets one (once; it only has to match between Redis and the API, both read .env)
+if [ -z "$(env_get REDIS_PASSWORD)" ]; then
+  printf 'REDIS_PASSWORD=%s\n' "$(openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | cut -c1-40)" >> .env
+  echo "Added REDIS_PASSWORD to .env."
+fi
 say() { printf '\n==> %s\n' "$*"; }
 
 # our own Docker credentials: never touch the login the other projects on this server rely on

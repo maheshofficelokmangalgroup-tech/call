@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
+import { DeviceFlag } from "@/components/domain/device-health";
 import { PRESENCE_META, PresenceLabel } from "@/components/ui/presence";
 import { ProgressBar } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,7 +35,10 @@ type SortKey = "name" | "calls" | "answer_rate" | "talk" | "avg_talk" | "contact
 function StatusCell({ person }: { person: EmployeeMetrics }) {
   return (
     <div className="leading-tight">
-      <PresenceLabel presence={person.presence} className="text-[13px]" />
+      <div className="flex items-center gap-1.5">
+        <PresenceLabel presence={person.presence} className="text-[13px]" />
+        <DeviceFlag status={person.device_status} />
+      </div>
       <p className="mt-0.5 whitespace-nowrap pl-[18px] text-xs text-muted">
         {person.presence === "inactive" ? "cannot sign in" : person.presence === "on_call" ? "talking now" : person.last_seen_at ? timeAgo(person.last_seen_at) : "never signed in"}
       </p>

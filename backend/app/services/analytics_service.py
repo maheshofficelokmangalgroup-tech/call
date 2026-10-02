@@ -40,6 +40,7 @@ from app.models.recording import REC_AVAILABLE, Recording
 from app.schemas.analytics import (
     ContactStat,
     DayPoint,
+    DeviceStatus,
     EmployeeCounts,
     EmployeeDetailOut,
     EmployeeMetrics,
@@ -58,7 +59,7 @@ from app.schemas.analytics import (
     StatusCount,
     Totals,
 )
-from app.services import call_service
+from app.services import call_service, heartbeat_service
 from app.services.scope import visible_employee_ids
 from app.services.settings_service import get_recording_config
 
@@ -332,6 +333,37 @@ def _presence(is_active: bool, on_call: bool, last_seen: datetime | None, now: d
     return "offline"
 
 
+def _device_status(device: EmployeeDevice | None, fresh: dict | None) -> DeviceStatus | None:
+    """The phone's own report: the live one from Redis if the app is open, else the last one that was saved on the device's row."""
+    if fresh:
+        return DeviceStatus(
+            live=True,
+            last_heartbeat_at=datetime.fromisoformat(fresh["at"]),
+            app_state=fresh.get("app_state"),
+            battery_percent=fresh.get("battery_percent"),
+            charging=fresh.get("charging"),
+            network=fresh.get("network"),
+            permissions_ok=fresh.get("permissions_ok"),
+            missing_permissions=list(fresh.get("missing_permissions") or []),
+            pending_sync=fresh.get("pending_sync"),
+            clock_skew_seconds=fresh.get("clock_skew_seconds"),
+        )
+    if device is not None and device.last_heartbeat_at is not None:
+        return DeviceStatus(
+            live=False,
+            last_heartbeat_at=device.last_heartbeat_at,
+            app_state=device.app_state,
+            battery_percent=device.battery_percent,
+            charging=device.charging,
+            network=device.network_type,
+            permissions_ok=device.permissions_ok,
+            missing_permissions=[p for p in (device.missing_permissions or "").split(",") if p],
+            pending_sync=device.pending_sync,
+            clock_skew_seconds=device.clock_skew_seconds,
+        )
+    return None
+
+
 def _on_call_employee_ids(db: Session, ids: list[int] | None, now: datetime) -> set[int]:
     stmt = select(Call.employee_id).where(Call.ended_at.is_(None), Call.status.in_(IN_PROGRESS), Call.started_at >= now - LIVE_WINDOW).distinct()
     if ids is not None:
@@ -444,6 +476,11 @@ def _employee_rows(
         latest_device.setdefault(device.employee_id, device)
         if device.last_seen_at and (device.employee_id not in seen or device.last_seen_at > seen[device.employee_id]):
             seen[device.employee_id] = device.last_seen_at
+    reports = heartbeat_service.latest(ids)  # what the open apps said in the last minutes (Redis: no database work)
+    for emp_id, report in reports.items():
+        reported_at = datetime.fromisoformat(report["at"])
+        if emp_id not in seen or reported_at > seen[emp_id]:
+            seen[emp_id] = reported_at
     on_call = _on_call_employee_ids(db, ids, now)
 
     result: list[EmployeeMetrics] = []
@@ -475,6 +512,7 @@ def _employee_rows(
                 device_name=device.device_name if device else None,
                 device_os=device.os_version if device else None,
                 app_version=device.app_version if device else None,
+                device_status=_device_status(device, reports.get(e.id)),
                 calls=calls,
                 connected=connected,
                 no_answer=int(f[3]) if f else 0,
@@ -725,17 +763,26 @@ def employees_csv(metrics: list[EmployeeMetrics]) -> Iterator[str]:
         )
 
 
+CSV_PAGE = 500
+
+
 def calls_csv(db: Session, user: Employee, *, limit: int = 20_000, **filters) -> Iterator[str]:
-    """Every call matching the call-list filters (newest first), with local times and the time-to-answer."""
-    yield "﻿"
+    """Every call matching the call-list filters (newest first), with local times and the time-to-answer.
+
+    The first page is read here, before a single byte is sent: a filter the database cannot take then fails as an ordinary error
+    answer instead of cutting the download off in the middle (after the "200 OK" has already gone out).
+    """
+    first = call_service.calls_page(db, user, offset=0, page_size=min(CSV_PAGE, limit), **filters)
+    return _calls_csv_rows(db, user, first, limit, filters)
+
+
+def _calls_csv_rows(db: Session, user: Employee, batch: list, limit: int, filters: dict) -> Iterator[str]:
+    yield "\ufeff"  # UTF-8 BOM so Excel opens Marathi / Hindi names correctly
     yield _csv_chunk(
         [["Call ID", "Employee ID", "Employee", "Contact", "Phone", "Direction", "Started", "Answered", "Ended", "Ring (s)", "Talk (s)", "Status", "Outcome", "Recording"]]
     )
-    offset, page_size = 0, 500
-    while offset < limit:
-        batch = call_service.calls_page(db, user, offset=offset, page_size=min(page_size, limit - offset), **filters)
-        if not batch:
-            break
+    offset = 0
+    while batch:
         employees = {
             e.id: e.employee_code for e in db.scalars(select(Employee).where(Employee.id.in_({c.employee_id for c in batch})))
         }
@@ -749,5 +796,6 @@ def calls_csv(db: Session, user: Employee, *, limit: int = 20_000, **filters) ->
             )
         yield _csv_chunk(rows)
         offset += len(batch)
-        if len(batch) < page_size:
+        if len(batch) < CSV_PAGE or offset >= limit:
             break
+        batch = call_service.calls_page(db, user, offset=offset, page_size=min(CSV_PAGE, limit - offset), **filters)

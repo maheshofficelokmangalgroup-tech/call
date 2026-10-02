@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only for a build whose server address starts with http:// (a pilot server on the office Wi-Fi, http://192.168.x.x:8000).
+  The app itself still refuses http:// for any address outside the local network (src/services/api/serverUrl.ts).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
