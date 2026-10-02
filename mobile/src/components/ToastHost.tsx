@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeOutUp, SlideInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useToastStore, type ToastKind } from '../store/toastStore';
-import { colors, motion, radius, shadow } from '../theme';
+import { colors, radius, shadow } from '../theme';
 import { haptics } from '../utils/haptics';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
@@ -34,17 +33,15 @@ export function ToastHost() {
   const look = STYLE[current.kind];
   return (
     <View pointerEvents="none" style={[styles.host, { top: insets.top + 10 }]}>
-      <Animated.View
+      <View
         key={current.id}
-        entering={SlideInUp.springify().damping(motion.spring.damping).stiffness(motion.spring.stiffness)}
-        exiting={FadeOutUp.duration(180)}
         style={[styles.toast, { backgroundColor: look.bg }]}
       >
         <Icon name={look.icon} size={20} color={colors.white} />
         <Text variant="bodyMedium" color={colors.white} style={styles.message}>
           {current.message}
         </Text>
-      </Animated.View>
+      </View>
     </View>
   );
 }

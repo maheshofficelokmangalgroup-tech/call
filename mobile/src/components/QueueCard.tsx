@@ -35,14 +35,16 @@ interface Props {
   onCall: () => void;
   /** visually emphasise the call button (first card) */
   highlight?: boolean;
+  /** false hides the New / High / campaign tags under the contact */
+  showTags?: boolean;
 }
 
-export function QueueCard({ item, onOpen, onCall, highlight = false }: Props) {
+export function QueueCard({ item, onOpen, onCall, highlight = false, showTags = true }: Props) {
   const { contact } = item;
   const priority = PRIORITY_LABEL[contact.priority];
   const last = parseIso(item.last_called_at);
   return (
-    <PressableScale onPress={onOpen} scaleTo={0.985} haptic={false} style={styles.card}>
+    <PressableScale onPress={onOpen} haptic={false} style={styles.card}>
       <Avatar name={contact.name} size={50} />
       <View style={styles.body}>
         <Text variant="h3" numberOfLines={1}>
@@ -52,18 +54,20 @@ export function QueueCard({ item, onOpen, onCall, highlight = false }: Props) {
           {formatPhone(contact.phone)}
           {contact.location ? `  •  ${contact.location}` : ''}
         </Text>
-        <View style={styles.tags}>
-          {reasonTag(item)}
-          {priority && contact.priority === 1 ? <Tag label={priority.label} color={priority.color} background={priority.bg} /> : null}
-          {item.campaign ? <Tag label={item.campaign.name} icon="tag" color={colors.purple} background={colors.purpleSoft} /> : null}
-        </View>
+        {showTags ? (
+          <View style={styles.tags}>
+            {reasonTag(item)}
+            {priority && contact.priority === 1 ? <Tag label={priority.label} color={priority.color} background={priority.bg} /> : null}
+            {item.campaign ? <Tag label={item.campaign.name} icon="tag" color={colors.purple} background={colors.purpleSoft} /> : null}
+          </View>
+        ) : null}
         {last ? (
           <Text variant="caption" color="faint" style={styles.last}>
             Last called {timeAgo(last)}
           </Text>
         ) : null}
       </View>
-      <PressableScale onPress={onCall} scaleTo={0.88} style={[styles.call, highlight ? styles.callHighlight : null]} testID={`call-${contact.id}`}>
+      <PressableScale onPress={onCall} style={[styles.call, highlight ? styles.callHighlight : null]} testID={`call-${contact.id}`}>
         <Icon name="phone" size={22} color={colors.white} />
       </PressableScale>
     </PressableScale>

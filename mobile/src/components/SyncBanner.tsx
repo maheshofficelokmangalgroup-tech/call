@@ -1,6 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
+import { StyleSheet, View } from 'react-native';
 
 import { syncEngine } from '../services/sync/syncEngine';
 import { useSyncStore } from '../store/syncStore';
@@ -52,19 +51,19 @@ export function SyncBanner({ offline = false }: Props) {
 
   if (!look) return null;
   return (
-    <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(160)} layout={LinearTransition} style={[styles.bar, { backgroundColor: look.bg }]}>
+    <View style={[styles.bar, { backgroundColor: look.bg }]}>
       <Icon name={look.icon} size={16} color={look.fg} />
       <Text variant="smallMedium" color={look.fg} style={styles.text} numberOfLines={1}>
         {look.text}
       </Text>
       {look.action ? (
-        <PressableScale onPress={look.onPress} haptic={false} scaleTo={0.92}>
+        <PressableScale onPress={look.onPress} haptic={false}>
           <Text variant="smallMedium" color={look.fg} style={styles.action}>
             {look.action}
           </Text>
         </PressableScale>
       ) : null}
-    </Animated.View>
+    </View>
   );
 }
 

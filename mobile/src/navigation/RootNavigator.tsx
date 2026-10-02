@@ -23,15 +23,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function SignedInStack() {
   useRefreshOnSync();
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.bg } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: colors.bg } }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="ContactDetail" component={ContactDetailScreen} />
-      <Stack.Screen name="InCall" component={InCallScreen} options={{ animation: 'fade_from_bottom', gestureEnabled: false }} />
-      <Stack.Screen name="Outcome" component={OutcomeScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+      <Stack.Screen name="InCall" component={InCallScreen} options={{ animation: 'none', gestureEnabled: false }} />
+      <Stack.Screen name="Outcome" component={OutcomeScreen} options={{ animation: 'none', gestureEnabled: false }} />
       <Stack.Screen name="CallDetail" component={CallDetailScreen} />
       <Stack.Screen name="Callbacks" component={CallbacksScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Permissions" component={PermissionsScreen} options={{ animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="Permissions" component={PermissionsScreen} options={{ animation: 'none' }} />
       <Stack.Screen name="TelephonyCheck" component={TelephonyCheckScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
     </Stack.Navigator>
@@ -46,7 +46,7 @@ export function RootNavigator() {
 
   if (status === 'signedOut') {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none' }}>
         <Stack.Screen name="Login" component={LoginScreen} />
       </Stack.Navigator>
     );
@@ -54,7 +54,7 @@ export function RootNavigator() {
 
   if (mustChange) {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none' }}>
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} initialParams={{ forced: true }} />
       </Stack.Navigator>
     );

@@ -6,6 +6,7 @@ import type { LocalCall } from '../src/database/calls';
 import * as callsDb from '../src/database/calls';
 import {
   CallPlacementFailed,
+  CallStartInProgress,
   PermissionRequired,
   WrapupPending,
   cancelAllDialTimers,
@@ -112,6 +113,24 @@ describe('startCall', () => {
     expect(db.updateCall).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ status: 'failed', wrapupDone: true, reconciled: true }));
     expect(enqueue).toHaveBeenCalledWith('call_events', { events: [expect.objectContaining({ type: 'failed' })] }, expect.any(String));
     expect(active()?.phase).toBe('failed');
+  });
+
+  it('starts one call when Call is tapped twice quickly', async () => {
+    tel.placeCall.mockResolvedValue({ startedAtMs: 1_234_567 });
+    const input = { contactId: 10, contactName: 'Asha', phone: '+919876543210' };
+    const [first, second] = await Promise.allSettled([startCall(input), startCall(input)]);
+    expect(first.status).toBe('fulfilled');
+    expect(second.status === 'rejected' && second.reason).toBeInstanceOf(CallStartInProgress);
+    expect(db.insertCall).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls.filter(([type]) => type === 'create_call')).toHaveLength(1);
+    expect(tel.placeCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the next tap once a call start has finished, even a failed one', async () => {
+    readPerms.mockResolvedValueOnce({ ...granted, phone: false });
+    await expect(startCall({ contactId: 10, contactName: 'Asha', phone: '+919876543210' })).rejects.toBeInstanceOf(PermissionRequired);
+    tel.placeCall.mockResolvedValue({ startedAtMs: 1_234_567 });
+    await expect(startCall({ contactId: 10, contactName: 'Asha', phone: '+919876543210' })).resolves.toEqual(expect.any(String));
   });
 });
 

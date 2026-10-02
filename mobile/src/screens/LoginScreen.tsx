@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, View, type TextInputInstance } from 'react-native';
-import Animated, { FadeInDown, SlideInDown, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '../components/BottomSheet';
@@ -15,7 +14,7 @@ import { serverUrlProblem } from '../services/api/serverUrl';
 import { api } from '../services/api/endpoints';
 import { useAuth } from '../store/authStore';
 import { toast } from '../store/toastStore';
-import { colors, motion, radius } from '../theme';
+import { colors, radius } from '../theme';
 import { haptics } from '../utils/haptics';
 
 export function loginErrorMessage(error: unknown): string {
@@ -62,19 +61,10 @@ export function LoginScreen() {
     }
   };
 
-  const shake = useSharedValue(0);
-  const logoPop = useSharedValue(0);
-  useEffect(() => {
-    logoPop.value = withDelay(120, withSpring(1, motion.springBouncy));
-  }, [logoPop]);
-  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
-  const logoStyle = useAnimatedStyle(() => ({ transform: [{ scale: logoPop.value }], opacity: logoPop.value }));
-
   const submit = useCallback(async () => {
     if (loading) return;
     if (!identifier.trim() || !password) {
       setError('Enter your employee ID (or email) and password.');
-      shake.value = withSequence(withTiming(-9, { duration: 50 }), withTiming(9, { duration: 70 }), withTiming(-6, { duration: 60 }), withTiming(0, { duration: 50 }));
       haptics.warning();
       return;
     }
@@ -86,36 +76,35 @@ export function LoginScreen() {
       haptics.success();
     } catch (e) {
       setError(loginErrorMessage(e));
-      shake.value = withSequence(withTiming(-9, { duration: 50 }), withTiming(9, { duration: 70 }), withTiming(-6, { duration: 60 }), withTiming(0, { duration: 50 }));
       haptics.error();
     } finally {
       setLoading(false);
     }
-  }, [identifier, password, loading, shake]);
+  }, [identifier, password, loading]);
 
   return (
     <View style={styles.root}>
       <View style={[styles.hero, { paddingTop: insets.top + 24 }]}>
         <View style={[styles.bubble, styles.bubbleA]} />
         <View style={[styles.bubble, styles.bubbleB]} />
-        <Animated.View style={logoStyle}>
-          <PressableScale onPress={onLogoTap} haptic={false} scaleTo={0.92} style={styles.logo}>
+        <View>
+          <PressableScale onPress={onLogoTap} haptic={false} style={styles.logo}>
             <Icon name="phone-call" size={38} color={colors.green} />
           </PressableScale>
-        </Animated.View>
-        <Animated.View entering={FadeInDown.delay(250).duration(420)}>
+        </View>
+        <View>
           <Text variant="display" color={colors.ink} style={styles.heroTitle}>
             Let’s start{'\n'}calling
           </Text>
           <Text variant="body" color={colors.inkSoft}>
             Sign in to see today’s contacts.
           </Text>
-        </Animated.View>
+        </View>
       </View>
 
-      <Animated.View entering={SlideInDown.delay(150).springify().damping(motion.spring.damping).stiffness(180)} style={styles.sheet}>
+      <View style={styles.sheet}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
-          <Animated.View style={shakeStyle}>
+          <View>
             {notice ? (
               <View style={styles.notice}>
                 <Icon name="info" size={18} color={colors.blue} />
@@ -158,20 +147,20 @@ export function LoginScreen() {
               testID="login-password"
             />
             {error ? (
-              <Animated.View entering={FadeInDown.duration(200)} style={styles.error}>
+              <View style={styles.error}>
                 <Icon name="alert" size={18} color={colors.red} />
                 <Text variant="smallMedium" color={colors.red} style={styles.flex} testID="login-error">
                   {error}
                 </Text>
-              </Animated.View>
+              </View>
             ) : null}
-          </Animated.View>
+          </View>
 
           <Button title="Sign in" onPress={submit} loading={loading} iconRight="arrow-right" style={styles.signIn} testID="login-submit" />
           <Text variant="small" color="muted" align="center" style={styles.footnote}>
             Forgot your password? Ask your administrator to reset it.
           </Text>
-          <PressableScale onPress={() => setSheet(true)} haptic={false} scaleTo={0.97} style={styles.server} testID="login-server">
+          <PressableScale onPress={() => setSheet(true)} haptic={false} style={styles.server} testID="login-server">
             <View style={styles.serverRow}>
               <Icon name="server" size={14} color={colors.faint} />
               <Text variant="caption" color="faint" numberOfLines={1} style={styles.serverText}>
@@ -184,7 +173,7 @@ export function LoginScreen() {
           </PressableScale>
           <KeyboardSpacer extra={24} />
         </ScrollView>
-      </Animated.View>
+      </View>
 
       <ServerSheet visible={sheet} onClose={() => setSheet(false)} />
     </View>
@@ -243,12 +232,12 @@ function ServerSheet({ visible, onClose }: { visible: boolean; onClose: () => vo
       </Text>
       <TextField value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" icon="server" placeholder="https://api.company.com" />
       {result ? (
-        <Animated.View entering={FadeInDown.duration(180)} style={[styles.result, { backgroundColor: result.ok ? colors.greenSoft : colors.redSoft }]}>
+        <View style={[styles.result, { backgroundColor: result.ok ? colors.greenSoft : colors.redSoft }]}>
           <Icon name={result.ok ? 'check-circle' : 'alert'} size={18} color={result.ok ? colors.green : colors.red} />
           <Text variant="smallMedium" color={result.ok ? colors.greenDark : colors.red} style={styles.flex}>
             {result.text}
           </Text>
-        </Animated.View>
+        </View>
       ) : null}
       <View style={styles.sheetButtons}>
         <Button title="Test" variant="outline" size="md" onPress={test} loading={testing} style={styles.flex} />
