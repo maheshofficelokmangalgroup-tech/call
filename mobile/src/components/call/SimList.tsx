@@ -18,7 +18,7 @@ export function SimList({ sims, onPick }: { sims: SimOption[]; onPick: (id: stri
   return (
     <View style={styles.list}>
       {sims.map((sim, index) => (
-        <PressableScale key={sim.id} onPress={() => onPick(sim.id)} scaleTo={0.97} style={styles.row} testID={`sim-${index + 1}`}>
+        <PressableScale key={sim.id} onPress={() => onPick(sim.id)} style={styles.row} testID={`sim-${index + 1}`}>
           <View style={styles.badge}>
             <Icon name="smartphone" size={20} color={colors.green} />
             <Text variant="caption" color={colors.greenDark} style={styles.slot}>

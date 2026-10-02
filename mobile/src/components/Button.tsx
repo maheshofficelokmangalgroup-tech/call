@@ -1,13 +1,12 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, radius } from '../theme';
 import { Icon, type IconName } from './Icon';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
 
-type Variant = 'primary' | 'accent' | 'soft' | 'outline' | 'danger' | 'dark';
+type Variant = 'primary' | 'accent' | 'soft' | 'outline' | 'danger' | 'dark' | 'white';
 type Size = 'lg' | 'md' | 'sm';
 
 interface Props {
@@ -30,6 +29,7 @@ const PALETTE: Record<Variant, { bg: string; fg: string; border?: string }> = {
   outline: { bg: colors.white, fg: colors.ink, border: colors.borderStrong },
   danger: { bg: colors.red, fg: colors.white },
   dark: { bg: colors.ink, fg: colors.white },
+  white: { bg: colors.white, fg: colors.ink },
 };
 
 const HEIGHT: Record<Size, number> = { lg: 54, md: 46, sm: 38 };
@@ -53,17 +53,17 @@ export function Button({ title, onPress, variant = 'primary', size = 'lg', icon,
       ]}
     >
       {loading ? (
-        <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
+        <View>
           <ActivityIndicator color={palette.fg} />
-        </Animated.View>
+        </View>
       ) : (
-        <Animated.View entering={FadeIn.duration(150)} style={styles.row}>
+        <View style={styles.row}>
           {icon ? <Icon name={icon} size={iconSize} color={palette.fg} /> : null}
           <Text variant={size === 'sm' ? 'bodyMedium' : 'button'} color={palette.fg} numberOfLines={1} style={size === 'sm' ? styles.smallLabel : undefined}>
             {title}
           </Text>
           {iconRight ? <Icon name={iconRight} size={iconSize} color={palette.fg} /> : null}
-        </Animated.View>
+        </View>
       )}
     </PressableScale>
   );

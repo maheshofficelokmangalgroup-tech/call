@@ -4,8 +4,10 @@ deactivated employees cannot create calls, outcomes drive the contact state mach
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import update
+
 from app.core.timeutils import day_bounds_utc, utcnow
-from app.models.contact import Contact
+from app.models.contact import Contact, ContactAssignment
 from tests.conftest import auth_headers, iso, now_utc
 
 
@@ -244,7 +246,7 @@ def test_due_callbacks_jump_to_the_top_and_are_fulfilled_by_the_next_outcome(cli
     assert client.get("/api/v1/callbacks?status=done", headers=as_a).json()["total"] == 1
 
 
-def test_queue_ordering_priority_then_never_called_first(client, make, emp_a, as_a):
+def test_queue_ordering_left_over_first_then_priority_then_never_called_first(client, make, emp_a, as_a):
     low = make.contact(name="low", assign_to=emp_a, priority=3)
     called_before = make.contact(name="mid-called", assign_to=emp_a, priority=2, call_count=1, last_called_at=utcnow() - timedelta(days=1))
     fresh_mid = make.contact(name="mid-fresh", assign_to=emp_a, priority=2)
@@ -252,7 +254,21 @@ def test_queue_ordering_priority_then_never_called_first(client, make, emp_a, as
     later = make.contact(name="later-callback", assign_to=emp_a, priority=1)
     _, day_end = day_bounds_utc()
     client.post("/api/v1/callbacks", headers=as_a, json={"contact_id": later.id, "scheduled_at": iso(utcnow() + (day_end - utcnow()) / 2)})
-    assert queue_ids(client, as_a) == [high.id, fresh_mid.id, called_before.id, low.id, later.id]
+    # called yesterday = still waiting from an earlier day, so it leads; today's contacts follow by priority
+    assert queue_ids(client, as_a) == [called_before.id, high.id, fresh_mid.id, low.id, later.id]
+
+
+def test_contacts_left_over_from_earlier_days_are_listed_first(client, make, emp_a, as_a, db):
+    today_high = make.contact(name="assigned-today-high", assign_to=emp_a, priority=1)
+    yesterday_low = make.contact(name="assigned-yesterday-low", assign_to=emp_a, priority=3)
+    yesterday_high = make.contact(name="assigned-yesterday-high", assign_to=emp_a, priority=1)
+    db.execute(
+        update(ContactAssignment)
+        .where(ContactAssignment.contact_id.in_([yesterday_low.id, yesterday_high.id]))
+        .values(assigned_at=utcnow() - timedelta(days=1))
+    )
+    db.commit()
+    assert queue_ids(client, as_a) == [yesterday_high.id, yesterday_low.id, today_high.id]
 
 
 def test_queue_respects_campaign_status_and_ownership(client, make, emp_a, emp_b, as_a):

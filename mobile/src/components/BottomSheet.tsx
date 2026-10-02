@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { BackHandler, Keyboard, Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { colors, motion, radius } from '../theme';
+import { colors, radius } from '../theme';
 import { Text } from './Text';
 
 interface Props {
@@ -25,33 +25,20 @@ interface Props {
 }
 
 /**
- * Slide-up sheet with a dimmed backdrop, spring entrance and drag-to-dismiss - the pattern quick-commerce apps use
- * for everything secondary. Built on Reanimated + Gesture Handler so the drag runs on the UI thread.
+ * Bottom sheet with a dimmed backdrop and drag-to-dismiss. It appears and disappears at once (no sliding or fading); only
+ * the finger drag moves it. Built on Reanimated + Gesture Handler so the drag runs on the UI thread.
  */
 export function BottomSheet({ visible, onClose, title, children, dismissible = true, keyboardAware = false }: Props) {
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [mounted, setMounted] = useState(visible);
-  const translateY = useSharedValue(screenHeight);
-  const backdrop = useSharedValue(0);
+  const translateY = useSharedValue(0);
   const keyboard = useKeyboardHeight();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
-  const unmount = useCallback(() => setMounted(false), []);
-
   useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      translateY.value = withSpring(0, motion.spring);
-      backdrop.value = withTiming(1, { duration: 220 });
-    } else if (mounted) {
-      if (keyboardAware) Keyboard.dismiss();
-      backdrop.value = withTiming(0, { duration: 200 });
-      translateY.value = withTiming(screenHeight, { duration: 240, easing: Easing.in(Easing.cubic) }, (finished) => {
-        if (finished) scheduleOnRN(unmount);
-      });
-    }
+    translateY.value = 0;
+    if (!visible && keyboardAware) Keyboard.dismiss();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
@@ -77,24 +64,21 @@ export function BottomSheet({ visible, onClose, title, children, dismissible = t
       if (e.translationY > 110 || e.velocityY > 900) {
         scheduleOnRN(onClose);
       } else {
-        translateY.value = withSpring(0, motion.spring);
+        translateY.value = 0;
       }
     },
   });
 
-  const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value - (keyboardAware ? keyboard.value : 0) }],
-  }));
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
 
-  if (!mounted) return null;
+  if (!visible) return null;
 
   const layers = (
     <>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+      <View style={[StyleSheet.absoluteFill, styles.backdrop]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={dismissible ? onClose : undefined} />
-      </Animated.View>
-      <Animated.View style={[styles.sheet, { maxHeight: screenHeight * 0.92, paddingBottom: Math.max(insets.bottom, 12) + 12 }, sheetStyle]}>
+      </View>
+      <Animated.View style={[styles.sheet, { maxHeight: screenHeight * 0.92, paddingBottom: Math.max(insets.bottom, 12) + 12, marginBottom: keyboardAware ? keyboard : 0 }, sheetStyle]}>
         <GestureDetector gesture={pan}>
           <View style={styles.grabArea}>
             <View style={styles.handle} />

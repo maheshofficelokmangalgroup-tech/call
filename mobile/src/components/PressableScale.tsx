@@ -1,14 +1,10 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 
-import { motion } from '../theme';
 import { haptics } from '../utils/haptics';
 
 interface Props extends Omit<PressableProps, 'style'> {
   style?: StyleProp<ViewStyle>;
-  /** scale while pressed */
-  scaleTo?: number;
   haptic?: boolean;
   children?: React.ReactNode;
 }
@@ -65,13 +61,11 @@ function splitStyle(style: StyleProp<ViewStyle>): { outer: ViewStyle; inner: Vie
 }
 
 /**
- * The app-wide press feedback: a quick spring squash plus a tick of haptics - the "alive" feel of quick-commerce apps.
+ * The app's touchable: a tick of haptics on press and nothing else (no squash or any other animation).
  * Layout styles (flex, size, margins) sit on the touchable itself so it behaves in rows/columns like any other view,
- * while the visual styles (background, radius, padding) are on the animated child that squashes.
+ * while the visual styles (background, radius, padding) are on the child.
  */
-export function PressableScale({ style, scaleTo = 0.96, haptic = true, onPress, onPressIn, onPressOut, disabled, children, ...rest }: Props) {
-  const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+export function PressableScale({ style, haptic = true, onPress, disabled, children, ...rest }: Props) {
   const { outer, inner } = useMemo(() => splitStyle(style), [style]);
   const grows = sizedByParent(outer);
 
@@ -80,20 +74,12 @@ export function PressableScale({ style, scaleTo = 0.96, haptic = true, onPress, 
       {...rest}
       disabled={disabled}
       style={outer}
-      onPressIn={(e) => {
-        scale.value = withSpring(scaleTo, motion.press);
-        onPressIn?.(e);
-      }}
-      onPressOut={(e) => {
-        scale.value = withSpring(1, motion.springBouncy);
-        onPressOut?.(e);
-      }}
       onPress={(e) => {
         if (haptic) haptics.tap();
         onPress?.(e);
       }}
     >
-      <Animated.View style={[inner, grows ? styles.fill : null, animated, disabled ? styles.disabled : null]}>{children}</Animated.View>
+      <View style={[inner, grows ? styles.fill : null, disabled ? styles.disabled : null]}>{children}</View>
     </Pressable>
   );
 }

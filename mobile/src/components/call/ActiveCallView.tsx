@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, FadeIn, FadeInDown, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { CallIdentity } from '../../hooks/useCallIdentity';
@@ -12,7 +11,6 @@ import { formatDuration, formatPhone } from '../../utils/format';
 import { Avatar } from '../Avatar';
 import { Icon } from '../Icon';
 import { PressableScale } from '../PressableScale';
-import { PulseRing } from '../PulseRing';
 import { Text } from '../Text';
 import { CallBackdrop } from './CallBackdrop';
 import { CallControlButton } from './CallControlButton';
@@ -78,7 +76,7 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
       </View>
 
       {keypad ? (
-        <Animated.View entering={FadeIn.duration(200)} style={styles.compactIdentity}>
+        <View style={styles.compactIdentity}>
           <Avatar name={identity.title} size={52} />
           <View style={styles.compactText}>
             <Text variant="h2" color={colors.white} numberOfLines={1}>
@@ -89,14 +87,12 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
               {onHold ? '  •  On hold' : ''}
             </Text>
           </View>
-        </Animated.View>
+        </View>
       ) : (
-      <Animated.View entering={FadeInDown.duration(360)} style={styles.identity}>
+      <View style={styles.identity}>
         <View style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}>
           {ringing ? (
             <>
-              <PulseRing size={avatarSize} color={colors.white} delay={0} duration={2400} maxScale={1.9} />
-              <PulseRing size={avatarSize} color={colors.white} delay={1200} duration={2400} maxScale={1.9} />
             </>
           ) : null}
           <Avatar name={identity.title} size={avatarSize} />
@@ -123,11 +119,11 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
             {statusLabel(call)}
           </Text>
         </View>
-      </Animated.View>
+      </View>
       )}
 
       {waiting ? (
-        <Animated.View entering={FadeInDown.duration(260)} exiting={FadeOut.duration(160)} style={styles.banner}>
+        <View style={styles.banner}>
           <View style={styles.bannerIcon}>
             <Icon name="phone-in" size={18} color={colors.white} />
           </View>
@@ -139,15 +135,15 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
               {waiting.name ?? formatPhone(waiting.number)}
             </Text>
           </View>
-          <PressableScale onPress={() => callControls.reject(waiting.id)} scaleTo={0.9} style={[styles.bannerBtn, styles.decline]} testID="waiting-decline">
+          <PressableScale onPress={() => callControls.reject(waiting.id)} style={[styles.bannerBtn, styles.decline]} testID="waiting-decline">
             <Icon name="phone-off" size={18} color={colors.white} />
           </PressableScale>
-          <PressableScale onPress={() => callControls.answer(waiting.id)} scaleTo={0.9} style={[styles.bannerBtn, styles.accept]} testID="waiting-accept">
+          <PressableScale onPress={() => callControls.answer(waiting.id)} style={[styles.bannerBtn, styles.accept]} testID="waiting-accept">
             <Icon name="phone" size={18} color={colors.white} />
           </PressableScale>
-        </Animated.View>
+        </View>
       ) : held ? (
-        <Animated.View entering={FadeInDown.duration(260)} exiting={FadeOut.duration(160)} style={styles.banner}>
+        <View style={styles.banner}>
           <View style={[styles.bannerIcon, styles.holdIcon]}>
             <Icon name="pause" size={18} color={colors.white} />
           </View>
@@ -159,24 +155,24 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
               {held.name ?? formatPhone(held.number)}
             </Text>
           </View>
-          <PressableScale onPress={() => callControls.swap()} scaleTo={0.94} style={styles.swap} testID="swap-calls">
+          <PressableScale onPress={() => callControls.swap()} style={styles.swap} testID="swap-calls">
             <Text variant="smallMedium" color={colors.greenDark}>
               Swap
             </Text>
           </PressableScale>
-        </Animated.View>
+        </View>
       ) : null}
 
       <View style={[styles.controls, keypad ? styles.controlsFill : styles.controlsGrid]}>
         {choosingSim ? (
-          <Animated.View entering={FadeIn.duration(220)} style={styles.simCard}>
+          <View style={styles.simCard}>
             <Text variant="h2" style={styles.simTitle}>
               Call with which SIM?
             </Text>
             <SimList sims={call.sims} onPick={(id) => callControls.selectSim(call.id, id)} />
-          </Animated.View>
+          </View>
         ) : keypad ? (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.padWrap}>
+          <View style={styles.padWrap}>
             <Text variant="number" color={colors.white} align="center" numberOfLines={1} style={styles.typed}>
               {typed || ' '}
             </Text>
@@ -187,9 +183,9 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
                 Hide
               </Text>
             </Pressable>
-          </Animated.View>
+          </View>
         ) : (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.grid}>
+          <View style={styles.grid}>
             <View style={styles.gridRow}>
               <CallControlButton
                 icon={snapshot.muted ? 'mic-off' : 'mic'}
@@ -231,12 +227,12 @@ export function ActiveCallView({ call, snapshot, identity }: Props) {
               />
               <CallControlButton icon="user" label="Details" onPress={() => setDetailsOpen(true)} size={control} testID="ctl-details" />
             </View>
-          </Animated.View>
+          </View>
         )}
       </View>
 
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 14) + 12 }]}>
-        <PressableScale onPress={() => callControls.hangup(call.id)} disabled={ended} scaleTo={0.92} style={styles.end} accessibilityLabel="End call" testID="end-call">
+        <PressableScale onPress={() => callControls.hangup(call.id)} disabled={ended} style={styles.end} accessibilityLabel="End call" testID="end-call">
           <Icon name="phone-off" size={32} color={colors.white} />
         </PressableScale>
       </View>
@@ -260,14 +256,9 @@ function Chip({ label, icon }: { label: string; icon?: React.ComponentProps<type
 
 /** "REC": the employee must always see that the call is being recorded. */
 function RecChip() {
-  const blink = useSharedValue(1);
-  useEffect(() => {
-    blink.value = withRepeat(withSequence(withTiming(0.25, { duration: 700, easing: Easing.inOut(Easing.quad) }), withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) })), -1);
-  }, [blink]);
-  const dot = useAnimatedStyle(() => ({ opacity: blink.value }));
   return (
     <View style={[styles.chip, styles.recChip]} testID="rec-chip">
-      <Animated.View style={[styles.recDot, dot]} />
+      <View style={styles.recDot} />
       <Text variant="caption" color={colors.white} style={styles.recText}>
         REC
       </Text>

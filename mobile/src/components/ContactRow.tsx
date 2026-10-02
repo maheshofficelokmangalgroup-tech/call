@@ -21,7 +21,7 @@ export function ContactRow({ contact, onOpen, onCall }: Props) {
   const status = contactStatusLook(contact.status);
   const blocked = contact.status === 'do_not_contact';
   return (
-    <PressableScale onPress={onOpen} scaleTo={0.985} haptic={false} style={styles.card}>
+    <PressableScale onPress={onOpen} haptic={false} style={styles.card}>
       <Avatar name={contact.name} size={46} />
       <View style={styles.body}>
         <Text variant="h3" numberOfLines={1}>
@@ -37,7 +37,7 @@ export function ContactRow({ contact, onOpen, onCall }: Props) {
         </View>
       </View>
       {onCall && !blocked ? (
-        <PressableScale onPress={onCall} scaleTo={0.88} style={styles.call}>
+        <PressableScale onPress={onCall} style={styles.call}>
           <Icon name="phone" size={20} color={colors.white} />
         </PressableScale>
       ) : null}

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, FadeInRight, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -12,7 +11,7 @@ import { Icon } from '../components/Icon';
 import { PressableScale } from '../components/PressableScale';
 import { ProgressRing } from '../components/ProgressRing';
 import { QueueCard } from '../components/QueueCard';
-import { Skeleton } from '../components/Skeleton';
+import { RowSkeleton, Skeleton } from '../components/Skeleton';
 import { StatCard } from '../components/StatCard';
 import { SyncBanner } from '../components/SyncBanner';
 import { PullRefresh } from '../components/PullRefresh';
@@ -37,9 +36,9 @@ export function HomeScreen() {
   const unread = useAuth((s) => s.config?.unread_notifications ?? 0);
   const dash = useDashboard();
   const queue = useQueue();
+  const call = useCallAction();
   const local = useLocalToday();
   const wrapup = usePendingWrapup();
-  const call = useCallAction();
   const [confetti, setConfetti] = useState(0);
 
   const target = Math.max(employee?.daily_target ?? 0, dash.data?.daily_target ?? 0);
@@ -66,7 +65,6 @@ export function HomeScreen() {
     });
   }, [done, target]);
 
-  const next = queue.data?.items.slice(0, 3) ?? [];
   const firstLoad = dash.loading && !dash.data;
 
   return (
@@ -76,7 +74,7 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<PullRefresh onRefresh={onRefresh} progressViewOffset={insets.top} />}
       >
-        <Animated.View entering={FadeInDown.duration(380)} style={styles.header}>
+        <View style={styles.header}>
           <View style={styles.flex}>
             <Text variant="small" color="muted">
               {greeting()}
@@ -85,7 +83,7 @@ export function HomeScreen() {
               {employee?.full_name.split(' ')[0] ?? 'there'} 👋
             </Text>
           </View>
-          <PressableScale onPress={() => navigation.navigate('Notifications')} style={styles.bell} scaleTo={0.9} testID="open-notifications">
+          <PressableScale onPress={() => navigation.navigate('Notifications')} style={styles.bell} testID="open-notifications">
             <Icon name="bell" size={22} color={colors.ink} />
             {unread > 0 ? (
               <View style={styles.bellBadge}>
@@ -95,12 +93,12 @@ export function HomeScreen() {
               </View>
             ) : null}
           </PressableScale>
-        </Animated.View>
+        </View>
 
         <SyncBanner offline={dash.offline || queue.offline} />
 
         {wrapup.length > 0 ? (
-          <Animated.View entering={FadeInDown.duration(300)} layout={LinearTransition}>
+          <View>
             <PressableScale
               onPress={() => navigation.navigate('Outcome', { callUuid: wrapup[0].uuid })}
               style={styles.wrapup}
@@ -119,10 +117,10 @@ export function HomeScreen() {
               </View>
               <Icon name="chevron-right" size={20} color="#9A3412" />
             </PressableScale>
-          </Animated.View>
+          </View>
         ) : null}
 
-        <Animated.View entering={FadeInDown.delay(80).duration(420)} style={styles.hero}>
+        <View style={styles.hero}>
           <View style={[styles.bubble, styles.bubbleA]} />
           <View style={[styles.bubble, styles.bubbleB]} />
           {firstLoad ? (
@@ -160,7 +158,7 @@ export function HomeScreen() {
             </View>
           )}
           <Button
-            title={(queue.data?.total ?? 0) > 0 ? 'Start calling' : 'Open my queue'}
+            title={(queue.data?.total ?? 0) > 0 ? 'Start calling' : 'Open my calls'}
             variant="accent"
             size="md"
             icon="phone"
@@ -168,69 +166,67 @@ export function HomeScreen() {
             onPress={() => navigation.navigate('MainTabs', { screen: 'Queue' })}
             testID="start-calling"
           />
-        </Animated.View>
+        </View>
 
         <View style={styles.grid}>
           {firstLoad ? (
             <>
               <View style={styles.gridRow}>
-                <Skeleton height={112} rounded={18} style={styles.flex} />
-                <Skeleton height={112} rounded={18} style={styles.flex} />
+                <Skeleton height={76} rounded={16} style={styles.flex} />
+                <Skeleton height={76} rounded={16} style={styles.flex} />
               </View>
               <View style={styles.gridRow}>
-                <Skeleton height={112} rounded={18} style={styles.flex} />
-                <Skeleton height={112} rounded={18} style={styles.flex} />
+                <Skeleton height={76} rounded={16} style={styles.flex} />
+                <Skeleton height={76} rounded={16} style={styles.flex} />
               </View>
             </>
           ) : (
             <>
-              <Animated.View entering={FadeInDown.delay(140).duration(380)} style={styles.gridRow}>
+              <View style={styles.gridRow}>
                 <StatCard label="Pending" value={queue.data?.total ?? dash.data?.pending_contacts ?? 0} icon="list-checks" tone={colors.green} toneSoft={colors.greenSoft} onPress={() => navigation.navigate('MainTabs', { screen: 'Queue' })} testID="stat-pending" />
                 <StatCard label="Callbacks due" value={queue.data?.due_callbacks ?? dash.data?.callbacks_due ?? 0} icon="calendar-clock" tone={colors.orange} toneSoft={colors.orangeSoft} onPress={() => navigation.navigate('Callbacks')} testID="stat-callbacks" />
-              </Animated.View>
-              <Animated.View entering={FadeInDown.delay(200).duration(380)} style={styles.gridRow}>
-                <StatCard label="Connected" value={dash.data?.connected_calls ?? 0} icon="phone-call" tone={colors.blue} toneSoft={colors.blueSoft} testID="stat-connected" />
-                <StatCard label="No answer" value={dash.data?.no_answer_calls ?? 0} icon="phone-missed" tone={colors.red} toneSoft={colors.redSoft} testID="stat-noanswer" />
-              </Animated.View>
+              </View>
+              <View style={styles.gridRow}>
+                <StatCard label="Connected" value={dash.data?.connected_calls ?? 0} icon="phone-call" tone={colors.blue} toneSoft={colors.blueSoft} onPress={() => navigation.navigate('MainTabs', { screen: 'History', params: { filter: 'connected' } })} testID="stat-connected" />
+                <StatCard label="No answer" value={dash.data?.no_answer_calls ?? 0} icon="phone-missed" tone={colors.red} toneSoft={colors.redSoft} onPress={() => navigation.navigate('MainTabs', { screen: 'History', params: { filter: 'missed' } })} testID="stat-noanswer" />
+              </View>
             </>
           )}
         </View>
 
         <View style={styles.sectionHead}>
           <Text variant="h2">Next up</Text>
-          <PressableScale onPress={() => navigation.navigate('MainTabs', { screen: 'Queue' })} haptic={false} scaleTo={0.94}>
-            <Text variant="smallMedium" color={colors.green} style={styles.link}>
-              See all
-            </Text>
-          </PressableScale>
         </View>
 
-        {queue.loading && !queue.data ? (
-          <>
-            <Skeleton height={92} rounded={18} style={styles.skeletonRow} />
-            <Skeleton height={92} rounded={18} style={styles.skeletonRow} />
-          </>
-        ) : next.length === 0 ? (
-          <Animated.View entering={FadeInRight.duration(300)} style={styles.allClear}>
-            <Icon name="badge-check" size={26} color={colors.green} />
-            <Text variant="bodyMedium" color={colors.greenDark}>
-              You’re all caught up. New contacts appear here when they are assigned.
-            </Text>
-          </Animated.View>
-        ) : (
-          next.map((item, index) => (
-            <Animated.View key={item.contact.id} entering={FadeInDown.delay(260 + index * 70).duration(380)} layout={LinearTransition}>
+        <View style={styles.list}>
+          {queue.loading && !queue.data ? (
+            <>
+              <RowSkeleton />
+              <RowSkeleton />
+            </>
+          ) : (queue.data?.items.length ?? 0) === 0 ? (
+            <View style={styles.allClear}>
+              <Icon name="badge-check" size={26} color={colors.green} />
+              <Text variant="bodyMedium" color={colors.greenDark} style={styles.flex}>
+                You’re all caught up. New contacts appear here when they are assigned.
+              </Text>
+            </View>
+          ) : (
+            queue.data?.items.map((item, index) => (
               <QueueCard
+                key={item.contact.id}
                 item={item}
                 highlight={index === 0}
+                showTags={false}
                 onOpen={() => navigation.navigate('ContactDetail', { contactId: item.contact.id, preview: item.contact })}
                 onCall={() =>
                   void call({ contactId: item.contact.id, contactName: item.contact.name, phone: item.contact.phone, campaignId: item.campaign?.id ?? null })
                 }
               />
-            </Animated.View>
-          ))
-        )}
+            ))
+          )}
+        </View>
+
         <View style={{ height: 24 }} />
       </ScrollView>
       <Confetti play={confetti} />
@@ -262,8 +258,7 @@ const styles = StyleSheet.create({
   cta: { marginTop: 16 },
   grid: { paddingHorizontal: 16, gap: space.md, marginBottom: 8 },
   gridRow: { flexDirection: 'row', gap: space.md },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 14, marginBottom: 10 },
-  link: { fontFamily: 'Poppins-SemiBold' },
-  skeletonRow: { marginHorizontal: 16, marginBottom: 10 },
-  allClear: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 16, padding: 16, borderRadius: radius.lg, backgroundColor: colors.greenSoft },
+  sectionHead: { paddingHorizontal: 16, marginTop: 14, marginBottom: 10 },
+  list: { paddingHorizontal: 16 },
+  allClear: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: radius.lg, backgroundColor: colors.greenSoft },
 });

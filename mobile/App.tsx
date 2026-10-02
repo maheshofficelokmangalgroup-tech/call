@@ -27,7 +27,7 @@ function AppContent() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ReducedMotionConfig mode={ReduceMotion.Never} />
+      <ReducedMotionConfig mode={ReduceMotion.Always} />
       <SafeAreaProvider>
         <StatusBar barStyle="dark-content" />
         <NavigationContainer ref={navigationRef} theme={navTheme}>

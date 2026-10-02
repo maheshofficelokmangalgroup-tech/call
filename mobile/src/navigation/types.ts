@@ -6,7 +6,7 @@ export type TabParamList = {
   Home: undefined;
   Queue: { segment?: 'today' | 'all' } | undefined;
   Dialer: { number?: string } | undefined;
-  History: undefined;
+  History: { filter?: 'all' | 'connected' | 'missed' | 'pending' | 'recordings' } | undefined;
   Profile: undefined;
 };
 

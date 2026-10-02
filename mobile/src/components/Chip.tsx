@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { colors, motion, radius } from '../theme';
+import { colors, radius } from '../theme';
 import { Icon, type IconName } from './Icon';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
@@ -19,28 +18,17 @@ interface ChipProps {
   testID?: string;
 }
 
-/** Selectable pill. The fill colour, border and scale animate when the selection changes. */
+/** Selectable pill. The fill colour and border change as soon as the selection changes (no animation). */
 export function Chip({ label, selected = false, onPress, icon, tone = colors.green, toneSoft = colors.greenSoft, size = 'md', testID }: ChipProps) {
-  const progress = useSharedValue(selected ? 1 : 0);
-  useEffect(() => {
-    progress.value = withTiming(selected ? 1 : 0, { duration: motion.fast });
-  }, [selected, progress]);
-
-  const animated = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(progress.value, [0, 1], [colors.white, toneSoft]),
-    borderColor: interpolateColor(progress.value, [0, 1], [colors.border, tone]),
-    transform: [{ scale: interpolate(progress.value, [0, 1], [1, 1.02]) }],
-  }));
-
   const fg = selected ? tone : colors.inkSoft;
   return (
-    <PressableScale onPress={onPress} scaleTo={0.94} testID={testID}>
-      <Animated.View style={[styles.chip, size === 'sm' ? styles.sm : null, animated]}>
+    <PressableScale onPress={onPress} testID={testID}>
+      <View style={[styles.chip, size === 'sm' ? styles.sm : null, { backgroundColor: selected ? toneSoft : colors.white, borderColor: selected ? tone : colors.border }]}>
         {icon ? <Icon name={icon} size={size === 'sm' ? 14 : 16} color={fg} /> : null}
         <Text variant={size === 'sm' ? 'caption' : 'smallMedium'} color={fg} style={selected ? styles.bold : undefined}>
           {label}
         </Text>
-      </Animated.View>
+      </View>
     </PressableScale>
   );
 }
