@@ -174,8 +174,9 @@ push to main -> CI (API on SQLite + MySQL, app, panel, browser tests, Docker sta
 
 * **Deploy** (`.github/workflows/deploy.yml`) starts by itself when CI passes on `main` and the push changed something that runs on
   the server (panel, API, deployment files); documents and app-only changes do not redeploy. *Actions -> Deploy -> Run workflow*
-  deploys the branch or commit you choose - use it to **roll back** (pick an older commit). Set the repository variable
-  `AUTO_DEPLOY=false` to switch the automatic part off.
+  deploys what you type in *What to deploy* (the full commit id, a tag or a branch; empty = the branch you picked). To **roll back**
+  give the id of an older commit (the *Commits* page shows it): the images are built again from exactly that code and the server is
+  moved to it. Set the repository variable `AUTO_DEPLOY=false` to switch the automatic part off.
 * **Certificate** (`.github/workflows/certificate.yml`) renews the HTTPS certificate every Monday when it has less than 30 days left.
 * Secrets (*Settings -> Secrets and variables -> Actions*): `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`
   (the server's SSH host keys, so a different machine at that address is refused). Variable: `PUBLIC_URL`.

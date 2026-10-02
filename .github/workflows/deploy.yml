@@ -3,7 +3,8 @@ name: Deploy
 # CI/CD for the server: after the checks of the CI workflow pass on `main`, the panel and the API are built into container
 # images (stored in this repository's registry, ghcr.io) and the server is updated to exactly that commit over SSH.
 #   push to main + CI green  -> deploy automatically (switch off with the repository variable AUTO_DEPLOY=false)
-#   "Run workflow"           -> deploy the branch / commit you pick (use it to roll back: pick an older commit)
+#   "Run workflow"           -> deploy what you name in "What to deploy" (a commit id, tag or branch; empty = the branch you picked
+#                               above). To roll back, give the id of an older commit: the images are built again from exactly that code.
 # Server side: deploy/shared/ (see docs/DEPLOYMENT.md). The SSH key can do nothing but run deploy.sh (forced command).
 # Needs the secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS and the variable PUBLIC_URL.
 on:
@@ -12,6 +13,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'What to deploy: the full commit id, a tag or a branch (empty = the branch selected above). Older commit = roll back.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -21,10 +27,6 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
-env:
-  # the exact commit this run is about (for a run started by CI: the commit CI tested)
-  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-
 jobs:
   plan:
     name: What changed?
@@ -32,15 +34,19 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && vars.AUTO_DEPLOY != 'false')
     outputs:
       deploy: ${{ steps.plan.outputs.deploy }}
+      sha: ${{ steps.plan.outputs.sha }}
       sha7: ${{ steps.plan.outputs.sha7 }}
     steps:
+      # the exact commit this run is about: for a run started by CI the commit CI tested, otherwise what was asked for
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.SHA }}
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
           fetch-depth: 2
 
       - id: plan
         run: |
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "sha7=${SHA::7}" >> "$GITHUB_OUTPUT"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "deploy=yes" >> "$GITHUB_OUTPUT"; exit 0; fi
           # a push that only touches the app or the documents does not need a new deployment
@@ -70,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.SHA }}
+          ref: ${{ needs.plan.outputs.sha }}
 
       - uses: docker/setup-buildx-action@v4
 
@@ -95,7 +101,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ env.SHA }}
+            org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
 
   deploy:
     name: Update the server
@@ -123,6 +129,7 @@ jobs:
           KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR_NAME: ${{ github.actor }}
+          SHA: ${{ needs.plan.outputs.sha }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy_key
