@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -466,7 +466,7 @@ def list_contact_calls(db: Session, contact_id: int, *, page: int, page_size: in
     return to_out_many(db, list(rows)), total
 
 
-def list_calls(
+def _calls_stmt(
     db: Session,
     user: Employee,
     *,
@@ -479,16 +479,17 @@ def list_calls(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     q: str | None = None,
-    page: int = 1,
-    page_size: int = 20,
-) -> tuple[list[CallOut], int]:
+    has_recording: bool | None = None,
+    min_duration: int | None = None,
+):
+    """The call query shared by the list, the CSV export and the employee views. None when the caller may see nothing."""
     stmt = select(Call)
     visible = visible_employee_ids(db, user)
     if visible is not None:
         stmt = stmt.where(Call.employee_id.in_(visible))
     if employee_id is not None:
         if visible is not None and employee_id not in visible:
-            return [], 0
+            return None
         stmt = stmt.where(Call.employee_id == employee_id)
     if contact_id is not None:
         stmt = stmt.where(Call.contact_id == contact_id)
@@ -502,6 +503,12 @@ def list_calls(
         stmt = stmt.where(Call.disposition_id.is_(None))
     elif needs_disposition is False:
         stmt = stmt.where(Call.disposition_id.is_not(None))
+    if has_recording is True:
+        stmt = stmt.where(exists().where(Recording.call_id == Call.id))
+    elif has_recording is False:
+        stmt = stmt.where(~exists().where(Recording.call_id == Call.id))
+    if min_duration is not None:
+        stmt = stmt.where(Call.duration_seconds >= min_duration)
     if date_from is not None:
         stmt = stmt.where(Call.started_at >= date_from)
     if date_to is not None:
@@ -511,6 +518,50 @@ def list_calls(
         stmt = stmt.where(
             or_(func.lower(Call.contact_name_snapshot).like(like, escape="\\"), Call.phone_number_snapshot.like(like, escape="\\"))
         )
+    return stmt
+
+
+_CALL_ORDER = {
+    "newest": lambda: (Call.started_at.desc(), Call.id.desc()),
+    "oldest": lambda: (Call.started_at.asc(), Call.id.asc()),
+    "longest": lambda: (Call.duration_seconds.desc(), Call.started_at.desc(), Call.id.desc()),
+}
+
+
+def calls_page(db: Session, user: Employee, *, offset: int, page_size: int, sort: str = "newest", **filters) -> list[CallOut]:
+    stmt = _calls_stmt(db, user, **filters)
+    if stmt is None:
+        return []
+    order = _CALL_ORDER.get(sort, _CALL_ORDER["newest"])()
+    rows = db.scalars(stmt.order_by(*order).limit(page_size).offset(offset)).unique().all()
+    return to_out_many(db, list(rows))
+
+
+def list_calls(
+    db: Session,
+    user: Employee,
+    *,
+    employee_id: int | None = None,
+    contact_id: int | None = None,
+    campaign_id: int | None = None,
+    status: str | None = None,
+    disposition: str | None = None,
+    needs_disposition: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    q: str | None = None,
+    has_recording: bool | None = None,
+    min_duration: int | None = None,
+    sort: str = "newest",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[CallOut], int]:
+    filters = dict(
+        employee_id=employee_id, contact_id=contact_id, campaign_id=campaign_id, status=status, disposition=disposition,
+        needs_disposition=needs_disposition, date_from=date_from, date_to=date_to, q=q, has_recording=has_recording, min_duration=min_duration,
+    )
+    stmt = _calls_stmt(db, user, **filters)
+    if stmt is None:
+        return [], 0
     total = db.scalar(select(func.count()).select_from(stmt.order_by(None).with_only_columns(Call.id).subquery())) or 0
-    rows = db.scalars(stmt.order_by(Call.started_at.desc(), Call.id.desc()).limit(page_size).offset((page - 1) * page_size)).unique().all()
-    return to_out_many(db, list(rows)), total
+    return calls_page(db, user, offset=(page - 1) * page_size, page_size=page_size, sort=sort, **filters), total

@@ -55,6 +55,25 @@ class EmployeeCreate(BaseModel):
         return v.strip()
 
 
+class BulkEmployeesIn(BaseModel):
+    employees: list[EmployeeCreate] = Field(min_length=1, max_length=100)
+
+
+class BulkEmployeeResult(BaseModel):
+    index: int  # position in the request (0-based)
+    ok: bool
+    employee: EmployeeOut | None = None
+    temporary_password: str | None = None
+    code: str | None = None
+    error: str | None = None
+
+
+class BulkEmployeesOut(BaseModel):
+    created: int
+    failed: int
+    results: list[BulkEmployeeResult]
+
+
 class EmployeeUpdate(BaseModel):
     email: Email | None = None
     full_name: str | None = Field(default=None, min_length=2, max_length=150)

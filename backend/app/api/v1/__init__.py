@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    analytics,
     audit_logs,
     auth,
     callbacks,
@@ -14,6 +15,7 @@ from app.api.v1 import (
     notifications,
     queue,
     recordings,
+    settings,
     teams,
 )
 
@@ -33,3 +35,5 @@ api_router.include_router(recordings.router, prefix="/recordings", tags=["record
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+api_router.include_router(settings.router, prefix="/settings", tags=["settings"])

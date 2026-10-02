@@ -63,6 +63,7 @@ class Call(Base, TimestampMixin):
         Index("ix_calls_contact_started", "contact_id", "started_at"),
         Index("ix_calls_campaign_started", "campaign_id", "started_at"),
         Index("ix_calls_status_started", "status", "started_at"),
+        Index("ix_calls_started", "started_at"),  # organisation-wide reports over a date range
         TABLE_OPTS,
     )
 

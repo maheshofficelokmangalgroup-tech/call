@@ -3,8 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request, status
 
 from app.api.deps import AdminUser, DbSession, Paging, StaffUser
+from app.core import rate_limit
+from app.core.errors import AppError
 from app.schemas.common import Message, Page
 from app.schemas.employee import (
+    BulkEmployeeResult,
+    BulkEmployeesIn,
+    BulkEmployeesOut,
     DeviceOut,
     EmployeeCreate,
     EmployeeCreated,
@@ -47,6 +52,23 @@ def list_employees(
 def create_employee(payload: EmployeeCreate, request: Request, db: DbSession, admin: AdminUser):
     employee, temporary = employee_service.create_employee(db, data=payload, actor=admin, request=request)
     return EmployeeCreated(employee=EmployeeOut.model_validate(employee), temporary_password=temporary)
+
+
+@router.post("/bulk", response_model=BulkEmployeesOut)
+def create_employees_bulk(payload: BulkEmployeesIn, request: Request, db: DbSession, admin: AdminUser):
+    """Create up to 100 employees at once. Each row succeeds or fails on its own (a duplicate email does not stop the rest)."""
+    rate_limit.enforce_sensitive(request, "employee_bulk", admin.id)
+    results: list[BulkEmployeeResult] = []
+    for index, item in enumerate(payload.employees):
+        try:
+            employee, temporary = employee_service.create_employee(db, data=item, actor=admin, request=request)
+        except AppError as exc:
+            db.rollback()
+            results.append(BulkEmployeeResult(index=index, ok=False, code=exc.code, error=exc.message))
+            continue
+        results.append(BulkEmployeeResult(index=index, ok=True, employee=EmployeeOut.model_validate(employee), temporary_password=temporary))
+    created = sum(1 for r in results if r.ok)
+    return BulkEmployeesOut(created=created, failed=len(results) - created, results=results)
 
 
 @router.get("/{employee_id}", response_model=EmployeeOut)

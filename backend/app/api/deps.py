@@ -11,11 +11,28 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.errors import Forbidden, Unauthorized
+from app.core.rate_limit import client_ip
 from app.core.security import decode_access_token
 from app.core.timeutils import utcnow
-from app.models.employee import ROLE_ADMIN, ROLE_MANAGER, Employee, EmployeeSession
+from app.models.employee import ROLE_ADMIN, ROLE_MANAGER, Employee, EmployeeDevice, EmployeeSession
 
 _bearer = HTTPBearer(auto_error=False)
+
+PRESENCE_TOUCH_SECONDS = 60  # "last seen" is refreshed by authenticated requests, at most once a minute per session
+
+
+def _touch_presence(db: Session, session: EmployeeSession, request: Request) -> None:
+    """Remember that this employee's phone / browser is alive (the admin panel shows who is online)."""
+    now = utcnow()
+    if (now - session.last_used_at).total_seconds() < PRESENCE_TOUCH_SECONDS:
+        return
+    session.last_used_at = now
+    if session.device_id is not None:
+        device = db.get(EmployeeDevice, session.device_id)
+        if device is not None:
+            device.last_seen_at = now
+            device.last_ip = client_ip(request)
+    db.commit()
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -46,6 +63,7 @@ def get_current_employee(
 
     request.state.session_id = session.id
     request.state.device_id = session.device_id
+    _touch_presence(db, session, request)
     return employee
 
 
