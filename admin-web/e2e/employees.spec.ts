@@ -93,6 +93,8 @@ test.describe("employees list", () => {
 
   test("clicking a row opens the profile", async ({ page }) => {
     await page.getByTestId("employee-search").fill("Aarav");
+    // the whole list is on screen until the answer for "Aarav" arrives: wait for it, or the first row of the old list is opened
+    await expect(page.getByTestId("employee-row")).toHaveCount(1);
     await page.getByTestId("employee-row").first().click();
     await page.waitForURL(/\/employees\/\d+/);
     await expect(page.getByTestId("employee-name")).toHaveText("Aarav Patil");

@@ -250,9 +250,9 @@ jobs:
 
       - name: Shell scripts are valid
         run: |
-          for f in deploy/*.sh; do bash -n "$f"; done
+          for f in deploy/*.sh deploy/shared/*.sh; do bash -n "$f"; done
           sudo apt-get install -y shellcheck >/dev/null
-          shellcheck -S warning deploy/*.sh
+          shellcheck -S warning deploy/*.sh deploy/shared/*.sh
 
       - name: Settings for a throw-away stack on plain http
         run: |
@@ -298,7 +298,8 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/docs)" != 200
           # the panel: a signed-out visitor is sent to the sign-in page, and comes back to where they wanted to go
           curl -sI http://localhost/employees | grep -i '^location: .*/login?next=%2Femployees'
-          curl -fsS http://localhost/login | grep -qi 'Welcome back'
+          # (no "grep -q" after a pipe here: it stops at the first match and curl's broken pipe would fail the step under pipefail)
+          curl -fsS http://localhost/login | grep -i 'Welcome back' >/dev/null
           # signing in through the panel, and asking for data with the session
           curl -fsS -c jar.txt -X POST http://localhost/api/auth/login -H 'content-type: application/json' -H 'x-requested-with: admin-web' \
             -d '{"identifier":"admin@ci.example.com","password":"Quartz-Mango-7731-ok"}' | grep '"role":"admin"'

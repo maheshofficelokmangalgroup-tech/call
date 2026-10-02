@@ -4,9 +4,10 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
+import { DialogRoot } from "@/components/ui/dialog-root";
 import { cn } from "@/lib/utils";
 
-export const Sheet = DialogPrimitive.Root;
+export const Sheet = DialogRoot;
 export const SheetTrigger = DialogPrimitive.Trigger;
 export const SheetClose = DialogPrimitive.Close;
 

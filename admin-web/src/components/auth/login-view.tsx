@@ -2,7 +2,7 @@
 
 import { ArrowRight, Eye, EyeOff, Headphones, Lock, ShieldCheck, Sparkles, User, Users } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { BrandMark } from "@/components/layout/brand";
@@ -37,7 +37,6 @@ function Waveform() {
 
 export function LoginView() {
   const router = useRouter();
-  const params = useSearchParams();
   const [identifier, setIdentifier] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [show, setShow] = React.useState(false);
@@ -53,7 +52,8 @@ export function LoginView() {
     setError(null);
     try {
       await authRequest("login", { identifier, password });
-      router.replace(safeNext(params.get("next")));
+      // read when it is needed, not with a hook: the page can then be built on the server (no blank screen while the script loads)
+      router.replace(safeNext(new URLSearchParams(window.location.search).get("next")));
     } catch (e) {
       const message =
         e instanceof ApiError && e.status === 429

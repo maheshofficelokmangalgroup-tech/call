@@ -47,7 +47,7 @@ GitHub builds the APK and publishes the Release `v1.0.1` by itself (about 8-25 m
 |---|---|---|
 | `KEYSTORE_BASE64` | secret | the release keystore (`mobile/android/app/release.keystore`) as one base64 line |
 | `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` | secret | the values from `mobile/android/keystore.properties` |
-| `API_URL` | variable | the server address the APK starts with, e.g. `http://192.168.0.103:8000` (the PC's Wi-Fi address) or `https://api.company.com` |
+| `API_URL` | variable | the server address the APK starts with: `https://13-205-79-72.sslip.io:8445` (the production server), or while testing `http://192.168.0.103:8000` (the PC's Wi-Fi address) |
 
 Set them again (for example after rotating the key) with the GitHub CLI:
 
