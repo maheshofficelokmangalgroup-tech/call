@@ -1,5 +1,6 @@
 from app.core.config import get_settings
-from app.models.employee import EmployeeSession
+from app.models.employee import EmployeeDevice, EmployeeSession
+from app.models.system import AuditLog
 from tests.conftest import DEVICE, PASSWORD, auth_headers, login
 
 
@@ -153,3 +154,44 @@ def test_validation_errors_use_the_uniform_error_shape(client):
     body = resp.json()["error"]
     assert body["code"] == "validation_error"
     assert {d["field"] for d in body["details"]} >= {"identifier", "password"}
+
+
+WEB = {"device_uid": "admin-panel", "name": "Admin panel (Chrome on Windows)", "platform": "web"}
+
+
+def test_browser_sign_ins_never_become_registered_devices(client, make, admin, db):
+    login(client, admin.email, device=WEB)
+    assert db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == admin.id).count() == 0
+    session = db.query(EmployeeSession).filter(EmployeeSession.employee_id == admin.id).one()
+    assert session.device_id is None and session.user_agent  # still visible as a sign-in, with its browser
+
+
+def test_the_panel_refuses_employees_without_opening_a_session(client, emp_a, db):
+    refused = client.post("/api/v1/auth/login", json={"identifier": emp_a.email, "password": PASSWORD, "device": WEB})
+    assert refused.status_code == 403 and refused.json()["error"]["code"] == "panel_not_allowed"
+    assert "access_token" not in refused.text
+    assert db.query(EmployeeSession).filter(EmployeeSession.employee_id == emp_a.id).count() == 0
+    assert db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == emp_a.id).count() == 0
+    blocked = db.query(AuditLog).filter(AuditLog.action == "auth.login_blocked", AuditLog.actor_id == emp_a.id).all()
+    assert [b.details["reason"] for b in blocked] == ["panel_not_allowed"]
+    # the same account still signs in on its phone
+    assert login(client, emp_a.email)["employee"]["id"] == emp_a.id
+
+
+def test_trying_the_panel_cannot_take_the_place_of_a_bound_phone(client, make, db):
+    emp = make.employee(code="BOUND2")
+    emp.device_binding_enabled = True
+    db.commit()
+    client.post("/api/v1/auth/login", json={"identifier": emp.email, "password": PASSWORD, "device": WEB})  # refused
+    # the first real phone is still the one that gets registered...
+    login(client, emp.email, device={**DEVICE, "device_uid": "the-real-phone-01"})
+    assert [d.device_uid for d in db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == emp.id)] == ["the-real-phone-01"]
+    # ...and a second phone is still turned away
+    blocked = client.post("/api/v1/auth/login", json={"identifier": emp.email, "password": PASSWORD, "device": {**DEVICE, "device_uid": "other-phone-02"}})
+    assert blocked.status_code == 403 and blocked.json()["error"]["code"] == "device_not_allowed"
+
+
+def test_managers_may_use_the_panel(client, make, db):
+    manager = make.employee(role="manager", code="MGRW", email="mgrw@example.com")
+    assert login(client, manager.email, device=WEB)["employee"]["role"] == "manager"
+    assert db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == manager.id).count() == 0

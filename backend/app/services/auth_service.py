@@ -24,7 +24,7 @@ from app.core.security import (
     verify_password,
 )
 from app.core.timeutils import utcnow
-from app.models.employee import Employee, EmployeeDevice, EmployeeSession
+from app.models.employee import ROLE_ADMIN, ROLE_MANAGER, Employee, EmployeeDevice, EmployeeSession
 from app.schemas.employee import DeviceInfo, EmployeeOut, TokenPair
 from app.services import audit_service
 
@@ -38,8 +38,15 @@ def find_employee_by_identifier(db: Session, identifier: str) -> Employee | None
     ).first()
 
 
+WEB_PLATFORM = "web"  # the admin panel signs in with this platform; phones say "android"
+
+
 def _register_device(db: Session, employee: Employee, info: DeviceInfo | None, ip: str | None) -> EmployeeDevice | None:
     """Create/refresh the device record and enforce optional device binding."""
+    if info is not None and info.platform == WEB_PLATFORM:
+        # A browser is not a phone: it never becomes a registered device (and so can never take the "first phone" place of a
+        # bound account). Web sign-ins are visible as sessions, with their browser and address.
+        return None
     if info is None:
         if employee.device_binding_enabled:
             raise Forbidden(
@@ -120,6 +127,12 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
         audit_service.record(db, action="auth.login_blocked", actor=employee, request=request, details={"reason": "inactive"})
         db.commit()
         raise Forbidden("Your account has been deactivated. Contact your administrator.", code="account_disabled")
+
+    if device is not None and device.platform == WEB_PLATFORM and employee.role_name not in (ROLE_ADMIN, ROLE_MANAGER):
+        # the admin panel is for administrators and managers; do not even open a session for anybody else
+        audit_service.record(db, action="auth.login_blocked", actor=employee, request=request, details={"reason": "panel_not_allowed"})
+        db.commit()
+        raise Forbidden("This panel is for administrators and managers. Employees use the mobile app.", code="panel_not_allowed")
 
     try:
         device_row = _register_device(db, employee, device, ip)
