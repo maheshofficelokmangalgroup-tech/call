@@ -8,12 +8,12 @@
 #                   APP_DOWNLOAD_URL - where employees get the mobile app; added to the login message sent on WhatsApp
 # Runtime settings: BACKEND_URL (where the API lives, as seen from this container), COOKIE_SECURE (true behind HTTPS)
 
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
@@ -24,7 +24,7 @@ ENV NEXT_PUBLIC_APP_NAME=${APP_NAME} \
     NEXT_PUBLIC_APP_DOWNLOAD_URL=${APP_DOWNLOAD_URL}
 RUN npm run build
 
-FROM node:22-alpine AS run
+FROM node:24-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
