@@ -74,6 +74,11 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 // CI passes -PversionName=1.2.3 -PversionCode=<run number>; a local build keeps 1.0.0 / 1
 def appVersionCode = (project.findProperty('versionCode') ?: '1').toString().toInteger()
+// The server the app starts with. A release build must be told (-PapiUrl=https://your-server); there is no built-in address.
+def appApiUrl = (project.findProperty('apiUrl') ?: '').toString()
+if (appApiUrl.isEmpty() && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+    throw new GradleException('Tell the release build which server to use: ./gradlew assembleRelease -PapiUrl=https://your-server')
+}
 def appVersionName = (project.findProperty('versionName') ?: '1.0.0').toString()
 
 // Release signing: android/keystore.properties (git-ignored) points at the release keystore.
@@ -108,7 +113,10 @@ android {
         versionName appVersionName
         // The server address the app starts with; employees can change it on the login screen (tap the server address).
         //   ./gradlew assembleRelease -PapiUrl=http://192.168.1.8:8000
-        buildConfigField "String", "DEFAULT_API_URL", "\"${project.findProperty('apiUrl') ?: 'https://api.example.com'}\""
+        buildConfigField "String", "DEFAULT_API_URL", "\"${appApiUrl}\""
+        // an https:// server -> nothing may travel in plain text; anything else (a pilot server on the office network, a debug build
+        // that loads its code from the development machine) -> the pilot rule
+        manifestPlaceholders = [networkSecurityConfig: appApiUrl.startsWith('https://') ? '@xml/network_security_config' : '@xml/network_security_config_pilot']
     }
     signingConfigs {
         debug {

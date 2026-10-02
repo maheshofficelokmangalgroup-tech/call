@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+import anyio.to_thread
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +17,7 @@ from app.core.config import get_settings
 from app.core.database import get_engine
 from app.core.errors import install_error_handlers
 from app.core.logging import RequestContextMiddleware, configure_logging
+from app.core.protection import BodyLimitMiddleware, InFlightLimitMiddleware, PathSanityMiddleware, SecurityHeadersMiddleware, configure_upload_slots
 from app.core.redis_client import get_redis, redis_status
 
 log = logging.getLogger(__name__)
@@ -27,6 +29,11 @@ async def lifespan(_: FastAPI):
     configure_logging(settings.log_level, settings.log_json)
     log.info("Starting %s v%s (env=%s, db=%s)", settings.app_name, __version__, settings.app_env, get_engine().dialect.name)
     get_redis()  # connect early so a missing Redis is reported at boot, not on the first login
+    configure_upload_slots()
+    # the handlers run in threads; there must always be a free one for a request that is in the middle of its work (see
+    # InFlightLimitMiddleware): more threads than requests that are allowed to be in progress
+    threads = anyio.to_thread.current_default_thread_limiter()
+    threads.total_tokens = max(threads.total_tokens, settings.max_inflight_requests + 16)
     yield
     log.info("Shutting down")
 
@@ -51,14 +58,21 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID", "Retry-After"],
     )
+    # (the one added last is the outermost) request id + access log around everything, then the security headers - so that even an
+    # answer given before the application is reached (a body that is too big, an impossible id) carries them. The turn-taking comes
+    # after the body has been received (a slow uploader must not hold a turn while the body trickles in).
+    app.add_middleware(InFlightLimitMiddleware)
+    app.add_middleware(BodyLimitMiddleware)
+    app.add_middleware(PathSanityMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
     install_error_handlers(app)
 
     app.include_router(api_router, prefix="/api/v1")
 
     @app.get("/health", tags=["ops"], include_in_schema=False)
-    def health():
-        """Liveness probe: the process is up."""
+    async def health():
+        """Liveness probe: the process is up (answered without a thread, so it still answers when every thread is busy)."""
         return {"status": "ok", "version": __version__}
 
     @app.get("/ready", tags=["ops"], include_in_schema=False)

@@ -8,8 +8,12 @@ import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -154,6 +158,41 @@ class CallingModule(private val reactContext: ReactApplicationContext) : ReactCo
             promise.resolve(map)
         } catch (e: Exception) {
             promise.reject("DEVICE_INFO_FAILED", e.message, e)
+        }
+    }
+
+    /**
+     * What the heartbeat reports about the phone itself: battery level, whether it is charging and what kind of network it is on.
+     * Nothing about location and nothing about other apps.
+     */
+    @ReactMethod
+    fun getDeviceStatus(promise: Promise) {
+        try {
+            val map = Arguments.createMap()
+            val battery = reactContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            if (battery != null) {
+                val level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                if (level >= 0 && scale > 0) map.putInt("batteryPercent", Math.round(level * 100f / scale))
+                val status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                map.putBoolean("charging", status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
+            }
+            map.putString("network", networkKind())
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("DEVICE_STATUS_FAILED", e.message, e)
+        }
+    }
+
+    private fun networkKind(): String {
+        val manager = reactContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return "other"
+        val active = manager.activeNetwork ?: return "none"
+        val caps = manager.getNetworkCapabilities(active) ?: return "none"
+        if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return "none"
+        return when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            else -> "other"
         }
     }
 

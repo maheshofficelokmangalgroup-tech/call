@@ -1,7 +1,8 @@
 """The employee calling queue (section 7.3).
 
 Ordering:  1) callbacks that are due (oldest first)
-           2) regular eligible contacts  (contact priority, campaign priority, never-called first)
+           2) regular eligible contacts  (left over from earlier days first, then contact priority, campaign priority,
+              never-called first)
            3) callbacks scheduled later today
 Excluded: contacts in terminal states, contacts inside a retry cool-down, contacts of inactive/paused
 campaigns, and contacts not actively assigned to the employee.
@@ -92,9 +93,15 @@ def build_queue(db: Session, employee_id: int, *, limit: int = 100, offset: int 
     total = db.scalar(select(func.count()).select_from(stmt.order_by(None).with_only_columns(Contact.id).subquery())) or 0
     due_callbacks, _ = callback_counts(db, [employee_id], now)
 
+    # Contacts still waiting from an earlier day (assigned or last called before today) are listed before today's.
+    day_start, _ = day_bounds_utc(now=now)
+    waiting_since = func.coalesce(Contact.last_called_at, ContactAssignment.assigned_at, Contact.created_at)
+    carried_over = case((waiting_since < day_start, 0), else_=1)
+
     ordered = stmt.order_by(
         group,
         case((group == 1, literal(0)), else_=cb.c.cb_at),  # callbacks by time (NULL for regular rows)
+        case((group == 1, carried_over), else_=literal(0)),  # regular contacts left over from earlier days first
         Contact.priority,
         func.coalesce(Campaign.priority, 2),
         Contact.last_called_at.is_not(None),  # never-called contacts first

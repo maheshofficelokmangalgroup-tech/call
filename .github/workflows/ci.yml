@@ -254,6 +254,9 @@ jobs:
           sudo apt-get install -y shellcheck >/dev/null
           shellcheck -S warning deploy/*.sh deploy/shared/*.sh
 
+      - name: The deploy script goes back to the running version when the new one is not healthy (a pretend Docker, no server needed)
+        run: bash deploy/shared/test-deploy.sh
+
       - name: Settings for a throw-away stack on plain http
         run: |
           cat > .env.production <<EOF
@@ -268,6 +271,7 @@ jobs:
           MYSQL_ROOT_PASSWORD=ci-mysql-root-0123456789
           APP_TIMEZONE=Asia/Kolkata
           JWT_SECRET=ci-jwt-secret-0123456789-0123456789-0123456789-0123456789
+          REDIS_PASSWORD=ci-redis-password-0123456789
           STORAGE_BACKEND=local
           BOOTSTRAP_ADMIN_EMAIL=admin@ci.example.com
           BOOTSTRAP_ADMIN_PASSWORD=Quartz-Mango-7731-ok
@@ -304,6 +308,9 @@ jobs:
           curl -fsS -c jar.txt -X POST http://localhost/api/auth/login -H 'content-type: application/json' -H 'x-requested-with: admin-web' \
             -d '{"identifier":"admin@ci.example.com","password":"Quartz-Mango-7731-ok"}' | grep '"role":"admin"'
           grep -q ec_at jar.txt
+          # the first password is a temporary one: until it is replaced the server answers only the password screens
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar.txt http://localhost/api/backend/analytics/overview)" = 403
+          curl -fsS -b jar.txt -X POST http://localhost/api/backend/auth/change-password -H 'content-type: application/json' -H 'x-requested-with: admin-web'             -d '{"current_password":"Quartz-Mango-7731-ok","new_password":"Brand-new-Pass-9142"}'
           curl -fsS -b jar.txt http://localhost/api/backend/analytics/overview | grep '"totals"'
           curl -fsS -b jar.txt http://localhost/api/backend/settings | grep '"default_daily_target"'
           # security headers of the panel
@@ -325,3 +332,305 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose.prod.yml --env-file .env.production down -v
+
+  docker-shared:
+    name: 'Shared-server stack - Docker: the layout that runs in production (own HTTPS port, MySQL outside, Redis with a password)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: Calling_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the two images, as deploy.yml does
+        run: |
+          docker build -t calling-api:ci backend
+          docker build -t calling-admin:ci admin-web
+
+      - name: Known vulnerabilities in the images (anything serious that has a fix fails the build)
+        run: |
+          for image in calling-api:ci calling-admin:ci; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image \
+              --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
+
+      - name: A certificate and settings for the test (the real certificate comes from Let's Encrypt)
+        working-directory: deploy/shared
+        run: |
+          mkdir -p letsencrypt/live/localhost certs
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost" \
+            -keyout letsencrypt/live/localhost/privkey.pem -out letsencrypt/live/localhost/fullchain.pem
+          : > certs/rds-global-bundle.pem
+          cat > .env <<EOS
+          PUBLIC_HOST=localhost
+          HTTPS_PORT=8445
+          PUBLIC_URL=https://localhost:8445
+          ACME_EMAIL=ci@example.com
+          CERTBOT_WEBROOT_VOLUME=unused
+          API_IMAGE=calling-api
+          ADMIN_IMAGE=calling-admin
+          IMAGE_TAG=ci
+          DATABASE_URL=mysql+pymysql://root:root@host.docker.internal:3306/Calling_db?charset=utf8mb4
+          APP_TIMEZONE=Asia/Kolkata
+          LOG_LEVEL=INFO
+          JWT_SECRET=ci-jwt-secret-0123456789-0123456789-0123456789-0123456789
+          REDIS_PASSWORD=ci-redis-password-0123456789
+          STORAGE_BACKEND=local
+          BOOTSTRAP_ADMIN_EMAIL=owner@ci.example.com
+          BOOTSTRAP_ADMIN_PASSWORD=Quartz-Mango-7731-ok
+          EOS
+          # the API reaches the MySQL of this test through the host (in production it is on RDS)
+          printf 'services:\n  api:\n    extra_hosts: ["host.docker.internal:host-gateway"]\n' > docker-compose.ci.yml
+
+      - name: The Caddyfile is valid
+        working-directory: deploy/shared
+        run: |
+          docker run --rm -e PUBLIC_HOST=localhost -e HTTPS_PORT=8445 \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/letsencrypt:/certs:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Start it
+        working-directory: deploy/shared
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env up -d
+
+      - name: Wait until it answers
+        working-directory: deploy/shared
+        run: |
+          for i in $(seq 1 60); do
+            if curl -ksf https://localhost:8445/health >/dev/null && curl -ksf "https://localhost:8445/api/health?deep=1" >/dev/null; then echo up; exit 0; fi
+            sleep 4
+          done
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env ps
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env logs --tail=80
+          exit 1
+
+      - name: It behaves as it must in production
+        working-directory: deploy/shared
+        run: |
+          set -euo pipefail
+          C=(docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env)
+          # Redis is really used (with its password), not the in-memory stand-in
+          "${C[@]}" exec -T api curl -fsS http://localhost:8000/ready | grep '"redis":"redis"'
+          # MySQL, not SQLite
+          "${C[@]}" logs api | grep -q 'db=mysql'
+          # the API container cannot write anywhere but its data volume
+          if "${C[@]}" exec -T api sh -c 'touch /app/not-allowed' 2>/dev/null; then echo "::error::the API container is not read-only"; exit 1; fi
+          "${C[@]}" exec -T api sh -c 'touch /app/var/allowed && rm /app/var/allowed'
+          # Redis refuses a caller without the password
+          if "${C[@]}" exec -T redis redis-cli ping 2>&1 | grep -q PONG; then echo "::error::Redis answered without a password"; exit 1; fi
+          # sign in through the panel; the first password must be changed (a temporary one only opens the password screens)
+          curl -ksf -c jar.txt -X POST https://localhost:8445/api/auth/login -H 'content-type: application/json' -H 'x-requested-with: admin-web' \
+            -d '{"identifier":"owner@ci.example.com","password":"Quartz-Mango-7731-ok"}' | grep '"must_change_password":true'
+          code="$(curl -ks -o /dev/null -w '%{http_code}' -b jar.txt https://localhost:8445/api/backend/analytics/overview)"
+          test "$code" = 403
+          # a JSON body above the limit is refused before the API reads it, at the front door
+          head -c 3000000 /dev/zero | tr '\0' 'a' > big.json
+          test "$(curl -ks -o /dev/null -w '%{http_code}' -X POST https://localhost:8445/api/v1/auth/login -H 'content-type: application/json' --data-binary @big.json)" = 413
+          # answers of the API may not be stored by anybody
+          curl -ksI https://localhost:8445/api/v1/me | grep -i '^cache-control: no-store'
+
+      - name: Logs when something failed
+        if: failure() && hashFiles('deploy/shared/.env') != ''
+        working-directory: deploy/shared
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env logs --tail=200
+
+      - name: Tear down
+        if: always() && hashFiles('deploy/shared/.env') != ''
+        working-directory: deploy/shared
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env down -v
+
+  security-scan:
+    name: Security scan (known vulnerabilities in what we depend on, static analysis of our own code)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: The API - a package with a known vulnerability, and risky code
+        working-directory: backend
+        run: |
+          python -m pip install pip-audit bandit
+          pip-audit -r requirements.txt --progress-spinner off
+          bandit -q -r app scripts -x scripts/seed_demo.py,scripts/seed_history.py,scripts/make_sample_csv.py -ll
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: The panel and the app - a package with a known vulnerability (what ships to users)
+        run: |
+          (cd admin-web && npm audit --package-lock-only --omit=dev --audit-level=high)
+          (cd mobile && npm audit --package-lock-only --omit=dev --audit-level=high)
+
+  load-test:
+    name: Load test (many phones calling at once, on MySQL and Redis, with the production pool and two workers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: calling_load
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=10
+    env:
+      DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/calling_load?charset=utf8mb4
+      REDIS_URL: redis://127.0.0.1:6379/0
+      BCRYPT_ROUNDS: '10'
+      LOG_LEVEL: WARNING
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Prepare the database - 500 employees, 100,000 contacts handed out to them
+        env:
+          APP_ENV: development
+        run: |
+          python -m scripts.bootstrap
+          python -m scripts.seed_load --employees 500 --contacts-per-employee 200
+
+      - name: Start the API like production does (two workers, a small database pool, Redis)
+        env:
+          APP_ENV: production
+          JWT_SECRET: load-test-secret-0123456789-0123456789-0123456789-abcdef
+          DB_POOL_SIZE: '3'
+          DB_MAX_OVERFLOW: '1'
+          RATE_LIMIT_LOGIN_PER_IP: '100000'
+          LOCAL_STORAGE_PATH: ${{ runner.temp }}/load-storage
+          IMPORT_STORAGE_PATH: ${{ runner.temp }}/load-imports
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:8000/ready && break || sleep 1; done
+
+      - name: 500 employees working for a few minutes (a call every ~40 s each - busier than a real day), 5 administrators watching
+        run: |
+          python -m scripts.loadtest --base-url http://127.0.0.1:8000 --phones 500 --viewers 5 --ramp 45 --seconds 150 \
+            --think 40 --heartbeat 30 --viewer-pause 8 --first-employee 1 \
+            --min-requests 10000 --max-p95-ms 1000 --max-login-p95-ms 6000 --max-error-percent 0.1
+
+      - name: Far more than a real day (150 phones, a call every ~2.5 s) - what does the service do when it cannot keep up?
+        run: |
+          python -m scripts.loadtest --base-url http://127.0.0.1:8000 --phones 150 --viewers 4 --ramp 5 --seconds 40 \
+            --think 2.5 --heartbeat 10 --viewer-pause 2 --first-employee 1 \
+            --min-throughput 60 --max-p95-ms 10000 --max-login-p95-ms 10000 --max-error-percent 0.5
+
+      - name: What the machine was doing
+        if: always()
+        run: |
+          ps -eo pid,etime,pcpu,rss,args --sort=-pcpu | head -8 | cut -c1-150
+          echo "--- MySQL connections now / most ever / allowed ---"
+          mysql -h 127.0.0.1 -uroot -proot -N -e "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Max_used_connections'); SHOW VARIABLES LIKE 'max_connections';" 2>/dev/null || true
+
+      - name: What the server saw
+        if: always()
+        run: |
+          echo "--- API log (errors only) ---"
+          grep -E '"level": "(ERROR|CRITICAL)"|Traceback' "$RUNNER_TEMP/api.log" | head -20 || true
+          echo "--- 5xx answers ---"
+          grep -cE '-> 5[0-9][0-9]' "$RUNNER_TEMP/api.log" || true
+
+  api-fuzz:
+    name: API fuzz test (thousands of odd requests generated from the API's own description, on MySQL and Redis; none may cause a server error)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: calling_fuzz
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=10
+    env:
+      # the same database and cache as production: MySQL has limits SQLite does not (column lengths, number ranges, text encodings)
+      DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/calling_fuzz?charset=utf8mb4
+      REDIS_URL: redis://127.0.0.1:6379/0
+      LOCAL_STORAGE_PATH: /tmp/fuzz-storage
+      IMPORT_STORAGE_PATH: /tmp/fuzz-imports
+      APP_ENV: development
+      BCRYPT_ROUNDS: '4'
+      LOG_LEVEL: WARNING
+      RATE_LIMIT_LOGIN_PER_IP: '100000'
+      RATE_LIMIT_USER_PER_MINUTE: '0'
+      RATE_LIMIT_SENSITIVE_PER_MINUTE: '100000'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt schemathesis
+
+      - name: Start the API with a few employees and contacts
+        run: |
+          python -m scripts.bootstrap
+          python -m scripts.seed_load --employees 5 --contacts-per-employee 20
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8000/health && break || sleep 1; done
+
+      - name: Fuzz it as an administrator and as an employee
+        run: |
+          set -euo pipefail
+          for who in 'load-admin@example.com|LoadAdmin-4k8Zp' 'LT00001|LoadTest-9x7Qm'; do
+            token="$(curl -fsS -X POST http://127.0.0.1:8000/api/v1/auth/login -H 'content-type: application/json' \
+              -d "{\"identifier\":\"${who%%|*}\",\"password\":\"${who##*|}\",\"device\":{\"device_uid\":\"fuzz-$RANDOM-$RANDOM\",\"name\":\"fuzz\",\"platform\":\"android\"}}" \
+              | python -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')"
+            echo "=== as ${who%%|*}"
+            schemathesis run http://127.0.0.1:8000/openapi.json -H "Authorization: Bearer $token" --checks not_a_server_error \
+              --max-examples 40 --workers 2 \
+              --exclude-path '/api/v1/auth/logout' --exclude-path '/api/v1/employees/{employee_id}/deactivate' \
+              --exclude-path '/api/v1/employees/{employee_id}/revoke-sessions' --exclude-path '/api/v1/employees/{employee_id}/reset-password'
+          done
+
+      - name: What the server logged
+        if: always()
+        run: grep -c 'Traceback' "$RUNNER_TEMP/api.log" || true

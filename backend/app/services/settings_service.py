@@ -2,16 +2,34 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import cache
+from app.core.config import get_settings
 from app.models.system import Setting
 from app.services.reference_data import DEFAULT_SETTINGS
 
+EPOCH = "settings"  # bumped (after the commit) by every change of a setting
+
+
+def all_settings(db: Session) -> dict[str, Any]:
+    """Every stored setting. They are read by almost every request (recording switch, retry rules, ...) and change a few times a
+    year, so they live in Redis until one is edited."""
+    if not cache.is_dirty(db, EPOCH):  # a transaction that has just changed one must see its own change
+        hit = cache.stamped_get("settings:all", EPOCH)
+        if hit is not None:
+            return hit
+    values = {key: value for key, value in db.execute(select(Setting.key, Setting.value)).all() if value is not None}
+    if not cache.is_dirty(db, EPOCH):
+        cache.stamped_set("settings:all", values, get_settings().config_cache_seconds, EPOCH)
+    return values
+
 
 def get_setting(db: Session, key: str, default: Any = None) -> Any:
-    row = db.get(Setting, key)
-    if row is not None and row.value is not None:
-        return row.value
+    value = all_settings(db).get(key)
+    if value is not None:
+        return value
     if default is not None:
         return default
     fallback = DEFAULT_SETTINGS.get(key)
@@ -28,6 +46,8 @@ def set_setting(db: Session, key: str, value: Any, *, actor_id: int | None = Non
         row.value = value
         row.updated_by = actor_id
     db.flush()
+    cache.mark_dirty(db, EPOCH)
+    cache.bump(db, EPOCH)
     return row
 
 

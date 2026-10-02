@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { colors, radius } from '../theme';
 
@@ -11,14 +10,9 @@ interface Props {
   style?: StyleProp<ViewStyle>;
 }
 
-/** Breathing placeholder shown while data loads (never a bare spinner). */
+/** Placeholder shown while data loads (never a bare spinner). Static: no shimmer or pulsing. */
 export function Skeleton({ width = '100%', height = 16, rounded = 8, style }: Props) {
-  const t = useSharedValue(0);
-  useEffect(() => {
-    t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);
-  }, [t]);
-  const animated = useAnimatedStyle(() => ({ opacity: interpolate(t.value, [0, 1], [0.45, 1]) }));
-  return <Animated.View style={[{ width, height, borderRadius: rounded, backgroundColor: '#E4E7EB' }, animated, style]} />;
+  return <View style={[{ width, height, borderRadius: rounded, backgroundColor: '#E4E7EB' }, style]} />;
 }
 
 /** A queue-row shaped placeholder. */

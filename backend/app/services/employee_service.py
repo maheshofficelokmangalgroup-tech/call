@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import auth_cache
 from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.security import hash_password, validate_password_strength
 from app.core.timeutils import utcnow
@@ -175,6 +176,7 @@ def update_employee(db: Session, *, employee: Employee, data: EmployeeUpdate, ac
         audit_service.record(
             db, action="employee.update", actor=actor, entity_type="employee", entity_id=employee.id, request=request, details=changes
         )
+        auth_cache.forget_employee(db, employee.id)  # a change of role, team or name is seen by the next request, not a minute later
     db.commit()
     return employee
 
@@ -186,6 +188,7 @@ def set_active(db: Session, *, employee: Employee, active: bool, actor: Employee
     revoked = 0
     if not active:
         revoked = revoke_all_sessions(db, employee.id, reason="deactivated")
+    auth_cache.forget_employee(db, employee.id)
     audit_service.record(
         db,
         action="employee.activate" if active else "employee.deactivate",
@@ -211,6 +214,7 @@ def reset_password(db: Session, *, employee: Employee, new_password: str | None,
     employee.must_change_password = True
     employee.password_changed_at = utcnow()
     revoked = revoke_all_sessions(db, employee.id, reason="password_reset")
+    auth_cache.forget_employee(db, employee.id)
     audit_service.record(
         db, action="employee.reset_password", actor=actor, entity_type="employee", entity_id=employee.id, request=request,
         details={"sessions_revoked": revoked},
@@ -292,6 +296,8 @@ def update_team(db: Session, team_id: int, data: TeamUpdate, actor: Employee, re
         team.description = data.description
     if data.is_active is not None:
         team.is_active = data.is_active
+    for member_id in db.scalars(select(Employee.id).where(Employee.team_id == team_id)):
+        auth_cache.forget_employee(db, member_id)  # the team's name is part of what is remembered about each member
     audit_service.record(db, action="team.update", actor=actor, entity_type="team", entity_id=team.id, request=request)
     db.commit()
     return team

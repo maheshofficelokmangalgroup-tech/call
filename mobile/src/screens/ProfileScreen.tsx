@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/Avatar';
@@ -29,7 +28,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function Row({ icon, label, value, onPress, tone = colors.green, toneSoft = colors.greenSoft, danger }: { icon: IconName; label: string; value?: string; onPress?: () => void; tone?: string; toneSoft?: string; danger?: boolean }) {
   return (
-    <PressableScale onPress={onPress} disabled={!onPress} haptic={false} scaleTo={0.985} style={styles.row}>
+    <PressableScale onPress={onPress} disabled={!onPress} haptic={false} style={styles.row}>
       <View style={[styles.rowIcon, { backgroundColor: toneSoft }]}>
         <Icon name={icon} size={20} color={tone} />
       </View>
@@ -77,7 +76,7 @@ export function ProfileScreen() {
           Profile
         </Text>
 
-        <Animated.View entering={FadeInDown.duration(360)}>
+        <View>
           <Card style={styles.header}>
             <Avatar name={employee.full_name} size={68} />
             <View style={styles.flex}>
@@ -94,9 +93,9 @@ export function ProfileScreen() {
               </View>
             </View>
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(70).duration(360)}>
+        <View>
           <Text variant="smallMedium" color="muted" style={styles.group}>
             PHONE
           </Text>
@@ -130,9 +129,9 @@ export function ProfileScreen() {
               </>
             ) : null}
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(130).duration(360)}>
+        <View>
           <Text variant="smallMedium" color="muted" style={styles.group}>
             SYNC
           </Text>
@@ -154,9 +153,9 @@ export function ProfileScreen() {
               {sync.failed > 0 ? <Button title="Retry failed" size="sm" variant="outline" onPress={() => void syncEngine.retryFailed()} style={styles.flex} /> : null}
             </View>
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(190).duration(360)}>
+        <View>
           <Text variant="smallMedium" color="muted" style={styles.group}>
             ACCOUNT
           </Text>
@@ -173,11 +172,11 @@ export function ProfileScreen() {
               </>
             ) : null}
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(250).duration(360)} style={styles.out}>
+        <View style={styles.out}>
           <Button title="Sign out" icon="log-out" variant="outline" onPress={() => setConfirmOut(true)} testID="sign-out" />
-        </Animated.View>
+        </View>
       </ScrollView>
 
       <BottomSheet visible={confirmOut} onClose={() => setConfirmOut(false)} title="Sign out?">

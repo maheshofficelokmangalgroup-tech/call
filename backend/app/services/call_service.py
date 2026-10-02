@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import Conflict, Forbidden, NotFound, ValidationFailed
-from app.core.timeutils import next_business_day_start, utcnow
+from app.core.timeutils import ensure_aware, next_business_day_start, utcnow
 from app.models.call import (
     CALL_COMPLETED,
     CALL_CONNECTED,
@@ -262,12 +262,14 @@ def add_events(db: Session, *, user: Employee, call: Call, events: list[CallEven
     if call.employee_id != user.id and not is_admin(user):
         raise NotFound("Call not found.")
     added = 0
+    # one query for what is already there (a call has a handful of events), instead of one per event; the set also catches the
+    # same event twice in one batch, which the unique key would otherwise reject at the commit
+    known = {(kind, ensure_aware(at)) for kind, at in db.execute(select(CallEvent.event_type, CallEvent.occurred_at).where(CallEvent.call_id == call.id))}
     for ev in sorted(events, key=lambda e: e.occurred_at):
-        duplicate = db.scalars(
-            select(CallEvent.id).where(CallEvent.call_id == call.id, CallEvent.event_type == ev.event_type, CallEvent.occurred_at == ev.occurred_at)
-        ).first()
-        if duplicate:
+        identity = (ev.event_type, ensure_aware(ev.occurred_at))
+        if identity in known:
             continue
+        known.add(identity)
         db.add(CallEvent(call_id=call.id, event_type=ev.event_type, occurred_at=ev.occurred_at, payload=ev.payload))
         added += 1
         if call.disposition_id is not None:
@@ -399,16 +401,27 @@ def set_disposition(db: Session, *, user: Employee, call: Call, data: Dispositio
 
 
 # --------------------------------------------------------------------- output
-def to_out_many(db: Session, calls: list[Call], *, detail: bool = False) -> list[CallOut]:
+def to_out_many(
+    db: Session, calls: list[Call], *, detail: bool = False, known_names: dict[int, str] | None = None, brand_new: bool = False
+) -> list[CallOut]:
+    """`known_names` (employee id -> name) saves asking for names the caller already has; `brand_new` says the calls were created a
+    moment ago, so there is no recording and no callback to look for."""
     if not calls:
         return []
     ids = [c.id for c in calls]
-    names = dict(db.execute(select(Employee.id, Employee.full_name).where(Employee.id.in_({c.employee_id for c in calls}))).all())
-    recordings = {r.call_id: r for r in db.scalars(select(Recording).where(Recording.call_id.in_(ids)))}
-    callbacks = {
-        cb.call_id: cb.scheduled_at
-        for cb in db.scalars(select(Callback).where(Callback.call_id.in_(ids), Callback.status == CALLBACK_PENDING))
-    }
+    names = dict(known_names or {})
+    missing = {c.employee_id for c in calls} - set(names)
+    if missing:
+        names.update(dict(db.execute(select(Employee.id, Employee.full_name).where(Employee.id.in_(missing))).all()))
+    if brand_new:
+        recordings: dict[int, Recording] = {}
+        callbacks: dict[int, datetime] = {}
+    else:
+        recordings = {r.call_id: r for r in db.scalars(select(Recording).where(Recording.call_id.in_(ids)))}
+        callbacks = {
+            cb.call_id: cb.scheduled_at
+            for cb in db.scalars(select(Callback).where(Callback.call_id.in_(ids), Callback.status == CALLBACK_PENDING))
+        }
     notes: dict[int, list[NoteOut]] = {}
     events: dict[int, list[CallEventOut]] = {}
     if detail:
@@ -454,8 +467,8 @@ def to_out_many(db: Session, calls: list[Call], *, detail: bool = False) -> list
     return result
 
 
-def to_out(db: Session, call: Call, *, detail: bool = False) -> CallOut:
-    return to_out_many(db, [call], detail=detail)[0]
+def to_out(db: Session, call: Call, *, detail: bool = False, known_names: dict[int, str] | None = None, brand_new: bool = False) -> CallOut:
+    return to_out_many(db, [call], detail=detail, known_names=known_names, brand_new=brand_new)[0]
 
 
 def list_contact_calls(db: Session, contact_id: int, *, page: int, page_size: int) -> tuple[list[CallOut], int]:

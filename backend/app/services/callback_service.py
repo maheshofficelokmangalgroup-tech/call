@@ -48,7 +48,8 @@ def close_pending(db: Session, *, employee_id: int, contact_id: int, status: str
     result = db.execute(
         update(Callback)
         .where(Callback.employee_id == employee_id, Callback.contact_id == contact_id, Callback.status == CALLBACK_PENDING)
-        .values(status=status, completed_at=utcnow())
+        .values(status=status, completed_at=utcnow()),
+        execution_options={"queue_employee": employee_id},  # (only this person's queue changes: see models/cache_events.py)
     )
     return result.rowcount or 0
 

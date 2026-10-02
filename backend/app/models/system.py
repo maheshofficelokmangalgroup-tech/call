@@ -31,6 +31,7 @@ class AuditLog(Base):
         Index("ix_audit_logs_actor_created", "actor_id", "created_at"),
         Index("ix_audit_logs_action_created", "action", "created_at"),
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
+        Index("ix_audit_logs_created", "created_at"),  # the newest entries first, with or without a filter
         TABLE_OPTS,
     )
 

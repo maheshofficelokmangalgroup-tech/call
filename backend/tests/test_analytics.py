@@ -13,6 +13,7 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 
+from app.core.redis_client import get_redis
 from app.core.timeutils import business_date, business_tz, utcnow
 from app.models.call import Call, CallDisposition, CallEvent
 from app.models.employee import Employee, EmployeeSession
@@ -246,6 +247,7 @@ def test_authenticated_requests_refresh_last_seen_once_a_minute(client, db, emp_
     session = db.query(EmployeeSession).filter(EmployeeSession.employee_id == emp_a.id).one()
     session.last_used_at = utcnow() - timedelta(minutes=10)
     db.commit()
+    get_redis().delete(f"c:once:presence:{session.id}")  # the minute that signing in wrote "last seen" for is over
     assert client.get("/api/v1/me", headers=headers).status_code == 200
     db.expire_all()
     fresh = db.query(EmployeeSession).filter(EmployeeSession.employee_id == emp_a.id).one().last_used_at

@@ -13,6 +13,8 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError, StatementError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import request_id_ctx
@@ -102,6 +104,23 @@ def _payload(code: str, message: str, details: Any = None) -> dict[str, Any]:
     return {"error": body}
 
 
+def _out_of_range() -> JSONResponse:
+    return JSONResponse(status_code=422, content=_payload("out_of_range", "A number in the request is outside the allowed range."))
+
+
+def _invalid_text() -> JSONResponse:
+    return JSONResponse(status_code=422, content=_payload("invalid_text", "The text contains characters that cannot be stored."))
+
+
+def _database_busy(request: Request, exc: Exception) -> JSONResponse:
+    log.error("Database not available for %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content=_payload("database_busy", "The database is busy. Please try again in a moment."),
+        headers={"Retry-After": "2"},
+    )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
@@ -133,6 +152,35 @@ def install_error_handlers(app: FastAPI) -> None:
             content=_payload(code, message),
             headers=getattr(exc, "headers", None),
         )
+
+    # What a client can cause with nonsense input is the client's error (4xx), never a "server error": a number too big for the
+    # database, text that cannot be stored, a duplicate or a reference to something that does not exist.
+    @app.exception_handler(OverflowError)
+    async def _too_big(_: Request, exc: OverflowError) -> JSONResponse:
+        return _out_of_range()
+
+    @app.exception_handler(UnicodeEncodeError)
+    async def _bad_text(_: Request, exc: UnicodeEncodeError) -> JSONResponse:
+        return _invalid_text()
+
+    @app.exception_handler(StatementError)
+    async def _database_refused(request: Request, exc: StatementError) -> JSONResponse:
+        inner = getattr(exc, "orig", None)
+        if isinstance(exc, IntegrityError):
+            return JSONResponse(status_code=409, content=_payload("conflict", "This conflicts with existing data: a duplicate, or something that no longer exists."))
+        if isinstance(exc, DataError) or isinstance(inner, OverflowError):
+            return _out_of_range()
+        if isinstance(inner, UnicodeEncodeError):
+            return _invalid_text()
+        if isinstance(exc, OperationalError):
+            # the database could not answer right now (a deadlock, a lock that did not clear, a lost connection): the caller retries
+            return _database_busy(request, exc)
+        return await _unhandled(request, exc)
+
+    @app.exception_handler(PoolTimeoutError)
+    async def _no_connection_free(request: Request, exc: PoolTimeoutError) -> JSONResponse:
+        # every connection of the pool was in use for longer than a request may wait for one
+        return _database_busy(request, exc)
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:

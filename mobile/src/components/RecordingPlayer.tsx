@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { ApiError, NetworkError, resolveUrl } from '../services/api/client';
 import { api } from '../services/api/endpoints';
@@ -22,7 +21,6 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
   const [state, setState] = useState<PlayerEvent['state'] | 'idle'>('idle');
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState((durationSec ?? 0) * 1000);
-  const progress = useSharedValue(0);
   const owned = useRef(false);
 
   useEffect(() => {
@@ -34,7 +32,6 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
       if (event.state === 'error') toast.error(event.message ?? 'Playback failed');
       if (event.state === 'completed' || event.state === 'stopped') {
         owned.current = false;
-        progress.value = withTiming(0, { duration: 200 });
         setPosition(0);
       }
     });
@@ -42,13 +39,9 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
       sub.remove();
       if (owned.current) audioPlayer.stop();
     };
-  }, [progress]);
+  }, []);
 
-  useEffect(() => {
-    progress.value = withTiming(duration > 0 ? Math.min(1, position / duration) : 0, { duration: 240 });
-  }, [position, duration, progress]);
-
-  const barStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+  const fraction = duration > 0 ? Math.min(1, position / duration) : 0;
 
   const toggle = async () => {
     if (state === 'playing') {
@@ -75,12 +68,12 @@ export function RecordingPlayer({ recordingId, durationSec }: Props) {
   const busy = state === 'preparing';
   return (
     <View style={styles.wrap}>
-      <PressableScale onPress={toggle} scaleTo={0.9} style={styles.play} testID="recording-play">
+      <PressableScale onPress={toggle} style={styles.play} testID="recording-play">
         {busy ? <ActivityIndicator color={colors.white} /> : <Icon name={state === 'playing' ? 'pause' : 'play'} size={22} color={colors.white} />}
       </PressableScale>
       <View style={styles.track}>
         <View style={styles.bar}>
-          <Animated.View style={[styles.fill, barStyle]} />
+          <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
         </View>
         <View style={styles.times}>
           <Text variant="caption" color="muted">

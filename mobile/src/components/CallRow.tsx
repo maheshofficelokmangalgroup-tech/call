@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import type { CallRowModel } from '../services/data/callModels';
 import { colors, radius, shadow } from '../theme';
 import { formatDuration, formatPhone } from '../utils/format';
-import { dispositionLook } from '../utils/status';
+import { dispositionLook, dispositionName } from '../utils/status';
 import { formatClock, formatDayLabel } from '../utils/time';
 import { Tag } from './Chip';
 import { Icon, type IconName } from './Icon';
@@ -28,10 +28,10 @@ interface Props {
 export function CallRow({ row, onPress, showName = true }: Props) {
   const look = tone(row);
   const disposition = dispositionLook(row.disposition);
-  const label = row.dispositionLabel ?? (row.disposition ? row.disposition.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : null);
+  const label = dispositionName(row.disposition, row.dispositionLabel) ?? (row.disposition ? row.disposition.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : null);
   const answered = row.status === 'completed' || row.status === 'connected';
   return (
-    <PressableScale onPress={onPress} scaleTo={0.985} haptic={false} style={styles.row} disabled={!onPress}>
+    <PressableScale onPress={onPress} haptic={false} style={styles.row} disabled={!onPress}>
       <View style={[styles.icon, { backgroundColor: look.bg }]}>
         <Icon name={look.icon} size={20} color={look.color} />
       </View>

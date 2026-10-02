@@ -134,6 +134,7 @@ APP_TIMEZONE=${APP_TIMEZONE:-Asia/Kolkata}
 DEFAULT_PHONE_REGION=${DEFAULT_PHONE_REGION:-IN}
 LOG_LEVEL=INFO
 JWT_SECRET=$(random_alnum 64)
+REDIS_PASSWORD=$(random_alnum 40)
 JWT_ACCESS_TTL_MINUTES=15
 JWT_REFRESH_TTL_DAYS=30
 
@@ -150,6 +151,11 @@ EOF
   note "Settings written to $ENV_FILE"
 else
   say "Using the settings in $ENV_FILE"
+  # an installation made before Redis had a password gets one now (it only has to match between Redis and the API)
+  if ! grep -q '^REDIS_PASSWORD=.' "$ENV_FILE"; then
+    printf 'REDIS_PASSWORD=%s\n' "$(random_alnum 40)" >> "$ENV_FILE"
+    note "Added REDIS_PASSWORD to $ENV_FILE"
+  fi
 fi
 
 # ----------------------------------------------------------------------------------------------------- the firewall

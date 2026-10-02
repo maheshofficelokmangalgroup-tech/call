@@ -4,7 +4,7 @@ import { mergeCalls } from '../src/services/data/callModels';
 import { hasExhaustedAttempts, nextBackoffMs } from '../src/services/sync/backoff';
 import { passwordStrength } from '../src/utils/password';
 import { contactStatusLook, dispositionLook, DISPOSITION_LOOK } from '../src/utils/status';
-import { DEFAULT_DISPOSITIONS } from '../src/services/api/defaults';
+import type { DispositionCode } from '../src/services/api/types';
 import { newCallId, newId } from '../src/utils/ids';
 
 // status.ts only imports the Icon *type*, so nothing native is loaded here.
@@ -78,18 +78,19 @@ describe('passwordStrength', () => {
   });
 });
 
+// The outcomes the server's reference data defines (the app itself keeps no list: it downloads it).
+const SERVER_OUTCOMES: DispositionCode[] = [
+  'CONNECTED', 'NO_ANSWER', 'BUSY', 'SWITCHED_OFF', 'INVALID_NUMBER', 'INTERESTED', 'NOT_INTERESTED', 'CALLBACK', 'FOLLOW_UP', 'COMPLETED', 'DO_NOT_CONTACT',
+];
+
 describe('outcome presentation', () => {
   it('has a look for every disposition the server can return', () => {
-    for (const d of DEFAULT_DISPOSITIONS) {
-      expect(DISPOSITION_LOOK[d.code]).toBeDefined();
-      expect(dispositionLook(d.code)?.icon).toBeTruthy();
+    for (const code of SERVER_OUTCOMES) {
+      expect(DISPOSITION_LOOK[code]).toBeDefined();
+      expect(dispositionLook(code)?.icon).toBeTruthy();
     }
     expect(dispositionLook(null)).toBeNull();
     expect(dispositionLook('SOMETHING_NEW')).toBeNull();
-  });
-  it('only CALLBACK and FOLLOW_UP require a time', () => {
-    expect(DEFAULT_DISPOSITIONS.filter((d) => d.requires_callback).map((d) => d.code)).toEqual(['CALLBACK', 'FOLLOW_UP']);
-    expect(DEFAULT_DISPOSITIONS).toHaveLength(11);
   });
   it('labels contact statuses', () => {
     expect(contactStatusLook('do_not_contact').label).toBe('Do not contact');

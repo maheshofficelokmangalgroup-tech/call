@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -23,7 +22,7 @@ import { useAuth } from '../store/authStore';
 import { toast } from '../store/toastStore';
 import { colors, radius } from '../theme';
 import { formatDuration, formatPhone } from '../utils/format';
-import { CALL_STATUS_LABEL, dispositionLook } from '../utils/status';
+import { CALL_STATUS_LABEL, dispositionLook, dispositionName } from '../utils/status';
 import { formatClock, formatDayLabel, parseIso } from '../utils/time';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -98,7 +97,7 @@ export function CallDetailScreen() {
     <View style={styles.root}>
       <ScreenHeader title="Call details" back />
       <ScrollView contentContainerStyle={styles.pad} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(340)}>
+        <View>
           <Card style={styles.summary}>
             <Avatar name={name} size={60} />
             <View style={styles.flex}>
@@ -110,13 +109,13 @@ export function CallDetailScreen() {
               </Text>
               <View style={styles.tags}>
                 <Tag label={CALL_STATUS_LABEL[status]} color={status === 'completed' || status === 'connected' ? colors.greenDark : colors.red} background={status === 'completed' || status === 'connected' ? colors.greenSoft : colors.redSoft} />
-                {look && disposition ? <Tag label={server?.disposition?.label ?? disposition.replace(/_/g, ' ')} color={look.tone} background={look.soft} /> : null}
+                {look && disposition ? <Tag label={dispositionName(disposition, server?.disposition?.label) ?? disposition.replace(/_/g, ' ')} color={look.tone} background={look.soft} /> : null}
               </View>
             </View>
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(60).duration(340)}>
+        <View>
           <Card style={styles.stats}>
             <Stat label="When" value={`${formatDayLabel(startedAt)}, ${formatClock(startedAt)}`} />
             <View style={styles.divider} />
@@ -124,10 +123,10 @@ export function CallDetailScreen() {
             <View style={styles.divider} />
             <Stat label="Attempt" value={server ? `#${server.attempt_number}` : '-'} />
           </Card>
-        </Animated.View>
+        </View>
 
         {recordingState ? (
-          <Animated.View entering={FadeInDown.delay(110).duration(340)}>
+          <View>
             <Card style={styles.section}>
               <View style={styles.sectionHead}>
                 <Text variant="h2">Recording</Text>
@@ -161,11 +160,11 @@ export function CallDetailScreen() {
                 </Text>
               )}
             </Card>
-          </Animated.View>
+          </View>
         ) : null}
 
         {notes.length > 0 ? (
-          <Animated.View entering={FadeInDown.delay(150).duration(340)}>
+          <View>
             <Card style={styles.section}>
               <Text variant="h2" style={styles.sectionTitle}>
                 Notes
@@ -179,11 +178,11 @@ export function CallDetailScreen() {
                 </View>
               ))}
             </Card>
-          </Animated.View>
+          </View>
         ) : null}
 
         {server && server.events.length > 0 ? (
-          <Animated.View entering={FadeInDown.delay(190).duration(340)}>
+          <View>
             <Card style={styles.section}>
               <Text variant="h2" style={styles.sectionTitle}>
                 Timeline
@@ -209,7 +208,7 @@ export function CallDetailScreen() {
                 );
               })}
             </Card>
-          </Animated.View>
+          </View>
         ) : null}
 
         {offline ? (

@@ -4,6 +4,7 @@ import { LogOut, ShieldCheck, Smartphone, Unlink } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { DeviceHealth, statusFromDevice } from "@/components/domain/device-health";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -11,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableWrap, TD, TH, THead, TR } from "@/components/ui/table";
 import { useNow } from "@/lib/hooks";
 import { useEmployeeAction, useEmployeeSessions, useUnbindDevice } from "@/lib/queries";
-import type { Device } from "@/lib/types";
+import type { Device, DeviceStatus } from "@/lib/types";
 import { cn, formatDateTime, timeAgo } from "@/lib/utils";
 
 function shortAgent(agent: string | null): string {
@@ -25,7 +26,7 @@ function shortAgent(agent: string | null): string {
 }
 
 /** The phones an employee has signed in on, and every sign-in (session) of the account. Administrators can release a phone or sign everything out. */
-export function DevicesPanel({ employeeId, employeeName, devices, bound, isAdmin }: { employeeId: number; employeeName: string; devices: Device[]; bound: boolean; isAdmin: boolean }) {
+export function DevicesPanel({ employeeId, employeeName, devices, bound, isAdmin, liveStatus }: { employeeId: number; employeeName: string; devices: Device[]; bound: boolean; isAdmin: boolean; liveStatus?: DeviceStatus | null }) {
   const sessions = useEmployeeSessions(employeeId);
   const now = useNow(60_000);
   const unbind = useUnbindDevice(employeeId);
@@ -61,6 +62,7 @@ export function DevicesPanel({ employeeId, employeeName, devices, bound, isAdmin
                   <p className="mt-2 text-xs text-muted">
                     Last seen <span className="font-semibold text-ink-soft">{timeAgo(d.last_seen_at)}</span> · first seen {formatDateTime(d.first_seen_at)}
                   </p>
+                  <DeviceHealth status={i === 0 && liveStatus ? liveStatus : statusFromDevice(d)} className="mt-2" />
                 </div>
                 {isAdmin ? (
                   <Button variant="ghost" size="xs" onClick={() => setRelease(d)} aria-label={`Release ${d.device_name ?? "phone"}`}>

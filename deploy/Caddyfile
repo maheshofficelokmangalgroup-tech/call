@@ -16,6 +16,27 @@
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
+	# Only these carry a file; everything else is a small JSON document. (The API enforces the same limits itself.)
+	@upload path_regexp upload ^/api/(v1|backend)/(recordings/[0-9]+/upload|contacts/import)$
+	handle @upload {
+		request_body {
+			max_size 120MB
+		}
+		@toapi path /api/v1/*
+		reverse_proxy @toapi api:8000 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
+		}
+		reverse_proxy admin:3000 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
+		}
+	}
+
 	# The mobile app and anything else that speaks to the API directly. The health check is public; the readiness check
 	# (which reveals the state of the database) is not.
 	@api path /api/v1/* /health
@@ -40,7 +61,7 @@
 	}
 
 	request_body {
-		max_size 120MB
+		max_size 2MB
 	}
 
 	header {

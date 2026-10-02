@@ -85,6 +85,21 @@ class EmployeeCounts(BaseModel):
     with_calls: int
 
 
+class DeviceStatus(BaseModel):
+    """How the employee's phone is, from what the app last reported (see POST /me/heartbeat)."""
+
+    live: bool  # the report is recent (the app is open right now); otherwise it is the last one that was saved
+    last_heartbeat_at: UTCDatetime | None
+    app_state: str | None
+    battery_percent: int | None
+    charging: bool | None
+    network: str | None
+    permissions_ok: bool | None
+    missing_permissions: list[str]
+    pending_sync: int | None  # things the phone could not send yet
+    clock_skew_seconds: int | None  # the phone's clock minus the server's
+
+
 class EmployeeMetrics(BaseModel):
     id: int
     employee_code: str
@@ -105,6 +120,7 @@ class EmployeeMetrics(BaseModel):
     device_name: str | None
     device_os: str | None
     app_version: str | None
+    device_status: DeviceStatus | None = None
     # figures of the selected period
     calls: int
     connected: int

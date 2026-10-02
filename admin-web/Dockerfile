@@ -26,6 +26,10 @@ RUN npm run build
 
 FROM node:24-alpine AS run
 WORKDIR /app
+# the base image is rebuilt rarely: take the operating system's security fixes when this image is built
+# (npm and corepack are only needed to build: the panel itself is started with `node server.js`; the npm that ships in the node image
+# carries its own, regularly flagged, dependencies)
+RUN apk upgrade --no-cache && rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \

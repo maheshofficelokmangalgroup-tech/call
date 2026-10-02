@@ -2,7 +2,6 @@ import React from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { EmptyState } from '../components/EmptyState';
 import { Icon, type IconName } from '../components/Icon';
@@ -54,7 +53,7 @@ export function NotificationsScreen() {
         back
         right={
           unread > 0 ? (
-            <PressableScale onPress={markAll} haptic={false} scaleTo={0.92}>
+            <PressableScale onPress={markAll} haptic={false}>
               <Text variant="smallMedium" color={colors.green} style={styles.link}>
                 Mark all read
               </Text>
@@ -78,11 +77,11 @@ export function NotificationsScreen() {
             <EmptyState icon="bell" title="Nothing new" message="You’ll be told here when contacts are assigned to you." />
           )
         }
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const look = iconFor(item.type);
           return (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)} layout={LinearTransition}>
-              <PressableScale onPress={() => open(item)} scaleTo={0.985} haptic={false} style={[styles.row, !item.is_read ? styles.unread : null]}>
+            <View>
+              <PressableScale onPress={() => open(item)} haptic={false} style={[styles.row, !item.is_read ? styles.unread : null]}>
                 <View style={[styles.icon, { backgroundColor: look.bg }]}>
                   <Icon name={look.icon} size={20} color={look.tone} />
                 </View>
@@ -99,7 +98,7 @@ export function NotificationsScreen() {
                 </View>
                 {!item.is_read ? <View style={styles.dot} /> : null}
               </PressableScale>
-            </Animated.View>
+            </View>
           );
         }}
       />

@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, FadeOutLeft, LinearTransition } from 'react-native-reanimated';
 
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
@@ -84,13 +83,13 @@ export function CallbacksScreen() {
             {section.title.toUpperCase()}
           </Text>
         )}
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const at = parseIso(item.scheduled_at) ?? Date.now();
           const overdue = at <= Date.now();
           const contact = item.contact;
           return (
-            <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(320)} exiting={FadeOutLeft.duration(220)} layout={LinearTransition.springify().damping(18)} style={styles.card}>
-              <PressableScale onPress={() => navigation.navigate('ContactDetail', { contactId: item.contact_id, preview: contact ?? undefined })} haptic={false} scaleTo={0.985} style={styles.cardTop}>
+            <View style={styles.card}>
+              <PressableScale onPress={() => navigation.navigate('ContactDetail', { contactId: item.contact_id, preview: contact ?? undefined })} haptic={false} style={styles.cardTop}>
                 <Avatar name={contact?.name ?? 'Contact'} size={46} />
                 <View style={styles.flex}>
                   <Text variant="h3" numberOfLines={1}>
@@ -131,14 +130,14 @@ export function CallbacksScreen() {
                   }}
                   style={styles.flex}
                 />
-                <PressableScale onPress={() => remove(item, 'done')} style={styles.iconBtn} scaleTo={0.88}>
+                <PressableScale onPress={() => remove(item, 'done')} style={styles.iconBtn}>
                   <Icon name="check" size={20} color={colors.green} />
                 </PressableScale>
-                <PressableScale onPress={() => remove(item, 'cancelled')} style={styles.iconBtn} scaleTo={0.88}>
+                <PressableScale onPress={() => remove(item, 'cancelled')} style={styles.iconBtn}>
                   <Icon name="x" size={20} color={colors.red} />
                 </PressableScale>
               </View>
-            </Animated.View>
+            </View>
           );
         }}
       />

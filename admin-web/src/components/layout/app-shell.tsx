@@ -167,7 +167,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </header>
 
           <motion.main key={pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            {children}
+            {/* until a temporary password has been replaced the server only answers the password screens: do not ask it for the page */}
+            {mustChange ? null : children}
           </motion.main>
         </div>
 

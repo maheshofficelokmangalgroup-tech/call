@@ -23,7 +23,7 @@ export function SimPickerHost() {
   return (
     <BottomSheet visible={open} onClose={() => resolve(null)} title="Call with which SIM?">
       <SimList sims={sims} onPick={(id) => resolve({ id, remember })} />
-      <PressableScale onPress={() => setRemember((r) => !r)} haptic={false} scaleTo={0.98} style={styles.remember}>
+      <PressableScale onPress={() => setRemember((r) => !r)} haptic={false} style={styles.remember}>
         <View style={[styles.box, remember ? styles.boxOn : null]}>{remember ? <Icon name="check" size={14} color={colors.white} strokeWidth={3} /> : null}</View>
         <Text variant="small" color="muted">
           Remember my choice

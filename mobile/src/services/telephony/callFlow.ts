@@ -49,6 +49,14 @@ export class CallPlacementFailed extends Error {
   }
 }
 
+/** Call was tapped again while the previous tap is still setting its call up. */
+export class CallStartInProgress extends Error {
+  constructor() {
+    super('A call is already being started');
+    this.name = 'CallStartInProgress';
+  }
+}
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const store = () => useCallStore.getState();
 
@@ -85,7 +93,25 @@ export interface StartCallInput {
   accountKey?: string | null;
 }
 
+/** true while a call is being set up (from the permission check until it is handed to the dialer or has failed) */
+let starting = false;
+
+/**
+ * One call start at a time. A second tap on Call that lands while the first is still being set up would otherwise pass the
+ * "previous call needs an outcome" check too (neither call row is saved yet): two call rows, two calls queued for the
+ * server, two dialer intents - and the orphaned first row then blocks every later call as "needs an outcome".
+ */
 export async function startCall(input: StartCallInput): Promise<string> {
+  if (starting) throw new CallStartInProgress();
+  starting = true;
+  try {
+    return await placeNewCall(input);
+  } finally {
+    starting = false;
+  }
+}
+
+async function placeNewCall(input: StartCallInput): Promise<string> {
   const status = await readPermissionStatus();
   if (!status.phone) throw new PermissionRequired();
 

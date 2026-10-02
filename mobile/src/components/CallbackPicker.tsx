@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { colors, radius } from '../theme';
 import { pickDateTime } from '../utils/pickDateTime';
@@ -39,12 +38,12 @@ export function CallbackPicker({ value, onChange }: Props) {
         />
       </View>
       {value !== null ? (
-        <Animated.View entering={FadeInDown.duration(220)} style={styles.chosen}>
+        <View style={styles.chosen}>
           <Icon name="clock" size={18} color={colors.blue} />
           <Text variant="bodyMedium" color={colors.blue}>
             {formatDateTime(value)}
           </Text>
-        </Animated.View>
+        </View>
       ) : null}
     </View>
   );

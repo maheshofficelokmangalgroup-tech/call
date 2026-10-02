@@ -9,7 +9,7 @@ from fastapi import Request
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
-from app.core import rate_limit
+from app.core import auth_cache, rate_limit
 from app.core.config import get_settings
 from app.core.errors import Forbidden, Unauthorized, ValidationFailed
 from app.core.rate_limit import client_ip
@@ -112,6 +112,8 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
     )
 
     employee = find_employee_by_identifier(db, identifier)
+    # checking a password takes ~100 ms of CPU: do not keep a database connection (there are only a few) waiting for it
+    db.commit()
     if employee is None:
         burn_password_check(password)
         audit_service.record(db, action="auth.login_failed", actor_label=ident_key, request=request, details={"reason": "unknown_user"})
@@ -133,6 +135,11 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
         audit_service.record(db, action="auth.login_blocked", actor=employee, request=request, details={"reason": "panel_not_allowed"})
         db.commit()
         raise Forbidden("This panel is for administrators and managers. Employees use the mobile app.", code="panel_not_allowed")
+
+    # Two sign-ins of the same person at the same moment (a double tap, a retry after a slow answer, two browser tabs) would each
+    # hold a shared lock on the employee's row - taken by the foreign keys of the new rows - and then both want to change it: the
+    # database ends that with a deadlock and an error for one of them. Taking the row first makes the second one simply wait.
+    db.execute(select(Employee.id).where(Employee.id == employee.id).with_for_update())
 
     try:
         device_row = _register_device(db, employee, device, ip)
@@ -160,6 +167,8 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
     audit_service.record(db, action="auth.login", actor=employee, entity_type="employee", entity_id=employee.id, request=request)
     db.commit()
     rate_limit.reset(f"login:id:{ident_key}")
+    auth_cache.store(employee, session)  # the first request after signing in then needs no database query ...
+    auth_cache.presence_due(session.id)  # ... and does not write "last seen" either: signing in has just done that
     return _issue_tokens(db, employee, session, refresh_token)
 
 
@@ -216,6 +225,7 @@ def logout(db: Session, *, session_id: str, employee: Employee, request: Request
         session.revoked_at = utcnow()
         session.revoked_reason = "logout"
         audit_service.record(db, action="auth.logout", actor=employee, entity_type="employee", entity_id=employee.id, request=request)
+        auth_cache.forget_session(db, session_id)
         db.commit()
 
 
@@ -228,6 +238,7 @@ def revoke_all_sessions(db: Session, employee_id: int, *, reason: str, except_se
     if except_session_id:
         stmt = stmt.where(EmployeeSession.id != except_session_id)
     result = db.execute(stmt)
+    auth_cache.forget_employee(db, employee_id)  # (after the commit) every remembered session of this person is asked again
     return result.rowcount or 0
 
 
@@ -252,9 +263,11 @@ def change_password(
     if problems:
         raise ValidationFailed(problems[0], code="weak_password", details=problems)
 
+    # (a remembered session does not carry the password hash: reading it above loaded it from the database)
     employee.password_hash = hash_password(new_password)
     employee.must_change_password = False
     employee.password_changed_at = utcnow()
+    auth_cache.forget_employee(db, employee.id)
     # Sign out every other device; keep the session that made the change.
     revoke_all_sessions(db, employee.id, reason="password_changed", except_session_id=current_session_id)
     audit_service.record(db, action="auth.password_changed", actor=employee, entity_type="employee", entity_id=employee.id, request=request)

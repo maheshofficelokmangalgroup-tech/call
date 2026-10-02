@@ -35,7 +35,7 @@ export interface DispositionLook {
 export const DISPOSITION_LOOK: Record<DispositionCode, DispositionLook> = {
   CONNECTED: { icon: 'phone-call', tone: colors.green, soft: colors.greenSoft, hint: 'Spoke to the person' },
   NO_ANSWER: { icon: 'phone-missed', tone: colors.red, soft: colors.redSoft, hint: 'Rang, nobody picked up' },
-  BUSY: { icon: 'phone-off', tone: colors.orange, soft: colors.orangeSoft, hint: 'Line was busy' },
+  BUSY: { icon: 'phone-off', tone: colors.orange, soft: colors.orangeSoft, hint: 'Call again later' },
   SWITCHED_OFF: { icon: 'smartphone', tone: colors.muted, soft: '#EEF0F3', hint: 'Phone switched off / unreachable' },
   INVALID_NUMBER: { icon: 'x', tone: colors.red, soft: colors.redSoft, hint: 'Wrong or non-existent number' },
   INTERESTED: { icon: 'flame', tone: '#EA580C', soft: '#FFEDD5', hint: 'Wants to know more' },
@@ -48,6 +48,13 @@ export const DISPOSITION_LOOK: Record<DispositionCode, DispositionLook> = {
 
 export function dispositionLook(code: string | null | undefined): DispositionLook | null {
   return code ? DISPOSITION_LOOK[code as DispositionCode] ?? null : null;
+}
+
+/** Wording shown to the employee for an outcome. The stored code (and the server's label) do not change. */
+const DISPOSITION_NAME: Partial<Record<DispositionCode, string>> = { BUSY: 'Call Back' };
+
+export function dispositionName(code: string | null | undefined, serverLabel?: string | null): string | null {
+  return (code ? DISPOSITION_NAME[code as DispositionCode] : undefined) ?? serverLabel ?? null;
 }
 
 export const CALL_STATUS_LABEL: Record<CallStatus, string> = {

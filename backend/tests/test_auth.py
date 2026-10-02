@@ -28,14 +28,14 @@ def test_login_wrong_password_and_unknown_user_look_identical(client, emp_a):
     assert bad_pw.json()["error"]["message"] == unknown.json()["error"]["message"]
 
 
-def test_deactivated_account_cannot_login_or_use_existing_token(client, make, emp_a):
+def test_deactivated_account_cannot_login_or_use_existing_token(client, make, emp_a, as_admin):
     headers = auth_headers(client, emp_a)
     assert client.get("/api/v1/me", headers=headers).status_code == 200
 
-    emp_a.is_active = False
-    make.db.commit()
+    # (through the API, as an administrator does: the sessions the phone remembered are forgotten at once)
+    assert client.post(f"/api/v1/employees/{emp_a.id}/deactivate", headers=as_admin).status_code == 200
 
-    assert client.get("/api/v1/me", headers=headers).json()["error"]["code"] == "account_disabled"
+    assert client.get("/api/v1/me", headers=headers).json()["error"]["code"] in ("account_disabled", "session_revoked")
     resp = client.post("/api/v1/auth/login", json={"identifier": emp_a.email, "password": PASSWORD})
     assert resp.status_code == 403
     assert resp.json()["error"]["code"] == "account_disabled"

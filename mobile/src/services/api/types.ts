@@ -50,6 +50,11 @@ export type DispositionCode =
   | 'COMPLETED'
   | 'DO_NOT_CONTACT';
 
+export interface HeartbeatAnswer {
+  server_time: string;
+  next_in_seconds: number;
+}
+
 export interface RecordingConfig {
   enabled: boolean;
   notice_text: string;
@@ -65,6 +70,10 @@ export interface ClientConfig {
   recording: RecordingConfig;
   dispositions: Disposition[];
   unread_notifications: number;
+  /** how often an open app reports that it is alive (the server decides) */
+  heartbeat_seconds: number;
+  /** how often the app retries what it could not send */
+  sync_interval_seconds: number;
 }
 
 export interface Me {
