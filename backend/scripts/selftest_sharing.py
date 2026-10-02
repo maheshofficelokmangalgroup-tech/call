@@ -34,6 +34,9 @@ BASE_NUMBER = 6_000_000_000  # every number from here on is a valid mobile numbe
 
 class Http:
     def __init__(self, base: str) -> None:
+        # the test signs in with passwords it makes up and handles plain-http tokens: only ever to this machine
+        if not base.startswith(("http://127.0.0.1", "http://localhost", "http://[::1]")):
+            raise SystemExit("--base must be a local address (http://127.0.0.1:8000): this test does not send anything over a network.")
         self.base = base.rstrip("/")
         self.token: str | None = None
 
@@ -47,9 +50,9 @@ class Http:
             headers["content-type"] = content_type
         if self.token:
             headers["authorization"] = f"Bearer {self.token}"
-        request = urllib.request.Request(f"{self.base}/api/v1/{path.lstrip('/')}", data=data, method=method, headers=headers)  # noqa: S310
+        request = urllib.request.Request(f"{self.base}/api/v1/{path.lstrip('/')}", data=data, method=method, headers=headers)  # nosec B310
         try:
-            with urllib.request.urlopen(request, timeout=300) as response:  # noqa: S310 - plain http to our own container
+            with urllib.request.urlopen(request, timeout=300) as response:  # nosec B310
                 payload, status, kind = response.read(), response.status, response.headers.get("content-type", "")
         except urllib.error.HTTPError as exc:
             payload, status, kind = exc.read(), exc.code, exc.headers.get("content-type", "")
