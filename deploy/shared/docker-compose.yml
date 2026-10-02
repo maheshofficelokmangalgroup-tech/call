@@ -1,0 +1,96 @@
+# The system on a server that ALREADY runs other projects, with the database on AWS RDS.
+#
+#   - nothing here touches ports 80 / 443 or any other project: one HTTPS port of our own (HTTPS_PORT, default 8445)
+#   - no MySQL container (the database is on RDS); a small Redis of our own
+#   - images are pulled (built by GitHub Actions), never built on the server
+#   - every container has a memory limit and rotated logs, so this project cannot starve its neighbours
+#
+# Runs from this folder:   docker compose --env-file .env up -d      (deploy.sh does it for you)
+# Guide: docs/DEPLOYMENT.md, section "An existing server with the database on RDS"
+name: calling
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:?set API_IMAGE in .env}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      LOG_JSON: "true"
+      TRUST_PROXY_HEADERS: "true" # the client's address comes from Caddy; nothing else can reach this container
+      REDIS_URL: redis://redis:6379/0
+      LOCAL_STORAGE_PATH: /app/var/storage
+      IMPORT_STORAGE_PATH: /app/var/imports
+      ADMIN_WEB_ORIGIN: ${PUBLIC_URL}
+      # RDS allows few connections and every project on it shares them: at most 2 workers x (3 + 1) = 8 for us
+      DB_POOL_SIZE: "3"
+      DB_MAX_OVERFLOW: "1"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    volumes:
+      - api_data:/app/var
+      - ./certs/rds-global-bundle.pem:/certs/rds-ca.pem:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 768m
+    logging: *logging
+
+  admin:
+    image: ${ADMIN_IMAGE:?set ADMIN_IMAGE in .env}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://api:8000
+      COOKIE_SECURE: "true"
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 384m
+    logging: *logging
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "${HTTPS_PORT:-8445}:${HTTPS_PORT:-8445}"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?set PUBLIC_HOST in .env}
+      HTTPS_PORT: ${HTTPS_PORT:-8445}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./letsencrypt:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    mem_limit: 96m
+    logging: *logging
+
+volumes:
+  api_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,32 @@
+name: Certificate
+
+# The server's HTTPS certificate (Let's Encrypt) lasts 90 days. Every Monday this renews it when it has less than 30 days left
+# and loads it without any downtime. Let's Encrypt also e-mails the address given at setup if a renewal ever fails.
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  renew:
+    name: Renew if needed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Renew over SSH
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$KNOWN" ]; then echo "::error::The deployment secrets are not set."; exit 1; fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes "${USER_NAME:-ubuntu}@$HOST" "renew-cert"

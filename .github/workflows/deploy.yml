@@ -1,42 +1,117 @@
 name: Deploy
 
-# Updates the server by running deploy/update.sh over SSH (see docs/DEPLOYMENT.md, "Updating automatically from GitHub").
-#   "Run workflow"                       -> deploy now
-#   push to main + variable AUTO_DEPLOY=true -> deploy after every change that touches the panel, the API or the deployment files
-# Needs the repository secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY and DEPLOY_PATH. Nothing runs without them.
+# CI/CD for the server: after the checks of the CI workflow pass on `main`, the panel and the API are built into container
+# images (stored in this repository's registry, ghcr.io) and the server is updated to exactly that commit over SSH.
+#   push to main + CI green  -> deploy automatically (switch off with the repository variable AUTO_DEPLOY=false)
+#   "Run workflow"           -> deploy the branch / commit you pick (use it to roll back: pick an older commit)
+# Server side: deploy/shared/ (see docs/DEPLOYMENT.md). The SSH key can do nothing but run deploy.sh (forced command).
+# Needs the secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS and the variable PUBLIC_URL.
 on:
-  workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'admin-web/**'
-      - 'backend/**'
-      - 'deploy/**'
-      - 'docker-compose.prod.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: deploy
   cancel-in-progress: false
 
+env:
+  # the exact commit this run is about (for a run started by CI: the commit CI tested)
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
 jobs:
-  deploy:
-    name: Update the server
-    # a push deploys only when the owner switched automatic deploys on; a manual run always does
-    if: github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true'
+  plan:
+    name: What changed?
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && vars.AUTO_DEPLOY != 'false')
+    outputs:
+      deploy: ${{ steps.plan.outputs.deploy }}
+      sha7: ${{ steps.plan.outputs.sha7 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+          fetch-depth: 2
+
+      - id: plan
+        run: |
+          echo "sha7=${SHA::7}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "deploy=yes" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # a push that only touches the app or the documents does not need a new deployment
+          changed="$(git diff --name-only HEAD~1 HEAD || true)"
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(admin-web/|backend/|deploy/|docker-compose|\.github/workflows/(deploy|certificate)\.yml)'; then
+            echo "deploy=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=no" >> "$GITHUB_OUTPUT"
+            echo "Nothing that runs on the server changed: no deployment."
+          fi
+
+  images:
+    name: Build image - ${{ matrix.image }}
+    needs: plan
+    if: needs.plan.outputs.deploy == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: admin
+            context: admin-web
+          - image: api
+            context: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image name
+        id: name
+        run: echo "ref=ghcr.io/$(echo "${GITHUB_REPOSITORY}" | tr 'A-Z' 'a-z')/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ steps.name.outputs.ref }}:sha-${{ needs.plan.outputs.sha7 }}
+            ${{ steps.name.outputs.ref }}:latest
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SHA }}
+
+  deploy:
+    name: Update the server
+    needs: [plan, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     steps:
       - name: Are the secrets there?
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          if [ -z "$HOST" ] || [ -z "$KEY" ]; then
-            echo "::error::DEPLOY_HOST and DEPLOY_SSH_KEY are not set. See docs/DEPLOYMENT.md."
+          if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$KNOWN" ]; then
+            echo "::error::DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must be set (see docs/DEPLOYMENT.md)."
             exit 1
           fi
 
@@ -45,20 +120,24 @@ jobs:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER_NAME: ${{ secrets.DEPLOY_USER }}
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DIR: ${{ secrets.DEPLOY_PATH }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR_NAME: ${{ github.actor }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ServerAliveInterval=30 "${USER_NAME:-root}@$HOST" \
-            "cd '${DIR:-/root/call}' && bash deploy/update.sh"
+          # the server's identity is pinned in a secret: a different machine at that address is refused
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          # the token (to download the images) travels on standard input, not in the command line
+          printf '%s\n' "$TOKEN" | ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "${USER_NAME:-ubuntu}@$HOST" "deploy sha-${SHA::7} ${SHA}"
 
-      - name: Is the site answering?
+      - name: Is the public address answering with the new version?
         if: ${{ vars.PUBLIC_URL != '' }}
         run: |
           for i in $(seq 1 20); do
-            if curl -fsS "${{ vars.PUBLIC_URL }}/api/health?deep=1"; then exit 0; fi
+            if curl -fsS "${{ vars.PUBLIC_URL }}/api/health?deep=1" && curl -fsS "${{ vars.PUBLIC_URL }}/health"; then echo; exit 0; fi
             sleep 6
           done
           echo "::error::${{ vars.PUBLIC_URL }} does not answer after the update"

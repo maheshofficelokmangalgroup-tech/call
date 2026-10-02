@@ -1,0 +1,53 @@
+# The HTTPS front door of this project on a shared server: our own port, with a certificate that certbot obtained
+# (see issue-cert.sh). Nothing here listens on 80 or 443, which belong to other projects.
+{
+	# the certificate comes from files, not from Caddy's own ACME client (which would need ports 80/443)
+	auto_https off
+	servers {
+		timeouts {
+			read_header 30s
+			idle 2m
+		}
+	}
+}
+
+https://{$PUBLIC_HOST}:{$HTTPS_PORT} {
+	tls /certs/live/{$PUBLIC_HOST}/fullchain.pem /certs/live/{$PUBLIC_HOST}/privkey.pem
+	encode zstd gzip
+
+	# the mobile app and anything else that speaks to the API directly
+	@api path /api/v1/* /health
+	handle @api {
+		reverse_proxy api:8000 {
+			transport http {
+				read_timeout 5m
+				write_timeout 5m
+			}
+		}
+	}
+
+	# everything else is the admin panel (its own /api/backend and /api/auth routes included)
+	handle {
+		reverse_proxy admin:3000 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
+		}
+	}
+
+	request_body {
+		max_size 120MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

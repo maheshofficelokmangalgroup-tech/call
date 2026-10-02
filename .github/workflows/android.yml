@@ -22,7 +22,7 @@ on:
       - 'docker-compose*.yml'
       - '**.md'
       - '.github/workflows/ci.yml'
-      - '.github/workflows/images.yml'
+      - '.github/workflows/certificate.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
