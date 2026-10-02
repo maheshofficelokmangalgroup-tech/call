@@ -6,6 +6,7 @@ import { ReduceMotion, ReducedMotionConfig } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CallWatcher } from './src/components/CallWatcher';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { SetupPrompt } from './src/components/SetupPrompt';
 import { SimPickerHost } from './src/components/SimPickerHost';
 import { ToastHost } from './src/components/ToastHost';
@@ -19,7 +20,7 @@ const navTheme = {
   colors: { ...DefaultTheme.colors, background: colors.bg, card: colors.white, primary: colors.green, text: colors.ink, border: colors.border },
 };
 
-export default function App() {
+function AppContent() {
   useEffect(() => {
     void useAuth.getState().boot();
   }, []);
@@ -38,5 +39,13 @@ export default function App() {
         <ToastHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary label="app">
+      <AppContent />
+    </ErrorBoundary>
   );
 }

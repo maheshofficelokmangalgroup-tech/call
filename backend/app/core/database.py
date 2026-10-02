@@ -30,6 +30,7 @@ def build_engine(url: str) -> Engine:
         kwargs.update(
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
+            pool_timeout=settings.db_pool_timeout_seconds,
             pool_recycle=1800,
             # MySQL defaults to REPEATABLE READ, which keeps a stale snapshot for the life of a
             # transaction and takes extra gap locks. READ COMMITTED is what this workload wants.

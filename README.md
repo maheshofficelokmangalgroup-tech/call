@@ -6,11 +6,11 @@ Built from the project documentation `Employee_Calling_CRM_Platform_Project_Docu
 
 | Part | Status | Folder |
 |---|---|---|
-| Backend API (FastAPI, MySQL / SQLite, Redis) | **done** - 95 automated tests, run on SQLite **and** MySQL 8.4 | [backend/](backend) |
+| Backend API (FastAPI, MySQL, Redis) | **done** - 230+ automated tests on SQLite **and** MySQL 8.4; Redis-first (no database query to know who is calling); tested with 500 employees / 100,000 contacts | [backend/](backend), [docs/PERFORMANCE_AND_SECURITY.md](docs/PERFORMANCE_AND_SECURITY.md) |
 | Employee Android app (React Native, Android only) | **done** - Blinkit-style animated UI, offline-first, own phone-app call screen | [mobile/](mobile) |
 | **Admin panel** (Next.js, web) | **done** - live dashboard, every employee's calls / talk time / recordings, create employees, contacts, campaigns, audit log; light + dark, phone-friendly | [admin-web/](admin-web), [docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md) |
 | **Server deployment** | **done** - one command on a Linux server: HTTPS, panel, API, MySQL, Redis, nightly backups | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docker-compose.prod.yml](docker-compose.prod.yml), [deploy/](deploy) |
-| CI/CD (GitHub Actions) | **done** - API (SQLite + MySQL), app, panel (unit + real-browser tests), production Docker stack on every push; signed APK -> Releases; images; optional auto-deploy | [.github/workflows/](.github/workflows), [docs/CICD.md](docs/CICD.md) |
+| CI/CD (GitHub Actions) | **done** - API (SQLite + MySQL), API fuzz + security scans + image scan, **load test (500 employees)**, app, panel (unit + real-browser tests), production Docker stacks on every push; signed APK -> Releases; images; optional auto-deploy | [.github/workflows/](.github/workflows), [docs/CICD.md](docs/CICD.md) |
 
 ---
 
@@ -136,7 +136,7 @@ backend/        FastAPI app, Alembic migrations, tests, scripts (bootstrap, demo
 mobile/         React Native (Android only). src/ = TypeScript app, android/.../calling = Kotlin phone layer
 admin-web/      The admin panel: Next.js 16, React 19, Tailwind 4. src/ = app, tests/ = unit tests, e2e/ = browser tests
 deploy/         Server installer, update / backup / restore scripts, Caddyfile (HTTPS front door)
-docs/           Telephony notes, CI/CD guide, admin panel guide, deployment guide
+docs/           Telephony notes, CI/CD guide, admin panel guide, deployment guide, speed / capacity / security
 scripts/        dev-backend.ps1 - one-command backend for Windows
 .github/        GitHub Actions: ci.yml (all tests + Docker smoke test), android.yml (signed APK -> Releases), images.yml, deploy.yml
 release/        APKs built on this PC (git-ignored); the official APK is on the GitHub Releases page

@@ -4,6 +4,7 @@ import { ReduceMotion, ReducedMotionConfig } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { LiveCallScreen } from './components/call/LiveCallScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastHost } from './components/ToastHost';
 import { initDatabase } from './database/db';
 import { startLiveCallSync } from './services/telephony/liveCalls';
@@ -13,7 +14,7 @@ import { startLiveCallSync } from './services/telephony/liveCalls';
  * own - a call can come in while the app is closed - so it only needs the local database and the live call state.
  * (The status bar icons are set natively in InCallActivity.)
  */
-export function InCallRoot() {
+function InCallContent() {
   useEffect(() => {
     void initDatabase().catch(() => undefined);
     startLiveCallSync();
@@ -27,5 +28,13 @@ export function InCallRoot() {
         <ToastHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+export function InCallRoot() {
+  return (
+    <ErrorBoundary label="call screen">
+      <InCallContent />
+    </ErrorBoundary>
   );
 }

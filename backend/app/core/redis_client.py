@@ -107,6 +107,74 @@ class InMemoryRedis:
             self._data.clear()
 
 
+class GuardedRedis:
+    """The real Redis, with a pause after it has failed.
+
+    When Redis does not answer, every call waits for its timeout before it fails - and one request makes several calls. Hundreds of
+    requests then spend seconds each on something that is known to be down (a crash test: the admin panel took 13 s per page). After
+    a failure the guard refuses calls straight away for a few seconds; then ONE caller is let through to find out whether Redis is
+    back, and the others go on being refused until it has answered. Everything that uses Redis already treats a failure as "ask the
+    database instead" (or "let the request through" for the rate limit), so the pause changes the speed, never the answer.
+    """
+
+    is_fallback = False
+
+    def __init__(self, client: Any, pause_seconds: float = 3.0) -> None:
+        self._client = client
+        self._pause = pause_seconds
+        self._lock = threading.Lock()
+        self._down = False
+        self._down_until = 0.0
+        self._probing = False
+
+    def _admit(self) -> bool:
+        if not self._down:
+            return True
+        with self._lock:
+            if not self._down:
+                return True
+            if self._probing or time.monotonic() < self._down_until:
+                return False
+            self._probing = True  # the pause is over: this caller finds out whether Redis is back
+            return True
+
+    def _failed(self, exc: Exception) -> None:
+        with self._lock:
+            first = not self._down
+            self._down = True
+            self._probing = False
+            self._down_until = time.monotonic() + self._pause
+        if first:
+            log.warning("Redis is not answering (%s); it is not asked again for %.0f seconds", exc, self._pause)
+
+    def _worked(self) -> None:
+        if not self._down:
+            return
+        with self._lock:
+            if self._down:
+                self._down = False
+                self._probing = False
+                log.warning("Redis is answering again")
+
+    def __getattr__(self, name: str) -> Any:
+        target = getattr(self._client, name)
+        if not callable(target):
+            return target
+
+        def guarded(*args: Any, **kwargs: Any) -> Any:
+            if not self._admit():
+                raise redis.ConnectionError("Redis is not answering (not asked again for a few seconds)")
+            try:
+                result = target(*args, **kwargs)
+            except (redis.ConnectionError, redis.TimeoutError) as exc:
+                self._failed(exc)
+                raise
+            self._worked()
+            return result
+
+        return guarded
+
+
 _RELEASE_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end
 """
@@ -117,19 +185,20 @@ def get_redis() -> KeyValueStore:
     settings = get_settings()
     url = settings.redis_url
     if url:
+        # (a call that fails costs at most the connect / read timeout - and then the guard stops asking for a few seconds)
+        client = GuardedRedis(
+            redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=0.5, socket_timeout=1.0, health_check_interval=30)
+        )
         try:
-            client = redis.Redis.from_url(
-                url,
-                decode_responses=True,
-                socket_connect_timeout=1.5,
-                socket_timeout=2.0,
-                health_check_interval=30,
-            )
             client.ping()
-            client.is_fallback = False  # type: ignore[attr-defined]
             log.info("Connected to Redis", extra={"redis": url.split("@")[-1]})
             return client  # type: ignore[return-value]
         except redis.RedisError as exc:
+            if settings.redis_required:
+                # not the private stand-in: it would hide the problem and never see what the other workers do. Every call fails
+                # (and is answered by the database) until Redis is back; the guard then connects by itself.
+                log.error("Redis is not answering at start-up (%s): the service runs without it until it is back", exc)
+                return client  # type: ignore[return-value]
             log.warning("Redis unavailable (%s) - using in-memory fallback", exc)
     else:
         log.info("REDIS_URL not set - using in-memory fallback")

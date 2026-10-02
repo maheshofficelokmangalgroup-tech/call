@@ -50,7 +50,12 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'var' / 'dev.db').as_posix()}"
     db_pool_size: int = 10
     db_max_overflow: int = 20
+    db_pool_timeout_seconds: int = 10  # how long a request waits for a free connection before it is told to come back (503)
     redis_url: str | None = "redis://localhost:6379/0"
+    # Redis must be there: when it is not answering (at start-up or later) the service goes on without it - slower, every question
+    # asked of the database - and connects again by itself when it is back, instead of using a private in-memory stand-in that
+    # nobody else sees. Always on in staging / production; in development the stand-in is kept so that no Redis is needed.
+    redis_required: bool = False
 
     # --- auth ----------------------------------------------------------------
     jwt_secret: str = "local-dev-secret-change-me-please-0123456789"
@@ -122,6 +127,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_production(self) -> "Settings":
         if self.app_env in ("staging", "production"):
+            self.redis_required = True
             if self.jwt_secret in WEAK_SECRETS or len(self.jwt_secret) < 32:
                 raise ValueError(
                     "JWT_SECRET must be a random string of at least 32 characters in "
