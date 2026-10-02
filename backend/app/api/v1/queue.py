@@ -18,7 +18,7 @@ def my_queue(
     db: DbSession,
     user: CurrentEmployee,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
 ):
     """Today's calling queue for the signed-in employee: due callbacks, then priority contacts, then later callbacks.
 

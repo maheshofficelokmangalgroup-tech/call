@@ -68,12 +68,11 @@ def test_manual_dial_of_a_known_assigned_number_links_the_contact(client, make, 
     assert resp["contact_id"] == contact.id
 
 
-def test_deactivated_employee_cannot_create_calls(client, make, emp_a, as_a):
+def test_deactivated_employee_cannot_create_calls(client, make, emp_a, as_a, as_admin):
     contact = make.contact(assign_to=emp_a)
-    emp_a.is_active = False
-    make.db.commit()
+    assert client.post(f"/api/v1/employees/{emp_a.id}/deactivate", headers=as_admin).status_code == 200  # (the way an account is really deactivated)
     resp = start_call(client, as_a, contact)
-    assert resp.status_code == 403 and resp.json()["error"]["code"] == "account_disabled"
+    assert resp.status_code == 401 and resp.json()["error"]["code"] == "session_revoked"  # deactivating also ends every session
     assert make.db.query(Contact).get(contact.id).call_count == 0
 
 

@@ -159,3 +159,62 @@ def test_the_admin_figures_serialise_exactly_as_before(client, make, emp_a, as_a
     remembered = client.get("/api/v1/analytics/employees", headers=as_admin).json()
     assert fresh == remembered
     assert "role" in fresh["items"][0] and "role_name" not in fresh["items"][0]
+
+
+# ------------------------------------------------------------------------------------------------------ never older than a change
+def test_a_changed_setting_shows_in_the_admin_figures_at_once(client, as_admin):
+    """Found by the browser test: the dashboard went on saying "recording is on" for several seconds after an administrator switched
+    it off, because the figures were only kept for a few seconds and not cleared by the change."""
+    assert client.get("/api/v1/analytics/overview", headers=as_admin).json()["recording"]["enabled"] is False
+    assert client.get("/api/v1/analytics/overview", headers=as_admin).json()["recording"]["enabled"] is False  # remembered
+    changed = client.put("/api/v1/settings/recording", headers=as_admin, json={"value": {"enabled": True, "notice_text": "Calls are recorded."}})
+    assert changed.status_code == 200, changed.text
+    assert client.get("/api/v1/analytics/overview", headers=as_admin).json()["recording"]["enabled"] is True
+
+
+def test_a_new_or_deactivated_person_shows_in_the_admin_list_at_once(client, make, as_admin):
+    before = client.get("/api/v1/analytics/employees", headers=as_admin).json()["total"]
+    assert client.get("/api/v1/analytics/employees", headers=as_admin).json()["total"] == before  # remembered
+    created = client.post("/api/v1/employees", headers=as_admin, json={"email": "fresh.face@example.com", "full_name": "Fresh Face", "password": "Sup3r-Secret-Pw"})
+    assert created.status_code == 201, created.text
+    listed = client.get("/api/v1/analytics/employees", headers=as_admin).json()
+    assert listed["total"] == before + 1
+    new_id = created.json()["employee"]["id"]
+
+    assert client.post(f"/api/v1/employees/{new_id}/deactivate", headers=as_admin).status_code == 200
+    row = next(i for i in client.get("/api/v1/analytics/employees", headers=as_admin).json()["items"] if i["id"] == new_id)
+    assert row["is_active"] is False and row["presence"] == "inactive"
+
+
+def test_signing_in_does_not_clear_the_admin_figures(client, make, emp_a, as_admin):
+    """A sign-in only changes "last sign-in" of one person: the figures built for everybody stay valid (otherwise the morning rush
+    of sign-ins would make every refresh of the panel hit the database)."""
+    client.get("/api/v1/analytics/employees", headers=as_admin)
+    auth_headers(client, emp_a)  # signs in: the employee's row is changed
+    with counting_queries() as repeat:
+        assert client.get("/api/v1/analytics/employees", headers=as_admin).status_code == 200
+    assert repeat.count == 0, repeat.statements
+
+
+# ------------------------------------------------------------------------------------------------------ the queue under load
+def test_an_outcome_clears_the_queue_of_the_person_who_made_it_and_nobody_elses(client, make, emp_a, emp_b, as_a, as_b):
+    """Hundreds of phones record outcomes all day: if each outcome cleared every queue, no queue would ever be remembered."""
+    mine, theirs = make.contact(assign_to=emp_a), make.contact(assign_to=emp_b)
+    assert queue_ids(client, as_a) == [mine.id] and queue_ids(client, as_b) == [theirs.id]
+
+    call = start_call(client, as_a, mine, cid="isolated-queue-01").json()
+    assert dispose(client, as_a, call["id"], "NOT_INTERESTED").status_code == 200
+
+    with counting_queries() as other:
+        assert queue_ids(client, as_b) == [theirs.id]
+    assert other.count == 0, other.statements  # B's remembered queue was not touched by A's work
+    assert queue_ids(client, as_a) == []  # A's own queue is up to date at once
+
+
+def test_a_contact_an_administrator_edits_is_fresh_in_every_queue(client, make, emp_a, emp_b, as_a, as_b, as_admin):
+    mine, theirs = make.contact(assign_to=emp_a, priority=3), make.contact(assign_to=emp_b)
+    other = make.contact(assign_to=emp_a, priority=2)
+    assert queue_ids(client, as_a) == [other.id, mine.id]
+    assert queue_ids(client, as_b) == [theirs.id]
+    assert client.patch(f"/api/v1/contacts/{mine.id}", headers=as_admin, json={"priority": 1}).status_code == 200
+    assert queue_ids(client, as_a) == [mine.id, other.id]  # the edit changed the order at once

@@ -10,7 +10,7 @@ from fastapi import APIRouter
 from sqlalchemy import event
 
 from app.api.deps import CurrentEmployee
-from app.core import cache
+from app.core import auth_cache, cache
 from app.core.config import get_settings, reset_settings_cache
 from app.core.database import get_engine
 from app.core.redis_client import get_redis
@@ -67,8 +67,9 @@ def test_a_remembered_session_needs_no_database_query(client, emp_a, probe):
     assert warm_queries.count == 0, warm_queries.statements
 
 
-def test_the_first_request_costs_what_it_always_did(client, emp_a, probe):
+def test_a_session_nobody_remembers_costs_what_it_always_did(client, emp_a, probe):
     headers = auth_headers(client, emp_a)
+    cache.bump_now(auth_cache._epoch_name(emp_a.id))  # (what an edit of the employee does) the remembered session is no longer valid
     with counting_queries() as first:
         assert client.get(probe, headers=headers).status_code == 200
     assert 2 <= first.count <= 6, first.statements  # the session, the employee, and the once-a-minute "last seen" write
@@ -181,15 +182,21 @@ def test_a_cached_session_is_dropped_when_the_epoch_moves(client, emp_a, probe):
     assert after_bump.count >= 2
 
 
-def test_nothing_is_remembered_for_a_session_that_is_not_valid(client, emp_a, probe, db):
-    from app.models.employee import EmployeeSession
-
+def test_nothing_is_remembered_for_a_session_that_is_not_valid(client, emp_a, probe, as_admin):
+    """Signing in remembers the new session (the first request needs no query); revoking it - which every way of ending a session does
+    through the service, never by editing the row - forgets it at once, and what the database then says (revoked) is not remembered."""
     headers = auth_headers(client, emp_a)
-    row = db.query(EmployeeSession).one()
-    row.revoked_at = row.created_at
-    db.commit()
+    assert client.get(probe, headers=headers).status_code == 200
+    assert client.post(f"/api/v1/employees/{emp_a.id}/revoke-sessions", headers=as_admin).status_code == 200
     for _ in range(2):
         assert client.get(probe, headers=headers).status_code == 401
+
+
+def test_the_first_request_after_signing_in_needs_no_database_query(client, emp_a, probe):
+    headers = auth_headers(client, emp_a)
+    with counting_queries() as first:
+        assert client.get(probe, headers=headers).status_code == 200
+    assert first.count == 0, first.statements
 
 
 def test_the_cache_can_be_switched_off(client, emp_a, probe, monkeypatch):

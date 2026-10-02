@@ -190,12 +190,16 @@ def is_dirty(db: Session, name: str) -> bool:
     return name in db.info.get(_DIRTY, ())
 
 
+def _forget_notes(session: Session) -> None:
+    for key in [k for k in session.info if isinstance(k, str) and k.startswith("cache.")]:
+        session.info.pop(key, None)
+
+
 @event.listens_for(Session, "after_commit")
 def _run_deferred(session: Session) -> None:
-    session.info.pop(_DIRTY, None)
-    actions = session.info.pop(_DEFERRED, None) or []
-    # (the bumps set is read by its action, which is in `actions`; the next transaction starts a new one)
-    session.info.pop(_BUMPS, None)
+    actions = session.info.get(_DEFERRED) or []
+    # (what an action needs it holds itself; the next transaction starts with clean notes)
+    _forget_notes(session)
     for action in actions:
         try:
             action()
@@ -205,29 +209,39 @@ def _run_deferred(session: Session) -> None:
 
 @event.listens_for(Session, "after_rollback")
 def _drop_deferred(session: Session) -> None:
-    session.info.pop(_DEFERRED, None)
-    session.info.pop(_DIRTY, None)
-    session.info.pop(_BUMPS, None)
+    _forget_notes(session)
 
 
 def digest(*parts: object) -> str:
     """A short stable name for a set of request parameters."""
     import hashlib
 
-    return hashlib.sha1("|".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:16]  # noqa: S324 - a cache key, not a secret
+    return hashlib.blake2b("|".join(str(p) for p in parts).encode("utf-8"), digest_size=8).hexdigest()  # 16 characters; a cache key, not a secret
 
 
 # ------------------------------------------------------------------------------------------------ single flight
-def single_flight(key: str, ttl_seconds: int, compute: Callable[[], Any], *, lock_seconds: int = 10) -> Any:
+def single_flight(key: str, ttl_seconds: int, compute: Callable[[], Any], *, epoch_names: tuple[str, ...] = (), lock_seconds: int = 10) -> Any:
     """Cached JSON-able result of `compute()`. When many viewers ask at the same moment, one computes and the rest wait for it
-    (a dashboard refreshed by ten people every few seconds costs the database one query set per few seconds, not ten)."""
+    (a dashboard refreshed by ten people every few seconds costs the database one query set per few seconds, not ten).
+
+    The result is good for `ttl_seconds` - unless one of the epochs it was made under changes first (an employee is added, a
+    setting is edited): then nobody is served the old one.
+    """
     if ttl_seconds <= 0 or not enabled():
         return compute()
-    hit = get_json(key)
+    stamp = ensure_epochs(*epoch_names) if epoch_names else []  # read BEFORE computing: a change during the work makes the result stale on arrival
+    if stamp is None:
+        return compute()
+
+    def remembered() -> Any | None:
+        entry = get_json(key)
+        return entry["v"] if isinstance(entry, dict) and entry.get("ep") == stamp and "v" in entry else None
+
+    hit = remembered()
     if hit is not None:
         return hit
     store = get_redis()
-    lock_key = f"c:lock:{key}"
+    lock_key = f"c:lock:{key}:{'.'.join(str(s) for s in stamp)}"
     try:
         won = bool(store.set(lock_key, "1", ex=lock_seconds, nx=True))
     except redis.RedisError:
@@ -236,13 +250,13 @@ def single_flight(key: str, ttl_seconds: int, compute: Callable[[], Any], *, loc
         deadline = time.monotonic() + lock_seconds
         while time.monotonic() < deadline:
             time.sleep(0.05)
-            hit = get_json(key)
+            hit = remembered()
             if hit is not None:
                 return hit
         return compute()  # the other worker was too slow or died: do it ourselves
     try:
         value = compute()
-        set_json(key, value, ttl_seconds)
+        set_json(key, {"ep": stamp, "v": value}, ttl_seconds)
         return value
     finally:
         try:

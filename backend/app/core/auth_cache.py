@@ -25,6 +25,14 @@ from app.core.timeutils import utcnow
 from app.models.employee import Employee, EmployeeSession, Role, Team
 
 
+PRESENCE_TOUCH_SECONDS = 60  # "last seen" is refreshed by authenticated requests, at most once a minute per session
+
+
+def presence_due(session_id: str) -> bool:
+    """True for the first caller in each minute (all workers share the answer): that request writes this session's "last seen"."""
+    return cache.once_per(f"presence:{session_id}", PRESENCE_TOUCH_SECONDS)
+
+
 def _epoch_name(employee_id: int | str) -> str:
     return f"emp:{employee_id}"
 

@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     rate_limit_user_per_minute: int = 600  # requests one signed-in person may make per minute (a runaway app cannot flood the API)
     max_json_body_kb: int = 1024  # every request except an upload must be smaller than this
     max_concurrent_uploads: int = 6  # recording uploads one worker handles at the same time (the rest wait their turn with a 429)
+    max_inflight_requests: int = 24  # requests one worker works on at the same time; the others wait for their turn (see protection.py)
+    inflight_wait_seconds: float = 15.0  # how long one may wait for its turn before it is told to come back in a moment (503)
 
     # --- what the phones are told to do (they ask /me, nothing is fixed in the app) ----------------------------------
     heartbeat_seconds: int = 60  # how often a phone that is open reports that it is alive (and how its battery / network are)

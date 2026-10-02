@@ -435,12 +435,12 @@ jobs:
           curl -ksI https://localhost:8445/api/v1/me | grep -i '^cache-control: no-store'
 
       - name: Logs when something failed
-        if: failure()
+        if: failure() && hashFiles('deploy/shared/.env') != ''
         working-directory: deploy/shared
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env logs --tail=200
 
       - name: Tear down
-        if: always()
+        if: always() && hashFiles('deploy/shared/.env') != ''
         working-directory: deploy/shared
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env down -v
 

@@ -15,9 +15,11 @@ from app.api.deps import DbSession, StaffUser
 from app.core import cache
 from app.core.config import get_settings
 from app.core.errors import NotFound
+from app.models.cache_events import ROSTER
 from app.models.employee import ROLE_ADMIN
 from app.schemas.analytics import EmployeeDetailOut, EmployeeStatsOut, LiveOut, OverviewOut
 from app.services import analytics_service, audit_service
+from app.services.settings_service import EPOCH as SETTINGS_EPOCH
 
 router = APIRouter()
 
@@ -27,7 +29,12 @@ def _cached(user, name: str, params: dict, compute) -> JSONResponse:
     for everybody who may see the same people (all administrators share one answer; a manager's is for their own team)."""
     scope = "org" if user.role_name == ROLE_ADMIN else f"team:{user.team_id}:{user.id}"
     key = f"analytics:{name}:{scope}:{cache.digest(sorted(params.items()))}"
-    return JSONResponse(cache.single_flight(key, get_settings().analytics_cache_seconds, lambda: compute().model_dump(mode="json", by_alias=True)))
+    # (the figures are a few seconds old at most - and never older than the last change of a person, a team or a setting)
+    return JSONResponse(
+        cache.single_flight(
+            key, get_settings().analytics_cache_seconds, lambda: compute().model_dump(mode="json", by_alias=True), epoch_names=(ROSTER, SETTINGS_EPOCH)
+        )
+    )
 
 
 DateFrom = Annotated[date | None, Query(description="First business day (inclusive), YYYY-MM-DD. Default: 6 days before date_to.")]

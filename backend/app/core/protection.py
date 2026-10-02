@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -12,6 +15,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import get_settings
 from app.core.errors import PayloadTooLarge, TooManyRequests
+
+log = logging.getLogger(__name__)
 
 # the only requests that may carry a file: everything else is a small JSON document
 UPLOAD_PATHS = (re.compile(r"^/api/v1/recordings/\d+/upload$"), re.compile(r"^/api/v1/contacts/import$"))
@@ -92,6 +97,70 @@ class BodyLimitMiddleware:
         body = json.dumps({"error": {"code": "payload_too_large", "message": f"The request is larger than {limit // 1024} KB."}}).encode()
         await send({"type": "http.response.start", "status": 413, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
         await send({"type": "http.response.body", "body": body})
+
+
+class InFlightLimitMiddleware:
+    """At most `max_inflight_requests` requests are worked on at the same time by one worker; the others wait for their turn.
+
+    Why: a worker has a fixed number of threads for the request handlers and a small pool of database connections. When hundreds
+    of requests arrive in the same second (everybody opens the app at nine o'clock), they would all start. Those that already hold
+    a database connection then wait for a free thread - behind the requests that wait for a database connection, which is held by
+    them. Nothing moves until the waiting times out (the load test showed 30-second standstills and errors for most phones).
+    With fewer requests in progress than there are threads, a request that holds a connection always finds a thread to carry
+    on with, the connection comes back, and the next one in line gets it: the same burst is simply done a little later.
+
+    A request that has waited `inflight_wait_seconds` is told to come back in a moment (503, the app retries by itself) instead of
+    being kept until the phone gives up. The probes (/health, /ready) and the uploads (limited separately) are not counted.
+    """
+
+    EXEMPT_PATHS = ("/health", "/ready")
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._turns: asyncio.Semaphore | None = None
+        self.waiting = 0
+        self.working = 0
+        self._last_warning = 0.0
+
+    def _semaphore(self) -> asyncio.Semaphore:
+        loop = asyncio.get_running_loop()
+        if self._turns is None or self._loop is not loop:  # (one loop per worker; tests start several)
+            self._loop, self._turns = loop, asyncio.Semaphore(max(1, get_settings().max_inflight_requests))
+            self.waiting = self.working = 0
+        return self._turns
+
+    def _exempt(self, path: str) -> bool:
+        return path in self.EXEMPT_PATHS or any(p.match(path) for p in UPLOAD_PATHS)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or self._exempt(scope.get("path", "")):
+            await self.app(scope, receive, send)
+            return
+        turns = self._semaphore()
+        self.waiting += 1
+        try:
+            await asyncio.wait_for(turns.acquire(), timeout=max(0.1, get_settings().inflight_wait_seconds))
+        except asyncio.TimeoutError:
+            self._warn()
+            body = json.dumps({"error": {"code": "server_busy", "message": "The server is busy right now. Please try again in a moment."}}).encode()
+            await send({"type": "http.response.start", "status": 503, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), (b"retry-after", b"3")]})
+            await send({"type": "http.response.body", "body": body})
+            return
+        finally:
+            self.waiting -= 1
+        self.working += 1
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.working -= 1
+            turns.release()
+
+    def _warn(self) -> None:
+        now = time.monotonic()
+        if now - self._last_warning > 10:  # one line per ten seconds, not one per refused request
+            self._last_warning = now
+            log.warning("Too many requests at once: %s working, %s waiting; the ones that waited too long are told to retry", self.working, self.waiting)
 
 
 class PathSanityMiddleware:

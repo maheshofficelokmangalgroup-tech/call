@@ -112,6 +112,8 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
     )
 
     employee = find_employee_by_identifier(db, identifier)
+    # checking a password takes ~100 ms of CPU: do not keep a database connection (there are only a few) waiting for it
+    db.commit()
     if employee is None:
         burn_password_check(password)
         audit_service.record(db, action="auth.login_failed", actor_label=ident_key, request=request, details={"reason": "unknown_user"})
@@ -133,6 +135,11 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
         audit_service.record(db, action="auth.login_blocked", actor=employee, request=request, details={"reason": "panel_not_allowed"})
         db.commit()
         raise Forbidden("This panel is for administrators and managers. Employees use the mobile app.", code="panel_not_allowed")
+
+    # Two sign-ins of the same person at the same moment (a double tap, a retry after a slow answer, two browser tabs) would each
+    # hold a shared lock on the employee's row - taken by the foreign keys of the new rows - and then both want to change it: the
+    # database ends that with a deadlock and an error for one of them. Taking the row first makes the second one simply wait.
+    db.execute(select(Employee.id).where(Employee.id == employee.id).with_for_update())
 
     try:
         device_row = _register_device(db, employee, device, ip)
@@ -160,6 +167,8 @@ def login(db: Session, *, identifier: str, password: str, device: DeviceInfo | N
     audit_service.record(db, action="auth.login", actor=employee, entity_type="employee", entity_id=employee.id, request=request)
     db.commit()
     rate_limit.reset(f"login:id:{ident_key}")
+    auth_cache.store(employee, session)  # the first request after signing in then needs no database query ...
+    auth_cache.presence_due(session.id)  # ... and does not write "last seen" either: signing in has just done that
     return _issue_tokens(db, employee, session, refresh_token)
 
 

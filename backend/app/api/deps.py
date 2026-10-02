@@ -21,8 +21,6 @@ from app.models.employee import ROLE_ADMIN, ROLE_MANAGER, Employee, EmployeeDevi
 
 _bearer = HTTPBearer(auto_error=False)
 
-PRESENCE_TOUCH_SECONDS = 60  # "last seen" is refreshed by authenticated requests, at most once a minute per session
-
 # A temporary password (a new employee's first one, or one an administrator reset) only opens these until it has been replaced.
 PASSWORD_CHANGE_PATHS = ("/api/v1/auth/change-password", "/api/v1/auth/logout", "/api/v1/me")
 
@@ -34,9 +32,9 @@ def _touch_presence(db: Session, request: Request, session_id: str, device_id: i
     """
     now = utcnow()
     if cache.enabled():
-        if not cache.once_per(f"presence:{session_id}", PRESENCE_TOUCH_SECONDS):
+        if not auth_cache.presence_due(session_id):
             return
-    elif session is not None and (now - session.last_used_at).total_seconds() < PRESENCE_TOUCH_SECONDS:
+    elif session is not None and (now - session.last_used_at).total_seconds() < auth_cache.PRESENCE_TOUCH_SECONDS:
         return
     db.execute(update(EmployeeSession).where(EmployeeSession.id == session_id).values(last_used_at=now))
     if device_id is not None:
@@ -97,7 +95,7 @@ CurrentEmployee = Annotated[Employee, Depends(get_current_employee)]
 
 
 def require_roles(*roles: str):
-    def _dependency(user: CurrentEmployee) -> Employee:
+    async def _dependency(user: CurrentEmployee) -> Employee:  # (async: it only compares two strings, it needs no thread)
         if user.role_name not in roles:
             raise Forbidden()
         return user

@@ -26,6 +26,8 @@ RUN npm run build
 
 FROM node:24-alpine AS run
 WORKDIR /app
+# the base image is rebuilt rarely: take the operating system's security fixes when this image is built
+RUN apk upgrade --no-cache
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \

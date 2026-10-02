@@ -65,8 +65,14 @@ def now_iso(delta: timedelta = timedelta()) -> str:
     return (datetime.now(timezone.utc) + delta).isoformat()
 
 
+def tls_check(args) -> bool:
+    """Certificate checking only exists for https (building the TLS machinery for every simulated phone is slow for the tool itself)."""
+    return args.base_url.startswith("https") and not args.insecure
+
+
 async def phone(index: int, args, rec: Recorder, deadline: float) -> None:
-    async with httpx.AsyncClient(base_url=args.base_url, timeout=30, verify=not args.insecure) as client:
+    await asyncio.sleep(args.ramp * index / max(1, args.phones))  # people open the app one after the other, not in the same instant
+    async with httpx.AsyncClient(base_url=args.base_url, timeout=30, verify=tls_check(args)) as client:
         code = f"LT{args.first_employee + index:05d}"
         login = await call(
             client, rec, "login", "POST", "/api/v1/auth/login",
@@ -110,7 +116,8 @@ async def phone(index: int, args, rec: Recorder, deadline: float) -> None:
 
 
 async def viewer(index: int, args, rec: Recorder, deadline: float) -> None:
-    async with httpx.AsyncClient(base_url=args.base_url, timeout=60, verify=not args.insecure) as client:
+    await asyncio.sleep(args.ramp * (index + 1) / max(1, args.viewers + 1))
+    async with httpx.AsyncClient(base_url=args.base_url, timeout=60, verify=tls_check(args)) as client:
         login = await call(client, rec, "login", "POST", "/api/v1/auth/login", json={"identifier": args.admin_email, "password": args.admin_password, "device": {"device_uid": f"viewer-{index}", "name": "Panel", "platform": "web"}})
         if login is None or login.status_code != 200:
             return
@@ -131,20 +138,24 @@ def report(rec: Recorder, seconds: float, args) -> int:
     rows = []
     total_requests = total_failures = 0
     worst_p95 = 0.0
+    login_p95 = 0.0
     for name in sorted(rec.samples):
         values = rec.samples[name]
         p95 = percentile(values, 95)
         rows.append((name, len(values), statistics.median(values), p95, percentile(values, 99), max(values), rec.failures[name], rec.throttled[name]))
         total_requests += len(values)
         total_failures += rec.failures[name]
-        if name != "login":
+        if name == "login":
+            login_p95 = p95
+        else:
             worst_p95 = max(worst_p95, p95)
     lines = ["| request | count | median ms | p95 ms | p99 ms | max ms | errors | throttled |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
     lines += [f"| {n} | {c} | {m:.0f} | {p95:.0f} | {p99:.0f} | {mx:.0f} | {e} | {t} |" for n, c, m, p95, p99, mx, e, t in rows]
     error_rate = 100.0 * total_failures / max(1, total_requests)
     summary = (
         f"**{total_requests} requests in {seconds:.0f} s = {total_requests / seconds:.0f} per second** from {args.phones} phones and {args.viewers} "
-        f"administrator tabs; errors {total_failures} ({error_rate:.2f} %); slowest p95 {worst_p95:.0f} ms (limit {args.max_p95_ms} ms)"
+        f"administrator tabs; errors {total_failures} ({error_rate:.2f} %); slowest p95 {worst_p95:.0f} ms (limit {args.max_p95_ms} ms); "
+        f"sign-in p95 {login_p95:.0f} ms (limit {args.max_login_p95_ms} ms)"
     )
     print("\n" + summary + "\n" + "\n".join(lines))
     for name, text in rec.first_errors.items():
@@ -158,6 +169,8 @@ def report(rec: Recorder, seconds: float, args) -> int:
         problems.append(f"{error_rate:.2f} % of the requests failed (limit {args.max_error_percent} %)")
     if worst_p95 > args.max_p95_ms:
         problems.append(f"the slowest request has p95 {worst_p95:.0f} ms (limit {args.max_p95_ms} ms)")
+    if login_p95 > args.max_login_p95_ms:
+        problems.append(f"signing in has p95 {login_p95:.0f} ms (limit {args.max_login_p95_ms} ms)")
     if total_requests < args.phones * 3:
         problems.append("hardly any requests were made: the phones could not sign in or had nothing to call")
     for problem in problems:
@@ -168,7 +181,7 @@ def report(rec: Recorder, seconds: float, args) -> int:
 async def main_async(args) -> int:
     rec = Recorder()
     started = time.monotonic()
-    deadline = started + args.seconds
+    deadline = started + args.ramp + args.seconds
     phones = [phone(i, args, rec, deadline) for i in range(args.phones)]
     viewers = [viewer(i, args, rec, deadline) for i in range(args.viewers)]
     await asyncio.gather(*phones, *viewers)
@@ -180,7 +193,8 @@ def main() -> int:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--phones", type=int, default=50)
     parser.add_argument("--viewers", type=int, default=2)
-    parser.add_argument("--seconds", type=int, default=60)
+    parser.add_argument("--seconds", type=int, default=60, help="how long the phones keep calling once they are all signed in")
+    parser.add_argument("--ramp", type=float, default=0.0, help="seconds over which the phones open the app, one after the other (0: all at once)")
     parser.add_argument("--think", type=float, default=2.0, help="seconds between two calls of a phone (a real employee: about 60)")
     parser.add_argument("--heartbeat", type=float, default=10.0, help="seconds between two heartbeats (a real phone: 60)")
     parser.add_argument("--viewer-pause", type=float, default=2.0, help="seconds between two refreshes of an administrator's live view (the panel: 8)")
@@ -189,6 +203,7 @@ def main() -> int:
     parser.add_argument("--admin-email", default="load-admin@example.com")
     parser.add_argument("--admin-password", default="LoadAdmin-4k8Zp")
     parser.add_argument("--max-p95-ms", type=float, default=1500)
+    parser.add_argument("--max-login-p95-ms", type=float, default=8000, help="a sign-in is one bcrypt check of CPU; a burst of them is slower")
     parser.add_argument("--max-error-percent", type=float, default=0.5)
     parser.add_argument("--insecure", action="store_true", help="do not verify the TLS certificate (a test server)")
     return asyncio.run(main_async(parser.parse_args()))

@@ -40,6 +40,14 @@ def test_numbers_beyond_the_databases_range_are_refused_not_crashed(client, as_a
         assert answer.status_code < 500, (url, answer.status_code, answer.text[:200])
 
 
+def test_a_queue_offset_beyond_any_real_queue_is_refused(client, as_a):
+    """MySQL cannot take an OFFSET beyond its integer range (SQLite quietly can): the fuzz test found a 500 here on MySQL."""
+    for offset in ("102096378373427998308171776", "18446744073709551616", "100001", "-1"):
+        answer = client.get(f"/api/v1/queue?limit=50&offset={offset}", headers=as_a)
+        assert answer.status_code == 422, (offset, answer.status_code)
+    assert client.get("/api/v1/queue?limit=50&offset=100000", headers=as_a).status_code == 200
+
+
 def test_a_csv_download_with_a_filter_the_database_cannot_take_fails_cleanly(client, as_admin):
     """It used to send "200 OK" and the header row, and then cut the connection when the first query failed."""
     answer = client.get(
