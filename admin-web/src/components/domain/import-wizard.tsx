@@ -339,9 +339,14 @@ function ImportBody({ onOpenChange, resumeId }: { onOpenChange: (open: boolean) 
                 <Stat label="have a problem" value={j.invalid_rows} tone="danger" />
               </div>
               {j.file_duplicate_rows > 0 || j.existing_rows > 0 ? (
-                <p className="text-xs text-muted">
-                  {formatNumber(j.existing_rows)} numbers are contacts already{mode === "update" ? " (they will be updated)" : " (they stay as they are)"}
-                  {j.file_duplicate_rows > 0 ? `, and ${formatNumber(j.file_duplicate_rows)} lines repeat a number that is earlier in the same sheet (only the first is used)` : ""}.
+                <p className="text-xs text-muted" data-testid="import-duplicates-note">
+                  {[
+                    j.existing_rows > 0 ? `${pluralize(j.existing_rows, "number")} ${j.existing_rows === 1 ? "is a contact" : "are contacts"} already (${mode === "update" ? "they will be updated" : "they stay as they are"})` : "",
+                    j.file_duplicate_rows > 0 ? `${pluralize(j.file_duplicate_rows, "line")} repeat${j.file_duplicate_rows === 1 ? "s" : ""} a number that is earlier in the same sheet (only the first is used)` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(", and ")}
+                  .
                 </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-3">

@@ -78,7 +78,7 @@ function Body({ employee, onOpenChange }: { employee: Pick<Employee, "id" | "ful
             <p className="mt-1.5">
               {c.must_change_password
                 ? `The saved password is gone (it is kept for ${pluralize(c.keep_days, "day")} at most, and removed when an account is deactivated).`
-                : "This employee has chosen their own password. Nobody can see it - that is on purpose."}{" "}
+                : "Either they chose their own password - nobody can see that, on purpose - or the account was made before passwords were kept for you."}{" "}
               If they cannot sign in, use <b className="text-ink">Reset password</b> to create a new one.
             </p>
           </div>

@@ -126,11 +126,22 @@ def create_employee(db: Session, *, data: EmployeeCreate, actor: Employee, reque
         password_changed_at=utcnow(),
     )
     db.add(employee)
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise Conflict("Employee email or ID already exists.", code="employee_exists") from exc
+    for attempt in range(1, 6):
+        try:
+            db.flush()
+            break
+        except IntegrityError as exc:
+            db.rollback()
+            # two administrators creating somebody at the same moment are given the same next number: the second takes the one after
+            if data.employee_code or attempt == 5 or db.scalars(select(Employee.id).where(Employee.email == data.email)).first():
+                raise Conflict("Employee email or ID already exists.", code="employee_exists") from exc
+            employee = Employee(
+                employee_code=f"EMP{(db.scalar(select(func.max(Employee.id))) or 0) + 1 + secrets.randbelow(5 * attempt):04d}",
+                email=data.email, full_name=data.full_name, phone=data.phone, password_hash=employee.password_hash, role_id=role.id,
+                team_id=data.team_id, is_active=True, daily_target=target, must_change_password=data.must_change_password,
+                device_binding_enabled=data.device_binding_enabled, password_changed_at=employee.password_changed_at,
+            )
+            db.add(employee)
     db.refresh(employee)
     # the first password stays visible to administrators (encrypted) until the employee chooses their own
     credential_vault.store(

@@ -38,14 +38,14 @@ test.describe("the password an administrator handed out", () => {
     await dialog.getByRole("button", { name: "Show Password" }).click();
     await expect(dialog.getByTestId("cred-password")).toHaveText(made.password);
     await expect(dialog).toContainText("audit log");
-    await dialog.getByRole("button", { name: "Close" }).click();
+    await dialog.locator("button", { hasText: /^Close$/ }).click();
 
     // the employee signs in and chooses their own password: nobody can see it - the first one is wiped
     await chooseOwnPassword(request, made.code, made.password, `Chosen-by-me-${id}-9`);
     await page.reload();
     await page.getByRole("button", { name: "Manage" }).click();
     await page.getByTestId("show-password").click();
-    await expect(page.getByTestId("credentials-unavailable")).toContainText("chosen their own password");
+    await expect(page.getByTestId("credentials-unavailable")).toContainText("chose their own password");
     await expect(page.getByTestId("cred-password")).toHaveCount(0);
   });
 
