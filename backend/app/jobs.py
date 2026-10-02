@@ -47,6 +47,26 @@ def submit(name: str, fn: Callable[..., Any], *args: Any) -> None:
     threading.Thread(target=_run, args=(name, fn, args), name=name, daemon=True).start()
 
 
+def clean_upload_tmp(max_age_seconds: int = 24 * 3600) -> int:
+    """Half-received uploads that a crash left behind (the folder of temporary upload files, when it is on the data volume)."""
+    import time
+    from pathlib import Path
+
+    folder = get_settings().upload_tmp_path
+    if not folder or not Path(folder).is_dir():
+        return 0
+    removed = 0
+    limit = time.time() - max_age_seconds
+    for entry in Path(folder).iterdir():
+        try:
+            if entry.is_file() and entry.stat().st_mtime < limit:
+                entry.unlink()
+                removed += 1
+        except OSError:  # pragma: no cover - somebody else removed it, or it is in use
+            continue
+    return removed
+
+
 def tick() -> None:
     """One round of the scheduler. Every step is safe to run in every worker at the same time (leases / one-per-window gates)."""
     from app.core.database import new_session
@@ -68,6 +88,7 @@ def tick() -> None:
             import_service.expire_unconfirmed(db)
             credential_vault.purge_expired(db)
             rebalance_service.recover_stuck_runs(db)
+            clean_upload_tmp()
         except Exception:  # noqa: BLE001
             log.exception("Housekeeping failed")
         finally:

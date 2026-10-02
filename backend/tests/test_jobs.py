@@ -89,3 +89,21 @@ def test_the_scheduler_only_starts_when_background_jobs_are_on(monkeypatch):
         if jobs._scheduler is not None:
             jobs._scheduler.join(2)
         jobs._scheduler = None
+
+
+def test_old_half_received_uploads_are_removed_and_recent_ones_kept(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("UPLOAD_TMP_PATH", str(tmp_path))
+    reset_settings_cache()
+    try:
+        old, recent = tmp_path / "old.tmp", tmp_path / "recent.tmp"
+        old.write_bytes(b"x")
+        recent.write_bytes(b"y")
+        long_ago = time.time() - 3 * 24 * 3600
+        os.utime(old, (long_ago, long_ago))
+        assert jobs.clean_upload_tmp() == 1
+        assert not old.exists() and recent.exists()
+    finally:
+        monkeypatch.undo()
+        reset_settings_cache()

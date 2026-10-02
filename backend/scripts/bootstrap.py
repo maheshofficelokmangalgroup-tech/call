@@ -16,6 +16,9 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from alembic.util.exc import CommandError
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 
@@ -47,6 +50,17 @@ def wait_for_database(timeout_seconds: int) -> None:
 def run_migrations() -> None:
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    # A version that is put back after a failed deploy meets a database that a newer version already changed. Migrations only ever add
+    # (columns with defaults, tables, indexes), which an older version does not mind - so it must start on it, not stop because it has
+    # never heard of the newest revision.
+    with get_engine().connect() as conn:
+        current = MigrationContext.configure(conn).get_current_revision()
+    if current is not None:
+        try:
+            ScriptDirectory.from_config(cfg).get_revision(current)
+        except CommandError:
+            log.warning("The database is at revision %s, which is newer than this version knows: it is used as it is.", current)
+            return
     command.upgrade(cfg, "head")
 
 
