@@ -270,7 +270,7 @@ jobs:
           JWT_SECRET=ci-jwt-secret-0123456789-0123456789-0123456789-0123456789
           STORAGE_BACKEND=local
           BOOTSTRAP_ADMIN_EMAIL=admin@ci.example.com
-          BOOTSTRAP_ADMIN_PASSWORD=Ci-Admin-Passw0rd
+          BOOTSTRAP_ADMIN_PASSWORD=Quartz-Mango-7731-ok
           ADMIN_IMAGE=
           API_IMAGE=
           EOF
@@ -301,7 +301,7 @@ jobs:
           curl -fsS http://localhost/login | grep -qi 'Welcome back'
           # signing in through the panel, and asking for data with the session
           curl -fsS -c jar.txt -X POST http://localhost/api/auth/login -H 'content-type: application/json' -H 'x-requested-with: admin-web' \
-            -d '{"identifier":"admin@ci.example.com","password":"Ci-Admin-Passw0rd"}' | grep '"role":"admin"'
+            -d '{"identifier":"admin@ci.example.com","password":"Quartz-Mango-7731-ok"}' | grep '"role":"admin"'
           grep -q ec_at jar.txt
           curl -fsS -b jar.txt http://localhost/api/backend/analytics/overview | grep '"totals"'
           curl -fsS -b jar.txt http://localhost/api/backend/settings | grep '"default_daily_target"'

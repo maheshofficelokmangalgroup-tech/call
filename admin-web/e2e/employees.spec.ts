@@ -163,7 +163,8 @@ test.describe("creating an employee", () => {
     await expect(row).toHaveCount(1);
     await expect(row).toContainText(name);
     await expect(row).toContainText("Sales Team A");
-    await expect(row).toContainText("Offline");
+    // they have just signed in on the phone (above), so the panel shows them as online
+    await expect(row).toContainText("Online");
   });
 
   test("an email that is already used is refused", async ({ page }) => {

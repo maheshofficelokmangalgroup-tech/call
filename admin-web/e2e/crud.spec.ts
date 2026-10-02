@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { login, panelGet, unique } from "./helpers";
+import { login, panelGet, searchFor, unique } from "./helpers";
 
 /** A valid Indian mobile number nobody has used yet. */
 const mobile = () => `9${Math.floor(100000000 + Math.random() * 899999999)}`;
@@ -98,11 +98,13 @@ test.describe("contacts", () => {
     await page.getByTestId("contact-submit").click();
     await expect(page.getByText("Contact saved")).toBeVisible();
     await expect(drawer).toContainText(`${name} edited`);
+    // Escape goes to the topmost layer: let the form finish closing first, or it is the form that takes the key
+    await expect(page.getByTestId("contact-name")).toBeHidden();
     await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
 
     // hand it to Priya Joshi
-    await page.getByTestId("contact-search").fill(`${name} edited`);
-    // wait for the new result: a row of the old list would be deselected the moment the new list arrives
+    await searchFor(page, page.getByTestId("contact-search"), `${name} edited`, "contacts");
     await expect(page.getByTestId("contact-row")).toHaveCount(1);
     await expect(page.getByTestId("contact-row")).toContainText(`${name} edited`);
     await page.getByTestId("contact-row").getByRole("checkbox").click();

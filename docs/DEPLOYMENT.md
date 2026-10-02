@@ -110,32 +110,83 @@ Edit `.env.production`, then `docker compose -f docker-compose.prod.yml --env-fi
 
 ## Small servers (1 GB) — use prebuilt images
 
-Building the panel needs about 2 GB of memory. On a smaller server let GitHub build the images instead (the workflow
-`Publish images` runs for every version tag) and set these two lines in `.env.production`:
+Building the panel needs about 2 GB of memory. On a smaller server use the images that GitHub builds (see the next section: the
+`Deploy` workflow pushes them to `ghcr.io/<owner>/<repo>/admin` and `/api`) and set these two lines in `.env.production`:
 
 ```
-ADMIN_IMAGE=ghcr.io/<owner>/call/admin:latest
-API_IMAGE=ghcr.io/<owner>/call/api:latest
+ADMIN_IMAGE=ghcr.io/<owner>/<repo>/admin:latest
+API_IMAGE=ghcr.io/<owner>/<repo>/api:latest
 ```
 
 If the repository is private, sign the server in to the registry once:
 `echo <token> | docker login ghcr.io -u <github-user> --password-stdin` (the token needs the `read:packages` permission).
 `bash deploy/update.sh` then pulls instead of building.
 
-## Updating automatically from GitHub
+## An existing server with the database on RDS (shared-server mode)
 
-The workflow **Deploy** (`.github/workflows/deploy.yml`) connects to the server over SSH and runs `deploy/update.sh`.
-Add these under *Settings → Secrets and variables → Actions*:
+Use this when the server **already runs other projects** (their nginx owns ports 80 and 443) and the data should live on an
+**AWS RDS** MySQL server instead of a database container. Everything is in `deploy/shared/`; nothing of the other projects is
+touched. This is how the production system of this repository is deployed.
 
-| Secret | Value |
+| Part | How |
 |---|---|
-| `DEPLOY_HOST` | the server's address |
-| `DEPLOY_USER` | the SSH user (it must be allowed to run Docker, e.g. `root`) |
-| `DEPLOY_SSH_KEY` | a private key whose public half is in the server's `~/.ssh/authorized_keys` |
-| `DEPLOY_PATH` | the project folder on the server, e.g. `/root/call` |
+| Containers | `calling-api`, `calling-admin`, `calling-redis`, `calling-caddy` (project name `calling`), memory-limited, logs rotated |
+| Database | RDS, a **dedicated user** that can reach only its own database (`deploy/shared/create-database-user.sh`), connection limit 12, TLS verified with the RDS certificate bundle |
+| Address | one HTTPS port of its own (default **8445**) - open it in the EC2 security group. Without a domain a free name such as `13-205-79-72.sslip.io` (the IP with dashes) works; with a domain put it in `PUBLIC_HOST` |
+| Certificate | Let's Encrypt in certbot *webroot* mode through the existing nginx (`issue-cert.sh`); renewed weekly by the `Certificate` workflow |
+| Images | built by GitHub Actions and pulled by the server; the server never builds |
+| Recordings | in the `calling_api_data` Docker volume (add S3 later with `STORAGE_BACKEND=s3`) |
 
-Run it from *Actions → Deploy → Run workflow*. Set the repository variable `AUTO_DEPLOY` to `true` to deploy on every push
-to `main` as well.
+**First-time setup** (once, on the server; the repository is cloned to `~/calling`):
+
+```bash
+cd ~/calling/deploy/shared
+# 1. a database user that reaches only Calling_db (the RDS master password is used here, once, and never stored)
+RDS_ADMIN_PASSWORD='...' DB_HOST=<rds-endpoint> DB_PASSWORD='<28 letters and digits>' bash create-database-user.sh
+# 2. the settings file with fresh secrets (prints the first administrator's password once)
+PUBLIC_HOST=<name> HTTPS_PORT=8445 ACME_EMAIL=<you> ADMIN_EMAIL=<you> API_IMAGE=ghcr.io/<owner>/<repo>/api \
+ADMIN_IMAGE=ghcr.io/<owner>/<repo>/admin DATABASE_URL='mysql+pymysql://calling_app:<password>@<rds-endpoint>:3306/Calling_db?charset=utf8mb4&ssl_ca=/certs/rds-ca.pem' bash setup.sh
+# 3. the certificate (a practice run first), then the first start
+bash issue-cert.sh --dry-run && bash issue-cert.sh
+bash deploy.sh
+```
+
+Afterwards updates are automatic (next section). Useful commands, from `deploy/shared`:
+
+```bash
+docker compose --env-file .env ps                    # what runs
+docker compose --env-file .env logs -f --tail=100 api
+bash deploy.sh                                       # newest images; or:  bash deploy.sh sha-1a2b3c4 <commit>  for an exact version
+bash renew-cert.sh                                   # renew the certificate now if it has less than 30 days left
+```
+
+The RDS server limits the number of connections for **all** projects on it, so this system uses at most 8 (2 workers x 4) and its
+database user is capped at 12. Backups of the database are RDS's automated backups (check their retention in the AWS console);
+the recordings in the volume are not part of them - copy the volume now and then or move recordings to S3.
+
+## Updating automatically from GitHub (CI/CD)
+
+```
+push to main -> CI (API on SQLite + MySQL, app, panel, browser tests, Docker stack)
+             -> Deploy: build the panel and API images (ghcr.io) -> SSH -> server pulls exactly that commit's images,
+                restarts, waits until healthy -> the public address is checked
+```
+
+* **Deploy** (`.github/workflows/deploy.yml`) starts by itself when CI passes on `main` and the push changed something that runs on
+  the server (panel, API, deployment files); documents and app-only changes do not redeploy. *Actions -> Deploy -> Run workflow*
+  deploys the branch or commit you choose - use it to **roll back** (pick an older commit). Set the repository variable
+  `AUTO_DEPLOY=false` to switch the automatic part off.
+* **Certificate** (`.github/workflows/certificate.yml`) renews the HTTPS certificate every Monday when it has less than 30 days left.
+* Secrets (*Settings -> Secrets and variables -> Actions*): `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`
+  (the server's SSH host keys, so a different machine at that address is refused). Variable: `PUBLIC_URL`.
+* The SSH key is a **dedicated deploy key**, not your login key. In the server's `~/.ssh/authorized_keys` it is written as
+  `command="/home/ubuntu/calling/deploy/shared/ci-entry.sh",restrict ssh-ed25519 ...`, so it can run exactly two things:
+  `deploy <tag> <commit>` and `renew-cert` - no shell, no file copy, no port forwarding. To revoke it, delete that line.
+* The images are downloaded with the workflow's temporary token, kept in a Docker login of its own (`~/calling/.docker`), apart from
+  the logins of other projects on the server.
+
+For the generic all-in-one server (the first sections of this guide) `deploy/update.sh` is the update command and a plain
+SSH workflow can call it.
 
 ## Security notes
 

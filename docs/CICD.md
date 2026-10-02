@@ -6,16 +6,17 @@ Four workflows live in [.github/workflows/](../.github/workflows):
 |---|---|---|---|
 | `ci.yml` | every push to `main`, every pull request | API tests on SQLite **and MySQL 8.4**; app type-check, lint, Jest; admin panel type-check, lint, unit tests and a production build; "panel and API agree" (generated types are current); the panel in a **real browser** (Playwright) against a real API with demo data; the **production Docker stack** started and used (sign in, data, backup) | ~10-15 min |
 | `android.yml` | push to `main` (app files), push of a `v*` tag, **Run workflow** button | builds the **signed release APK** (arm64) on GitHub's server | first build ~25 min, later ~8 min (cached) |
-| `images.yml` | push of a `v*` tag, **Run workflow** | builds the server images (panel + API) and stores them in the registry `ghcr.io/<owner>/<repo>/{admin,api}` so a small server can download instead of build | ~5 min |
-| `deploy.yml` | **Run workflow**; every push to `main` that touches the panel / API / deploy files **when** the variable `AUTO_DEPLOY` is `true` | logs in to the server over SSH and runs `deploy/update.sh` | ~2 min |
+| `deploy.yml` | automatically when **CI is green on `main`** and the push changed the panel, the API or the deployment files; **Run workflow** (deploys the branch / commit you pick - also the way to **roll back**) | builds the panel and API images into `ghcr.io/<owner>/<repo>/{admin,api}`, then updates the server over SSH to exactly that commit and checks the public address | ~6-8 min |
+| `certificate.yml` | every Monday, **Run workflow** | renews the server's HTTPS certificate when it has less than 30 days left | ~1 min |
 
 Changes that only touch the panel, the server files or the docs do **not** start an APK build, and app-only changes do not start
 a deployment.
 
-### Server deployment secrets (only for `deploy.yml`)
+### Server deployment secrets (`deploy.yml`, `certificate.yml`)
 
-`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` (secrets) and optionally the variables `AUTO_DEPLOY=true` and
-`PUBLIC_URL=https://calling.example.com` (the workflow then checks the site answers after the update). See [DEPLOYMENT.md](DEPLOYMENT.md).
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (secrets) and the variable `PUBLIC_URL`
+(e.g. `https://13-205-79-72.sslip.io:8445`; the workflow checks it answers after the update). Switch the automatic deployment off with
+the variable `AUTO_DEPLOY=false`. The SSH key is a dedicated deploy key restricted on the server to two commands. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## APK कुठे मिळतो
 
