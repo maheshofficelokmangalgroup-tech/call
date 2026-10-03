@@ -398,6 +398,16 @@ jobs:
           docker run --rm -e PUBLIC_HOST=localhost -e HTTPS_PORT=8445 \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/letsencrypt:/certs:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile
 
+      - name: The front door lets a sheet and a recording through and refuses every other large body (both Caddyfiles, tried with the real Caddy)
+        run: |
+          # (a Caddyfile can be valid and still refuse what it must let through: a limit for the whole site overrules the larger limits of
+          # one path - that is how a 12 MB sheet and every recording above 2 MB were refused on the real server)
+          docker create --name caddy-binary caddy:2 >/dev/null
+          docker cp caddy-binary:/usr/bin/caddy ./caddy-binary
+          docker rm caddy-binary >/dev/null
+          python3 deploy/check_caddy_limits.py --caddy ./caddy-binary --caddyfile deploy/shared/Caddyfile
+          python3 deploy/check_caddy_limits.py --caddy ./caddy-binary --caddyfile deploy/Caddyfile
+
       - name: Start it
         working-directory: deploy/shared
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env up -d
@@ -437,6 +447,47 @@ jobs:
           test "$(curl -ks -o /dev/null -w '%{http_code}' -X POST https://localhost:8445/api/v1/auth/login -H 'content-type: application/json' --data-binary @big.json)" = 413
           # answers of the API may not be stored by anybody
           curl -ksI https://localhost:8445/api/v1/me | grep -i '^cache-control: no-store'
+
+      - name: A sheet of 12 MB goes through the front door, the panel and the API (the way an administrator uploads it)
+        working-directory: deploy/shared
+        run: |
+          set -euo pipefail
+          C=(docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env)
+          # an administrator who has chosen a password already (the first one may only open the password screens)
+          "${C[@]}" exec -T api python - <<'PY'
+          from sqlalchemy import select
+
+          from app.core.database import new_session
+          from app.core.security import hash_password
+          from app.core.timeutils import utcnow
+          from app.models.employee import Employee, Role
+
+          db = new_session()
+          role = db.scalars(select(Role).where(Role.name == "admin")).one()
+          db.add(Employee(employee_code="CIUP1", email="uploader@ci.example.com", full_name="CI uploader", password_hash=hash_password("Quartz-Mango-7731-ok"),
+                          role_id=role.id, daily_target=0, must_change_password=False, password_changed_at=utcnow()))
+          db.commit()
+          PY
+          curl -ksf -c up.txt -X POST https://localhost:8445/api/auth/login -H 'content-type: application/json' -H 'x-requested-with: admin-web' \
+            -d '{"identifier":"uploader@ci.example.com","password":"Quartz-Mango-7731-ok"}' | grep '"must_change_password":false'
+          python3 - > sheet.csv <<'PY'
+          print("name,phone,city,notes")
+          for i in range(28000):
+              print(f"CI sheet {i},{6200000000 + i},Pune,{'x' * 400}")
+          PY
+          size="$(stat -c %s sheet.csv)"; echo "the sheet is $size bytes"
+          test "$size" -gt 10000000   # above every default limit of a proxy (and 5 times what the front door allows for an ordinary request)
+          answer="$(curl -ksf -b up.txt -X POST https://localhost:8445/api/backend/contacts/import -H 'x-requested-with: admin-web' -F 'file=@sheet.csv;type=text/csv' -F mode=skip)"
+          id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$answer")"
+          state=""
+          for _ in $(seq 1 90); do
+            state="$(curl -ksf -b up.txt "https://localhost:8445/api/backend/contacts/import/$id" | python3 -c 'import json,sys; j=json.load(sys.stdin); print(j["status"], j["total_rows"], j["valid_rows"])')"
+            case "$state" in previewed*|failed*) break ;; esac
+            sleep 2
+          done
+          echo "the import: $state"
+          test "$state" = "previewed 28000 28000"   # every line arrived and was checked; nothing is added to the contacts
+          curl -ksf -b up.txt -X POST "https://localhost:8445/api/backend/contacts/import/$id/cancel" -H 'x-requested-with: admin-web' >/dev/null
 
       - name: Logs when something failed
         if: failure() && hashFiles('deploy/shared/.env') != ''
