@@ -130,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.models.imports import Import
     from app.models.system import Notification, Setting
     from app.services import activity
+    from app.services.settings_service import get_setting
 
     report = Report()
     run_id = secrets.token_hex(3)
@@ -153,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
     report.say(f"Before: {before}")
     previous_auto = db.get(Setting, "auto_rebalance")
     previous_auto_value = previous_auto.value if previous_auto else None
+    db.rollback()
+    auto_seen_before = bool(get_setting(db, "auto_rebalance"))  # what the server's workers read (through the settings they remember)
     db.rollback()
     admin_password = secrets.token_urlsafe(18) + "aA1!"
     admin_email = f"zz-selftest-{run_id}@example.com"
@@ -336,6 +339,10 @@ def main(argv: list[str] | None = None) -> int:
         after = snapshot()
         report.say(f"After:  {after}")
         report.check(after == before or args.keep, "the database is as it was (employees, contacts, assignments, imports, runs, credentials, notifications)")
+        if not args.keep:
+            seen_after = bool(get_setting(db, "auto_rebalance"))
+            db.rollback()
+            report.check(seen_after == auto_seen_before, f"the automatic sharing reads {auto_seen_before} again, also in the settings the workers remember (it reads {seen_after})")
         db.close()
     if report.failures:
         report.say(f"\n{len(report.failures)} CHECK(S) FAILED")
@@ -381,12 +388,14 @@ def _clean(db, report: Report, run_id: str, admin_email: str, employee_ids: list
     """Remove every row and file this run made, in an order the foreign keys allow, and put the setting back."""
     from sqlalchemy import delete, or_, select, update
 
+    from app.core import cache
     from app.core.config import get_settings
     from app.models.contact import Contact, ContactAssignment
     from app.models.distribution import DistributionRun, EmployeeCredential
     from app.models.employee import Employee
     from app.models.imports import Import, ImportRow
     from app.models.system import AuditLog, Notification, Setting
+    from app.services.settings_service import EPOCH as SETTINGS_EPOCH
 
     db.rollback()
     people = set(employee_ids) | set(db.scalars(select(Employee.id).where(Employee.email == admin_email)))
@@ -417,6 +426,7 @@ def _clean(db, report: Report, run_id: str, admin_email: str, employee_ids: list
     elif row is not None:
         row.value = previous_auto_value
         row.updated_by = None
+    cache.bump(db, SETTINGS_EPOCH)  # (written here and not through the settings service: the copy every worker remembers must be thrown away too)
     db.commit()
     root = Path(get_settings().import_storage_path).resolve()
     for folder in folders:
