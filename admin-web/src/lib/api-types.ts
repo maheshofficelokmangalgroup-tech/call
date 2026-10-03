@@ -1577,7 +1577,6 @@ export interface components {
             default_priority: number;
             /**
              * File
-             * Format: binary
              * @description CSV or XLSX file with a header row
              */
             file: string;
@@ -1592,7 +1591,6 @@ export interface components {
         Body_upload_recording_api_v1_recordings__recording_id__upload_post: {
             /**
              * File
-             * Format: binary
              * @description The audio file
              */
             file: string;
@@ -4034,6 +4032,10 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
