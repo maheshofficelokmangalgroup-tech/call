@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, api, buildQuery, downloadUrl, errorMessage, mediaUrl, parseError } from "@/lib/api";
+import { ApiError, api, buildQuery, downloadUrl, errorMessage, mediaUrl, parseError, plainStatus, upload } from "@/lib/api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -46,7 +46,14 @@ describe("error answers", () => {
 
   it("still gives a sensible message when the answer is not JSON", async () => {
     const err = await parseError(new Response("<html>Bad gateway</html>", { status: 502 }));
-    expect(err).toMatchObject({ status: 502, code: "http_error", message: "The server answered 502." });
+    expect(err).toMatchObject({ status: 502, code: "http_error", message: "The server is restarting or busy. Wait a minute and try again." });
+    expect(await parseError(new Response("", { status: 418 }))).toMatchObject({ message: "The server answered 418." });
+  });
+
+  it("says in plain words that a request was too large (the front door answers 413 without a message)", async () => {
+    expect(await parseError(new Response("", { status: 413 }))).toMatchObject({ status: 413, message: "That is more than the server accepts in one request." });
+    expect(plainStatus(413, true)).toContain("up to 200 MB");
+    expect(plainStatus(504)).toContain("restarting or busy");
   });
 
   it("chooses what to show a person", () => {
@@ -108,5 +115,46 @@ describe("api()", () => {
     const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
     await expect(api("teams")).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+describe("upload()", () => {
+  /** A stand-in for the browser's XMLHttpRequest that answers with `status` and `body` as soon as the form is sent. */
+  function answerWith(status: number, body: string) {
+    class FakeXhr {
+      upload: { onprogress?: (event: unknown) => void } = {};
+      status = 0;
+      responseText = "";
+      onload?: () => void;
+      open() {}
+      setRequestHeader() {}
+      getResponseHeader() {
+        return null;
+      }
+      abort() {}
+      send() {
+        queueMicrotask(() => {
+          this.status = status;
+          this.responseText = body;
+          this.onload?.();
+        });
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", FakeXhr);
+  }
+
+  it("resolves with the answer of the API", async () => {
+    answerWith(202, JSON.stringify({ id: 7, status: "checking" }));
+    await expect(upload("contacts/import", { form: new FormData() })).resolves.toEqual({ id: 7, status: "checking" });
+  });
+
+  it("keeps the API's own message when it has one", async () => {
+    answerWith(413, JSON.stringify({ error: { code: "file_too_large", message: "The sheet is 230 MB; the limit is 200 MB." } }));
+    await expect(upload("contacts/import", { form: new FormData() })).rejects.toMatchObject({ status: 413, code: "file_too_large", message: "The sheet is 230 MB; the limit is 200 MB." });
+  });
+
+  it("explains the front door's bare 413 (a sheet that is too big) instead of 'The server answered 413.'", async () => {
+    answerWith(413, "");
+    await expect(upload("contacts/import", { form: new FormData() })).rejects.toMatchObject({ status: 413, message: expect.stringContaining("up to 200 MB") });
   });
 });

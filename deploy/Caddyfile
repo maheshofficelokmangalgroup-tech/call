@@ -58,12 +58,19 @@
 		}
 	}
 
+	# The limit of everything else (a small JSON document) is written INSIDE each of these two blocks, never once for the whole site: a
+	# limit outside of the blocks is applied first, to every request, and the larger limits above could not raise it (the smaller one
+	# wins) - that is how a 12 MB sheet and every recording above 2 MB were refused. deploy/check_caddy_limits.py tries it.
+
 	# The mobile app and anything else that speaks to the API directly. The health check is public; the readiness check
 	# (which reveals the state of the database) is not.
 	@api path /api/v1/* /health
 	handle @api {
+		request_body {
+			max_size 2MB
+		}
 		reverse_proxy api:8000 {
-			# recordings are sent in one piece and can be large
+			# (the recordings and the sheets have their own blocks above)
 			transport http {
 				read_timeout 5m
 				write_timeout 5m
@@ -73,16 +80,15 @@
 
 	# Everything else is the admin panel (its own /api/backend and /api/auth routes included)
 	handle {
+		request_body {
+			max_size 2MB
+		}
 		reverse_proxy admin:3000 {
 			transport http {
 				read_timeout 10m
 				write_timeout 10m
 			}
 		}
-	}
-
-	request_body {
-		max_size 2MB
 	}
 
 	header {
