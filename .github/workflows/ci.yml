@@ -738,3 +738,9 @@ jobs:
           mysql -h 127.0.0.1 -uroot -proot -e 'DROP DATABASE calling_scale; CREATE DATABASE calling_scale CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;' 2>/dev/null || true
           python -m scripts.bootstrap
           python -m scripts.scale_check --rows 100000 --existing 10000 --xlsx --max-rss-mb 1200 --max-endpoint-seconds 20
+
+      - name: A voter list - one row per number; the rows of one person become one contact with all their numbers (every row accounted for, no number twice)
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot -e 'DROP DATABASE calling_scale; CREATE DATABASE calling_scale CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;' 2>/dev/null || true
+          python -m scripts.bootstrap
+          python -m scripts.voter_check --rows 120000 --max-rss-mb 1200 --max-endpoint-seconds 20

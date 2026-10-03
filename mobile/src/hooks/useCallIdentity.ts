@@ -9,13 +9,14 @@ import type { LiveCall } from '../services/telephony/native';
 import { telephony } from '../services/telephony/native';
 import { useAuth } from '../store/authStore';
 import { formatPhone } from '../utils/format';
+import { personLine } from '../utils/people';
 
 export interface CallIdentity {
   /** what to show as the title: CRM name, else device-contact / caller-ID name, else the number */
   title: string;
   /** the number, formatted */
   phone: string;
-  /** location / category of the CRM contact */
+  /** relative / age / gender, location and category of the CRM contact */
   subtitle: string | null;
   contact: Contact | null;
   /** the CRM call row (only for calls started from the app) */
@@ -61,7 +62,7 @@ export function useCallIdentity(call: LiveCall | null): CallIdentity {
       if (!alive) return;
       const phone = number ? formatPhone(number) : 'Unknown number';
       const title = localCall?.contactName ?? contact?.name ?? deviceName ?? phone;
-      const subtitle = [contact?.location, contact?.category].filter(Boolean).join(' • ') || null;
+      const subtitle = [contact ? personLine(contact) : null, contact?.location, contact?.category].filter(Boolean).join(' • ') || null; // (a voter: relative, age, gender)
       setResolved({ callId, identity: { title, phone, subtitle, contact, localCall, inCrm: Boolean(contact || localCall?.contactId), employeeId } });
       const key = `${callId}|${title}|${subtitle}`;
       if (announced.current !== key) {

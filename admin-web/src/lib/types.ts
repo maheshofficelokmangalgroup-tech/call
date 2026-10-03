@@ -45,6 +45,7 @@ export type Settings = S["SettingsOut"];
 export type Disposition = S["DispositionOut"];
 
 export type Contact = S["ContactBrief"];
+export type ContactPhone = S["PhoneOut"];
 export type ContactCreate = S["ContactCreate"];
 export type ContactUpdate = S["ContactUpdate"];
 export type AssignRequest = S["AssignRequest"];

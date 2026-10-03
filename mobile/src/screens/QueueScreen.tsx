@@ -25,6 +25,7 @@ import { syncEngine } from '../services/sync/syncEngine';
 import { colors, fonts, radius, shadow } from '../theme';
 import { formatPhone, pluralize } from '../utils/format';
 import { haptics } from '../utils/haptics';
+import { dialNumber } from '../utils/people';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Segment = 'today' | 'all';
@@ -43,11 +44,11 @@ export function QueueScreen() {
   const first = items[0];
 
   const callQueueItem = useCallback(
-    (item: QueueItem) => void call({ contactId: item.contact.id, contactName: item.contact.name, phone: item.contact.phone, campaignId: item.campaign?.id ?? null }),
+    (item: QueueItem) => void call({ contactId: item.contact.id, contactName: item.contact.name, phone: dialNumber(item.contact), campaignId: item.campaign?.id ?? null }),
     [call],
   );
   const callContact = useCallback(
-    (contact: Contact) => void call({ contactId: contact.id, contactName: contact.name, phone: contact.phone }),
+    (contact: Contact) => void call({ contactId: contact.id, contactName: contact.name, phone: dialNumber(contact) }),
     [call],
   );
   const open = useCallback((contact: Contact) => navigation.navigate('ContactDetail', { contactId: contact.id, preview: contact }), [navigation]);
@@ -186,7 +187,7 @@ export function QueueScreen() {
               {first.contact.name}
             </Text>
             <Text variant="caption" color="rgba(255,255,255,0.8)" numberOfLines={1}>
-              {formatPhone(first.contact.phone)}
+              {formatPhone(dialNumber(first.contact))}
             </Text>
           </View>
           <Button title="Call" icon="phone" variant="white" size="md" onPress={() => callQueueItem(first)} testID="next-call" />

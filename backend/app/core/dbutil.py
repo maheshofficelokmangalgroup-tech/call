@@ -9,13 +9,34 @@ from typing import Any, TypeVar
 
 from sqlalchemy import Table, insert
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import ClauseElement
+from sqlalchemy.sql.visitors import InternalTraversal
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 
 # MySQL: 1205 lock wait timeout, 1213 deadlock, 2006 / 2013 / 2014 connection lost - all go away when the work is simply tried again
 _TRANSIENT_MYSQL = {1205, 1213, 2006, 2013, 2014, 2055}
+
+
+class KeepExistingRow(ClauseElement):
+    """MySQL's `ON DUPLICATE KEY UPDATE col = col`: the row that is there stays exactly as it is. It is written like this, and not with
+    SQLAlchemy's own on_duplicate_key_update(), for the sake of the driver - see `insert_ignore`."""
+
+    __visit_name__ = "keep_existing_row"
+    _traverse_internals = [("column_name", InternalTraversal.dp_string)]
+    inherit_cache = True
+
+    def __init__(self, column_name: str) -> None:
+        self.column_name = column_name
+
+
+@compiles(KeepExistingRow, "mysql")
+def _render_keep_existing_row(element: KeepExistingRow, compiler: Any, **kw: Any) -> str:
+    name = compiler.preparer.quote(element.column_name)
+    return f"ON DUPLICATE KEY UPDATE {name} = {name}"
 
 
 def insert_ignore(db: Session, table: Table, rows: list[dict[str, Any]], *, conflict_column: str | tuple[str, ...]) -> None:
@@ -28,8 +49,13 @@ def insert_ignore(db: Session, table: Table, rows: list[dict[str, Any]], *, conf
     if dialect == "mysql":
         from sqlalchemy.dialects.mysql import insert as mysql_insert
 
-        # "set the column to what it is" - the row that is already there stays exactly as it is
-        statement = mysql_insert(table).on_duplicate_key_update({columns[0]: table.c[columns[0]]})
+        # "set the column to what it is" - the row that is already there stays exactly as it is.
+        # Not on_duplicate_key_update(): that one makes SQLAlchemy put "AS new" in front of ON DUPLICATE, and pymysql's pattern for
+        # "INSERT ... VALUES (...) ON DUPLICATE KEY" does not know it. The pattern then takes seconds to fail (the more columns the
+        # longer: 6 s for 2,000 contacts) and every row is sent as a statement of its own. Written as `KeepExistingRow` pymysql
+        # joins the rows into statements of up to 1 MB: a few round trips for a whole step.
+        statement = mysql_insert(table)
+        statement._post_values_clause = KeepExistingRow(table.c[columns[0]].name)
     elif dialect == "sqlite":
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 

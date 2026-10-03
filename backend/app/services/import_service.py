@@ -2,8 +2,10 @@
 
   upload   the file is stored (private folder, size limits, free disk checked); a background job then checks it      validating
   check    row by row, never the whole file in memory:
-             valid rows       -> valid.jsonl
-             the number is already a contact -> existing.jsonl       (compared in batches against a unique index)
+             rows that say they are the same person (a voter list has the same voter on several rows, one number each) become ONE
+             person with all their numbers (on disk, a part at a time)
+             valid people     -> valid.jsonl
+             a number is already a contact -> existing.jsonl       (compared in batches against a unique index)
              anything wrong / the same number twice in the sheet -> issues.csv  (the whole list; the first rows also in the database
              for the preview)                                                                                        previewed
   plan     who is working right now and how many each of them would get (activity.py, distribution.py)
@@ -45,7 +47,7 @@ from app.core.dbutil import insert_ignore, retry_transient
 from app.core.errors import AppError, Conflict, NotFound, PayloadTooLarge, ValidationFailed
 from app.core.timeutils import utcnow
 from app.models.cache_events import EVERYONE, QUIET, employee_epoch
-from app.models.contact import Campaign, CampaignContact, Contact, ContactAssignment
+from app.models.contact import Campaign, CampaignContact, Contact, ContactAssignment, ContactPhone
 from app.models.employee import ROLE_EMPLOYEE, Employee
 from app.models.imports import (
     IMPORT_APPLYING,
@@ -61,17 +63,18 @@ from app.models.imports import (
     ImportRow,
 )
 from app.schemas.distribution import DistributionIn, ImportPlanOut, PlanEmployee
-from app.services import activity, audit_service, workload
+from app.services import activity, audit_service, contact_numbers, workload
 from app.services.contact_service import build_search_text, refresh_search_text
 from app.services.distribution import ORDERS, STRATEGIES, Recipient, Schedule, quotas
 from app.services.import_files import SheetError, open_sheet
-from app.services.import_rows import map_headers, validate_row
+from app.services.import_rows import map_headers, person_key, validate_row
 from app.services.notification_service import notify
 
 log = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx"}
-SOURCE, VALID, EXISTING, ISSUES = "source", "valid.jsonl", "existing.jsonl", "issues.csv"
+SOURCE, VALID, EXISTING, ISSUES, ROWS, EXTEND = "source", "valid.jsonl", "existing.jsonl", "issues.csv", "rows.jsonl", "extend.jsonl"
+GROUP_PARTS = 64  # the rows are split into this many files by person while they are put together
 LOOKUP_BATCH = 1000  # numbers compared with the contacts in one query
 VALID_SAMPLE = 200  # valid rows kept in the database for the preview
 MAX_ATTEMPTS = 5  # a job that has been taken over this many times (it keeps crashing) is given up
@@ -311,13 +314,14 @@ def _scan(db: Session, imp: Import, owner: str) -> dict[str, Any]:
     with open_sheet(Path(imp.file_path), imp.file_type) as sheet:
         counts["headers"] = list(sheet.headers)
         canonical, custom = map_headers(sheet.headers)
+        sheet_columns = ", ".join(f"'{h}'" for h in [str(h).strip() for h in sheet.headers if str(h).strip()][:12])  # (what the sheet has: the person can see what to rename)
         if "phone" not in canonical.values():
-            raise SheetError("No mobile number column found. Name a column 'Mobile' or 'Phone'.")
+            raise SheetError(f"No mobile number column found. Name a column 'Mobile' or 'Phone'. The columns of the sheet are: {sheet_columns or 'none'}.")
         if "name" not in canonical.values():
-            raise SheetError("No name column found. Name a column 'Name'.")
+            raise SheetError(f"No name column found. Name a column 'Name'. The columns of the sheet are: {sheet_columns or 'none'}.")
         db.execute(delete(ImportRow).where(ImportRow.import_id == imp.id))  # a fresh start (this is a second try, or a takeover)
         db.commit()
-        with open(folder / VALID, "w", encoding="utf-8", newline="\n") as valid_file, open(folder / ISSUES, "w", encoding="utf-8", newline="") as issues_file:
+        with open(folder / ROWS, "w", encoding="utf-8", newline="\n") as valid_file, open(folder / ISSUES, "w", encoding="utf-8", newline="") as issues_file:
             issues = csv.writer(issues_file)
             issues.writerow(["row_number", "status", "problem", *[_csv_safe(h) for h in sheet.headers]])
             for row_number, cells in sheet.rows():
@@ -342,7 +346,8 @@ def _scan(db: Session, imp: Import, owner: str) -> dict[str, Any]:
                                 {
                                     "r": row_number, "n": data["name"], "p": data["phone_raw"], "m": result.normalized_phone, "e": data["email"],
                                     "l": data["location"], "c": data["category"], "pr": data["priority"], "t": data["tags"],
-                                    "cf": data["custom_fields"], "a": data["assigned_employee_id"],
+                                    "cf": data["custom_fields"], "a": data["assigned_employee_id"], "rn": data["relative_name"], "ag": data["age"],
+                                    "g": data["gender"], "ep": data["epic_no"], "pc": data["pincode"], "ad": data["address"], "k": person_key(data),
                                 }
                             )
                             + "\n"
@@ -387,8 +392,9 @@ def _read_lines(path: Path, skip: int = 0) -> Iterator[dict[str, Any]]:
 def _original_cells(headers_by_position: dict[int, str], width: int, row: dict[str, Any]) -> list[str]:
     """Rebuild the cells of a row from what was read of it (for the report of rows that are already contacts)."""
     cells = [""] * width
-    by_key = {"name": row.get("n"), "phone": row.get("p"), "email": row.get("e"), "location": row.get("l"), "category": row.get("c"),
-              "priority": row.get("pr"), "tags": ", ".join(row.get("t") or [])}
+    by_key = {"name": row.get("n"), "phone": " / ".join(raw for _, raw in _all_numbers(row)), "email": row.get("e"), "location": row.get("l"),
+              "category": row.get("c"), "priority": row.get("pr"), "tags": ", ".join(row.get("t") or []), "relative_name": row.get("rn"),
+              "age": row.get("ag"), "gender": row.get("g"), "epic_no": row.get("ep"), "pincode": row.get("pc"), "address": row.get("ad")}
     custom = row.get("cf") or {}
     for idx, key in headers_by_position.items():
         if idx < width:
@@ -396,49 +402,177 @@ def _original_cells(headers_by_position: dict[int, str], width: int, row: dict[s
     return cells
 
 
+def _all_numbers(row: dict[str, Any]) -> list[tuple[str, str]]:
+    """[(normalized, as written)] of a person: the first number, then the others."""
+    return [(row["m"], row.get("p") or row["m"]), *[(m, raw) for m, raw in row.get("ph", [])]]
+
+
+_FILL = ("e", "l", "c", "rn", "ag", "g", "ep", "pc", "ad", "a")  # what a later row of the same person may add when the first one lacks it
+
+
+def _person(row: dict[str, Any]) -> dict[str, Any]:
+    return dict(row)  # (the key stays: it is stored with the contact, and a later sheet finds the person by it)
+
+
+def _merge(person: dict[str, Any], row: dict[str, Any], counts: dict[str, Any]) -> None:
+    """Another row of the same person: its number is added, what the person lacks is filled in (the first row's data always wins)."""
+    if 1 + len(person.get("ph", [])) >= contact_numbers.MAX_NUMBERS:
+        counts["dropped_numbers"] = counts.get("dropped_numbers", 0) + 1
+    else:
+        person.setdefault("ph", []).append([row["m"], row.get("p") or row["m"]])
+    for key in _FILL:
+        if not person.get(key) and row.get(key):
+            person[key] = row[key]
+    if row.get("t"):
+        person["t"] = list(dict.fromkeys([*(person.get("t") or []), *row["t"]]))[:20]
+    if row.get("cf"):
+        merged = dict(person.get("cf") or {})
+        for name, value in row["cf"].items():
+            if len(merged) < 30:
+                merged.setdefault(name, value)
+        person["cf"] = merged
+
+
+def _join(same: list[dict[str, Any]], row: dict[str, Any], persons: list[dict[str, Any]], counts: dict[str, Any]) -> None:
+    """Put a row with a person key into the person it belongs to. Two different voter card numbers are two different people (twins,
+    father and son with the same name); a row without a card number joins the first of them."""
+    epic = row.get("ep")
+    target = None
+    if epic:
+        target = next((p for p in same if p.get("ep") == epic), None) or next((p for p in same if not p.get("ep")), None)
+    elif same:
+        target = same[0]
+    if target is None:
+        person = _person(row)
+        same.append(person)
+        persons.append(person)
+    else:
+        _merge(target, row, counts)
+
+
+def _group(db: Session, imp: Import, owner: str, counts: dict[str, Any]) -> None:
+    """Pass 1b: the good rows that are the same person become ONE person with all their numbers.
+
+    Done on disk, a part at a time, never all in memory: the rows are split into 64 files by the key of the person (every row of a
+    person lands in the same file), each file is grouped in memory (a 64th of the sheet), and the people are put back in the order
+    of their first row - so "in blocks" still follows the sheet, and the same sheet always gives the same people."""
+    folder = import_dir(imp)
+    rows_path = folder / ROWS
+    parts = [folder / f"part-{i:02d}.jsonl" for i in range(GROUP_PARTS)]
+    handles = [open(path, "w", encoding="utf-8", newline="\n") for path in parts]
+    survivors = 0
+    try:
+        with closing(_read_lines(rows_path)) as rows:
+            for row in rows:
+                survivors += 1
+                key = row.get("k")
+                handles[int(key[:6], 16) % GROUP_PARTS if key else row["r"] % GROUP_PARTS].write(_json_line(row) + "\n")
+    finally:
+        for handle in handles:
+            handle.close()
+    rows_path.unlink(missing_ok=True)
+    _beat(db, imp.id, owner, IMPORT_VALIDATING, result={"stage": "grouping"})
+
+    step = max(1, -(-int(counts["total"]) // GROUP_PARTS))
+    ordered = [folder / f"order-{i:02d}.jsonl" for i in range(GROUP_PARTS)]
+    handles = [open(path, "w", encoding="utf-8", newline="\n") for path in ordered]
+    try:
+        for index, path in enumerate(parts):
+            persons: list[dict[str, Any]] = []
+            groups: dict[str, list[dict[str, Any]]] = {}
+            with closing(_read_lines(path)) as rows:
+                for row in rows:
+                    key = row.get("k")
+                    if key:
+                        _join(groups.setdefault(key, []), row, persons, counts)
+                    else:
+                        persons.append(_person(row))
+            path.unlink(missing_ok=True)
+            for person in persons:
+                handles[min(GROUP_PARTS - 1, (person["r"] - 1) // step)].write(_json_line(person) + "\n")
+            if index % 8 == 7:
+                _beat(db, imp.id, owner, IMPORT_VALIDATING, result={"stage": "grouping"})
+    finally:
+        for handle in handles:
+            handle.close()
+    people = numbers = 0
+    with open(folder / VALID, "w", encoding="utf-8", newline="\n") as final:
+        for path in ordered:
+            with closing(_read_lines(path)) as rows:
+                for person in sorted(rows, key=lambda p: p["r"]):
+                    final.write(_json_line(person) + "\n")
+                    people += 1
+                    numbers += 1 + len(person.get("ph", []))
+            path.unlink(missing_ok=True)
+    counts.update(survivors=survivors, valid=people, sheet_people=people, sheet_numbers=numbers, merged_rows=survivors - people)
+
+
 def _compare(db: Session, imp: Import, owner: str, counts: dict[str, Any], headers: list[str]) -> None:
-    """Pass 2: which numbers are already contacts. Writes the final valid.jsonl (new numbers) and existing.jsonl (the others)."""
+    """Pass 2: which people are already contacts (by any of their numbers). Writes the final valid.jsonl (new people) and existing.jsonl."""
     settings = get_settings()
     folder = import_dir(imp)
     canonical, custom = map_headers(headers)
     positions = {idx: key for idx, key in canonical.items()} | {idx: name for idx, name in custom.items()}
     explicit_by_employee: Counter[int] = Counter()
-    existing_rows = new_rows = restored = explicit = 0
+    existing_rows = new_rows = restored = explicit = new_numbers = 0
     stored_issues = int(counts.get("stored_issues", 0))
     next_index = 0
     sample: list[dict[str, Any]] = []
     issue_rows: list[dict[str, Any]] = []
     batch: list[dict[str, Any]] = []
 
-    def flush(handle_valid: Any, handle_existing: Any, issues: csv.writer) -> None:
-        nonlocal existing_rows, new_rows, restored, explicit, next_index, stored_issues
+    def flush(handle_valid: Any, handle_existing: Any, handle_extend: Any, issues: csv.writer) -> None:
+        nonlocal existing_rows, new_rows, restored, explicit, next_index, stored_issues, new_numbers
         if not batch:
             return
-        found = {
-            phone: (contact_id, deleted_at is not None)
+        wanted = sorted({m for row in batch for m, _ in _all_numbers(row)})
+        keys = sorted({row["k"] for row in batch if row.get("k")})
+        by_key: dict[str, list[tuple[int, str | None, bool]]] = {}
+        for start in range(0, len(keys), 900):
+            for contact_id, key, epic, deleted_at in db.execute(
+                select(Contact.id, Contact.person_key, Contact.epic_no, Contact.deleted_at).where(Contact.person_key.in_(keys[start : start + 900])).order_by(Contact.id)
+            ):
+                by_key.setdefault(key, []).append((contact_id, epic, deleted_at is not None))
+        found: dict[str, tuple[int, bool]] = {}
+        for start in range(0, len(wanted), 900):
             for contact_id, phone, deleted_at in db.execute(
-                select(Contact.id, Contact.normalized_phone, Contact.deleted_at).where(Contact.normalized_phone.in_([row["m"] for row in batch]))
-            )
-        }
+                select(ContactPhone.contact_id, ContactPhone.normalized_phone, Contact.deleted_at)
+                .join(Contact, Contact.id == ContactPhone.contact_id)
+                .where(ContactPhone.normalized_phone.in_(wanted[start : start + 900]))
+            ):
+                found[phone] = (contact_id, deleted_at is not None)
         for row in batch:
-            hit = found.get(row["m"])
-            if hit and not hit[1]:  # a contact that is there and alive: this row is a duplicate
+            numbers = _all_numbers(row)
+            hits = [found[m] for m, _ in numbers if m in found]
+            alive = [hit for hit in hits if not hit[1]]
+            fresh = [[m, raw] for m, raw in numbers if m not in found]
+            same = _same_person(by_key.get(row.get("k") or "", []), row.get("ep"))  # (the person, found by who they are and not by a number)
+            target = alive[0][0] if alive else (same[0] if same and not same[2] else None)
+            if target is not None:  # a contact has one of these numbers, or is this very person: they are there already
                 existing_rows += 1
-                handle_existing.write(_json_line({**row, "id": hit[0]}) + "\n")
-                issues.writerow([row["r"], ROW_DUPLICATE, "Mobile number already exists in contacts.", *[_csv_safe(c) for c in _original_cells(positions, len(headers), row)]])
+                line = _json_line({**row, "id": target, "nw": fresh}) + "\n"
+                handle_existing.write(line)
+                if fresh:
+                    handle_extend.write(line)  # (a person that is there but has numbers the contact lacks: they are added even in skip mode)
+                said = "Mobile number already exists in contacts." if not row.get("ph") else "This person is already in contacts (one of their numbers exists)."
+                issues.writerow([row["r"], ROW_DUPLICATE, said, *[_csv_safe(c) for c in _original_cells(positions, len(headers), row)]])
                 if stored_issues < settings.import_issue_sample:
                     stored_issues += 1
                     issue_rows.append(
                         {
                             "import_id": imp.id, "row_number": row["r"], "status": ROW_DUPLICATE, "duplicate_of": "existing",
-                            "normalized_phone": row["m"], "contact_id": hit[0], "errors": ["Mobile number already exists in contacts."],
+                            "normalized_phone": row["m"], "contact_id": target, "errors": [said],
                             "data": _row_data(row),
                         }
                     )
                 continue
-            if hit:  # it was deleted once: the import brings it back
-                row["u"] = hit[0]
+            if hits or same:  # only contacts that were deleted once are this person (or have their numbers): the first of them is brought back
+                row["u"] = hits[0][0] if hits else same[0]
+                row["nw"] = fresh
                 restored += 1
+                new_numbers += len(fresh)
+            else:
+                new_numbers += len(numbers)
             if row.get("a"):
                 explicit += 1
                 explicit_by_employee[row["a"]] += 1
@@ -453,21 +587,23 @@ def _compare(db: Session, imp: Import, owner: str, counts: dict[str, Any], heade
 
     final_valid = folder / "valid.next"
     with open(final_valid, "w", encoding="utf-8", newline="\n") as handle_valid, open(folder / EXISTING, "w", encoding="utf-8", newline="\n") as handle_existing, open(
-        folder / ISSUES, "a", encoding="utf-8", newline=""
-    ) as issues_file:
+        folder / EXTEND, "w", encoding="utf-8", newline="\n"
+    ) as handle_extend, open(folder / ISSUES, "a", encoding="utf-8", newline="") as issues_file:
         issues = csv.writer(issues_file)
-        done = 0
+        done = in_batch = 0
         with closing(_read_lines(folder / VALID)) as rows:
             for row in rows:
                 batch.append(row)
-                if len(batch) >= LOOKUP_BATCH:
-                    flush(handle_valid, handle_existing, issues)
-                    done += LOOKUP_BATCH
+                in_batch += 1 + len(row.get("ph", []))
+                if in_batch >= LOOKUP_BATCH:  # (counted in numbers: that is what the query is about)
+                    done += len(batch)
+                    in_batch = 0
+                    flush(handle_valid, handle_existing, handle_extend, issues)
                     if issue_rows:
                         db.execute(insert(ImportRow), issue_rows)
                         issue_rows = []
                     _beat(db, imp.id, owner, IMPORT_VALIDATING, result={"stage": "comparing", "compared": done})
-        flush(handle_valid, handle_existing, issues)
+        flush(handle_valid, handle_existing, handle_extend, issues)
     os.replace(final_valid, folder / VALID)
     if issue_rows:
         db.execute(insert(ImportRow), issue_rows)
@@ -475,16 +611,29 @@ def _compare(db: Session, imp: Import, owner: str, counts: dict[str, Any], heade
         db.execute(insert(ImportRow), sample)
     db.commit()
     counts.update(
-        valid=new_rows, existing=existing_rows, restored=restored, explicit=explicit, to_distribute=next_index,
+        valid=new_rows, existing=existing_rows, restored=restored, explicit=explicit, to_distribute=next_index, numbers=new_numbers,
         explicit_by_employee={str(k): v for k, v in explicit_by_employee.items()},
     )
 
 
+def _same_person(candidates: list[tuple[int, str | None, bool]], epic: str | None) -> tuple[int, str | None, bool] | None:
+    """Of the contacts with this person's key (name, relative, age, gender, pincode, address), the one this is. A different voter
+    card number is a different person (twins); a person without a card is the first of them. Alive ones are preferred."""
+    pool = [c for c in candidates if not c[2]] or candidates
+    if not pool:
+        return None
+    if epic:
+        return next((c for c in pool if c[1] == epic), None) or next((c for c in pool if not c[1]), None)
+    return pool[0]
+
+
 def _row_data(row: dict[str, Any]) -> dict[str, Any]:
-    """A row of valid.jsonl / existing.jsonl as the contact fields it stands for."""
+    """A person of valid.jsonl / existing.jsonl as the contact fields it stands for."""
     return {
         "name": row.get("n"), "phone_raw": row.get("p"), "email": row.get("e"), "location": row.get("l"), "category": row.get("c"),
         "priority": row.get("pr", 2), "tags": row.get("t") or [], "custom_fields": row.get("cf") or {}, "assigned_employee_id": row.get("a"),
+        "relative_name": row.get("rn"), "age": row.get("ag"), "gender": row.get("g"), "epic_no": row.get("ep"), "pincode": row.get("pc"),
+        "address": row.get("ad"), "person_key": row.get("k"), "phones": [m for m, _ in _all_numbers(row)] if row.get("m") else [],
     }
 
 
@@ -530,7 +679,9 @@ def _validate(db: Session, import_id: int, owner: str) -> None:
         return
     started = time.monotonic()
     counts = _scan(db, imp, owner)
-    _beat(db, imp.id, owner, IMPORT_VALIDATING, scanned_rows=counts["total"], progress_percent=100, result={"stage": "comparing", "compared": 0})
+    _beat(db, imp.id, owner, IMPORT_VALIDATING, scanned_rows=counts["total"], progress_percent=100, result={"stage": "grouping"})
+    _group(db, imp, owner, counts)
+    _beat(db, imp.id, owner, IMPORT_VALIDATING, result={"stage": "comparing", "compared": 0})
     _compare(db, imp, owner, counts, counts["headers"])
     seconds = round(time.monotonic() - started, 1)
     done = db.execute(
@@ -544,6 +695,9 @@ def _validate(db: Session, import_id: int, owner: str) -> None:
             result={
                 "stage": "ready", "to_distribute": counts["to_distribute"], "restored": counts["restored"],
                 "explicit_by_employee": counts["explicit_by_employee"], "check_seconds": seconds,
+                # the rows of the sheet that said they were the same person became one: people, their numbers, the rows that joined
+                "sheet_people": counts["sheet_people"], "sheet_numbers": counts["sheet_numbers"], "merged_rows": counts["merged_rows"],
+                "numbers": counts["numbers"], "dropped_numbers": counts.get("dropped_numbers", 0),
             },
         ),
         execution_options={"synchronize_session": False},
@@ -552,7 +706,10 @@ def _validate(db: Session, import_id: int, owner: str) -> None:
         db.rollback()
         raise _Lost()
     db.commit()
-    log.info("Import %s checked: %s rows in %.1fs (%s new, %s existing, %s invalid, %s repeated)", imp.id, counts["total"], seconds, counts["valid"], counts["existing"], counts["invalid"], counts["file_duplicates"])
+    log.info(
+        "Import %s checked: %s rows in %.1fs (%s new people with %s numbers, %s existing, %s invalid, %s repeated, %s rows joined another row of the same person)",
+        imp.id, counts["total"], seconds, counts["valid"], counts["numbers"], counts["existing"], counts["invalid"], counts["file_duplicates"], counts["merged_rows"],
+    )
 
 
 # --------------------------------------------------------------------------------------------------------- reading
@@ -756,22 +913,29 @@ def _contact_row(imp: Import, row: dict[str, Any], created_by: int | None, now: 
     return {
         "name": data["name"], "phone_raw": data["phone_raw"], "normalized_phone": row["m"], "email": data["email"],
         "location": data["location"], "category": data["category"], "priority": data["priority"], "tags": data["tags"],
-        "custom_fields": data["custom_fields"],
+        "custom_fields": data["custom_fields"], "relative_name": data["relative_name"], "age": data["age"], "gender": data["gender"],
+        "epic_no": data["epic_no"], "pincode": data["pincode"], "address": data["address"], "person_key": data["person_key"],
         "search_text": build_search_text(
             name=data["name"], phone_raw=data["phone_raw"], normalized_phone=row["m"], email=data["email"], location=data["location"],
-            category=data["category"], tags=data["tags"], custom_fields=data["custom_fields"],
+            category=data["category"], tags=data["tags"], custom_fields=data["custom_fields"], numbers=data["phones"],
+            relative_name=data["relative_name"], epic_no=data["epic_no"], pincode=data["pincode"], address=data["address"],
         ),
         "status": "new", "source": "import", "import_id": imp.id, "call_count": 0, "failed_attempts": 0,
         "created_by": created_by, "created_at": now, "updated_at": now,
     }
 
 
-def _apply_fields(contact: Contact, data: dict[str, Any], *, reset: bool) -> None:
+def _apply_fields(contact: Contact, data: dict[str, Any], *, reset: bool, primary: bool = True) -> None:
     contact.name = data["name"]
-    contact.phone_raw = data["phone_raw"]
-    for key in ("email", "location", "category"):
+    if primary:  # (the row's first number is the contact's own first number)
+        contact.phone_raw = data["phone_raw"]
+    for key in ("email", "location", "category", "relative_name", "gender", "epic_no", "pincode", "address"):
         if data.get(key):
             setattr(contact, key, data[key])
+    if data.get("age"):
+        contact.age = data["age"]
+    if data.get("person_key"):
+        contact.person_key = data["person_key"]
     if data.get("priority"):
         contact.priority = data["priority"]
     if data.get("tags"):
@@ -789,7 +953,7 @@ def _apply_fields(contact: Contact, data: dict[str, Any], *, reset: bool) -> Non
         contact.status = "new"
         contact.failed_attempts = 0
         contact.next_eligible_at = None
-    refresh_search_text(contact)
+    refresh_search_text(contact, data.get("phones"))
 
 
 def _schedule(imp: Import) -> Schedule | None:
@@ -801,10 +965,10 @@ def _schedule(imp: Import) -> Schedule | None:
 def _add_chunk(
     db: Session, imp: Import, owner: str, lines: list[dict[str, Any]], offset_after: int, schedule: Schedule | None, so_far: Counter[int]
 ) -> Counter[int]:
-    """One transaction: contacts, owners, campaign, and the resume point. Returns who received how many in this step.
+    """One transaction: people with all their numbers, owners, campaign, and the resume point. Returns who received how many in this step.
 
     The resume point is written as an absolute number (`offset_after`), never as "+ this many": a step that is repeated because the
-    answer of its commit got lost on the way is then harmless - the contacts are in already (the unique number decides) and the
+    answer of its commit got lost on the way is then harmless - the people are in already (the unique numbers decide) and the
     resume point is the same."""
     now = utcnow()
     options = imp.options or {}
@@ -814,24 +978,54 @@ def _add_chunk(
     fresh = [row for row in lines if not row.get("u")]
     revived = [row for row in lines if row.get("u")]
     insert_ignore(db, Contact.__table__, [_contact_row(imp, row, created_by, now) for row in fresh], conflict_column="normalized_phone")
+    contacts: dict[int, Contact] = {}
     if revived:
         contacts = {c.id: c for c in db.scalars(select(Contact).where(Contact.id.in_([row["u"] for row in revived])))}
         for row in revived:
             contact = contacts.get(row["u"])
             if contact is not None and contact.deleted_at is not None:
-                _apply_fields(contact, _row_data(row), reset=True)
+                _apply_fields(contact, _row_data(row), reset=True, primary=row["m"] == contact.normalized_phone)
                 contact.import_id = imp.id
                 contact.source = "import"
     db.flush()
-    owned = {
+    first_number_owner = {
         phone: contact_id
         for contact_id, phone in db.execute(
             select(Contact.id, Contact.normalized_phone).where(
-                Contact.normalized_phone.in_([row["m"] for row in lines]), Contact.import_id == imp.id, Contact.deleted_at.is_(None)
+                Contact.normalized_phone.in_([row["m"] for row in fresh]), Contact.import_id == imp.id, Contact.deleted_at.is_(None)
             )
         )
     }
-    mine = [(owned[row["m"]], row) for row in lines if row["m"] in owned]
+    people: list[tuple[int, dict[str, Any]]] = [(first_number_owner[row["m"]], row) for row in fresh if row["m"] in first_number_owner]
+    people += [(row["u"], row) for row in revived if row["u"] in contacts and contacts[row["u"]].deleted_at is None]
+
+    # every number of every person (the unique index decides: a number somebody else got in the meantime is left out)
+    have = dict(
+        db.execute(select(ContactPhone.contact_id, func.count(ContactPhone.id)).where(ContactPhone.contact_id.in_([cid for cid, row in people if row.get("u")] or [0])).group_by(ContactPhone.contact_id)).all()
+    )
+    number_rows: list[dict[str, Any]] = []
+    for contact_id, row in people:
+        if row.get("u"):
+            start, numbers = int(have.get(contact_id, 0)), [(m, raw) for m, raw in row.get("nw", [])]
+        else:
+            start, numbers = 0, _all_numbers(row)
+        for offset, (normalized, raw) in enumerate(numbers[: max(0, contact_numbers.MAX_NUMBERS - start)]):
+            number_rows.append({"contact_id": contact_id, "phone_raw": str(raw)[:64], "normalized_phone": normalized, "position": start + offset, "created_at": now})
+    contact_numbers.insert_numbers(db, number_rows)
+    db.flush()
+    owner_of_number = contact_numbers.numbers_owned_by(db, [cid for cid, _ in people])
+    # a person whose first number went to somebody else in the meantime is a duplicate after all: it is not added
+    losers = {cid for cid, row in people if not row.get("u") and owner_of_number.get(row["m"]) != cid}
+    if losers:
+        db.execute(delete(Contact).where(Contact.id.in_(list(losers))))
+        people = [(cid, row) for cid, row in people if cid not in losers]
+    if revived:  # (the search text of a person that was brought back knows all the numbers it has now)
+        numbers_now = contact_numbers.numbers_of(db, [cid for cid, row in people if row.get("u")])
+        for contact_id, row in people:
+            if row.get("u") and contact_id in contacts:
+                refresh_search_text(contacts[contact_id], [p.normalized_phone for p in numbers_now.get(contact_id, [])])
+
+    mine = people
     assigned = 0
     taken_by_someone = 0
     if mine:
@@ -883,19 +1077,35 @@ def _add_chunk(
     return gave
 
 
-def _update_chunk(db: Session, imp: Import, owner: str, lines: list[dict[str, Any]], offset_after: int, before: tuple[int, int]) -> tuple[int, int]:
-    """Update mode: the contacts of the sheet that were there already get the data of the sheet. Returns (updated, skipped) in total.
+def _update_chunk(
+    db: Session, imp: Import, owner: str, lines: list[dict[str, Any]], offset_after: int, before: tuple[int, int], *, fields: bool = True
+) -> tuple[int, int]:
+    """The people of the sheet that were there already get the numbers they did not have - and, in update mode (`fields`), the data
+    of the sheet. (Skip mode adds the numbers only: nothing else of the contact is touched.) Returns (updated, skipped) in total.
     (`before` is what the earlier steps counted: the totals are written as absolute numbers, like the resume point.)"""
     db.info[QUIET] = True
+    now = utcnow()
     contacts = {c.id: c for c in db.scalars(select(Contact).where(Contact.id.in_([row["id"] for row in lines]), Contact.deleted_at.is_(None)))}
+    have = dict(db.execute(select(ContactPhone.contact_id, func.count(ContactPhone.id)).where(ContactPhone.contact_id.in_(list(contacts) or [0])).group_by(ContactPhone.contact_id)).all())
     updated = skipped = 0
+    number_rows: list[dict[str, Any]] = []
     for row in lines:
         contact = contacts.get(row["id"])
         if contact is None:
             skipped += 1
             continue
-        _apply_fields(contact, _row_data(row), reset=False)
+        if fields:
+            _apply_fields(contact, _row_data(row), reset=False, primary=row["m"] == contact.normalized_phone)
+        start = int(have.get(contact.id, 0))
+        for offset, (normalized, raw) in enumerate(row.get("nw", [])[: max(0, contact_numbers.MAX_NUMBERS - start)]):
+            number_rows.append({"contact_id": contact.id, "phone_raw": str(raw)[:64], "normalized_phone": normalized, "position": start + offset, "created_at": now})
+        have[contact.id] = start + len(row.get("nw", []))
         updated += 1
+    contact_numbers.insert_numbers(db, number_rows)
+    db.flush()
+    numbers_now = contact_numbers.numbers_of(db, list(contacts))
+    for contact in contacts.values():
+        refresh_search_text(contact, [p.normalized_phone for p in numbers_now.get(contact.id, [])])
     db.flush()
     totals = (before[0] + updated, before[1] + skipped)
     moved = db.execute(
@@ -1000,10 +1210,11 @@ def _apply(db: Session, import_id: int, owner: str) -> None:
             _pause(started)
 
     db.refresh(imp)
-    if imp.mode == "update":
+    existing_path = _file(imp, EXISTING if imp.mode == "update" else EXTEND)  # (skip mode: only the people that have numbers to add)
+    if existing_path.is_file():
         offset = imp.applied_existing
         totals = (imp.updated_rows, imp.skipped_rows)
-        with closing(_read_lines(_file(imp, EXISTING), skip=offset)) as lines:
+        with closing(_read_lines(existing_path, skip=offset)) as lines:
             while True:
                 batch = list(islice(lines, chunk))
                 if not batch:
@@ -1011,7 +1222,7 @@ def _apply(db: Session, import_id: int, owner: str) -> None:
                 started = time.monotonic()
                 _beat(db, imp.id, owner, IMPORT_APPLYING)
                 after = offset + len(batch)
-                totals = retry_transient(db, lambda: _update_chunk(db, imp, owner, batch, after, totals))
+                totals = retry_transient(db, lambda: _update_chunk(db, imp, owner, batch, after, totals, fields=imp.mode == "update"))
                 offset = after
                 _pause(started)
     _finish(db, imp, owner, per_employee, receivers)

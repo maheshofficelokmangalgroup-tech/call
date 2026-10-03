@@ -38,6 +38,7 @@ from app.models.contact import (
     CONTACT_UNREACHABLE,
     CampaignContact,
     Contact,
+    ContactPhone,
 )
 from app.models.employee import Employee
 from app.models.recording import Recording
@@ -52,7 +53,7 @@ from app.schemas.call import (
     RecordingOut,
 )
 from app.schemas.contact import NoteOut
-from app.services import callback_service, contact_service
+from app.services import callback_service, contact_numbers, contact_service
 from app.services.phone import normalize_phone
 from app.services.scope import is_admin, visible_employee_ids
 from app.services.settings_service import get_retry_rules
@@ -140,13 +141,18 @@ def create_call(db: Session, *, employee: Employee, data: CallCreate, device_id:
     if data.contact_id is not None:
         contact = contact_service.get_visible_contact(db, employee, data.contact_id)
         number = contact.normalized_phone
+        chosen = normalize_phone(data.phone_number) if data.phone_number else None
+        if chosen and chosen != number and chosen in contact_numbers.all_numbers(db, contact.id):  # one of the person's other numbers
+            number = chosen
     else:
         if not data.phone_number:
             raise ValidationFailed("Provide a contact or a phone number.", code="missing_number")
         number = normalize_phone(data.phone_number)
         if number is None:
             raise ValidationFailed("Enter a valid phone number.", code="invalid_phone")
-        known = db.scalars(contact_service.scoped_contacts(db, employee).where(Contact.normalized_phone == number)).first()
+        known = db.scalars(
+            contact_service.scoped_contacts(db, employee).where(Contact.id.in_(select(ContactPhone.contact_id).where(ContactPhone.normalized_phone == number)))
+        ).first()  # (any number of a contact of this employee)
         if known is not None:
             contact = known
 
@@ -355,6 +361,8 @@ def set_disposition(db: Session, *, user: Employee, call: Call, data: Dispositio
         contact.last_disposition_code = disp.code
         new_status = effects.get("status", contact.status)
         contact.next_eligible_at = None
+        if disp.code == "INVALID_NUMBER" and contact_numbers.has_other_usable_number(db, contact.id, call.phone_number_snapshot):
+            new_status = CONTACT_IN_PROGRESS  # this number is wrong, the person is not: the next number is tried
 
         if effects.get("success"):
             contact.failed_attempts = 0

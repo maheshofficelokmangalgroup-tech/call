@@ -15,6 +15,7 @@ import {
   initials,
   minuteToClock,
   percentChange,
+  parseNumberList,
   pluralize,
   timeAgo,
   todayIn,
@@ -163,6 +164,21 @@ describe("people and phone numbers", () => {
     expect(formatPhone("+14155550123")).toBe("+1 (415) 555-0123");
     expect(formatPhone("+442071234567")).toBe("+442071234567");
     expect(formatPhone(null)).toBe("-");
+  });
+});
+
+describe("the other numbers of a person", () => {
+  it("takes one number on each line, and commas and semicolons as well", () => {
+    expect(parseNumberList("98 7654 3211\n98 7654 3212")).toEqual(["98 7654 3211", "98 7654 3212"]);
+    expect(parseNumberList("9876543211, 9876543212;9876543213")).toEqual(["9876543211", "9876543212", "9876543213"]);
+  });
+  it("leaves out empty lines and spaces around a number", () => {
+    expect(parseNumberList("\n  9876543211  \n\n ,; \n")).toEqual(["9876543211"]);
+    expect(parseNumberList("")).toEqual([]);
+  });
+  it("takes at most 19 (a person has 20 numbers with the main one)", () => {
+    const many = Array.from({ length: 30 }, (_, i) => `98765432${String(i).padStart(2, "0")}`).join("\n");
+    expect(parseNumberList(many)).toHaveLength(19);
   });
 });
 

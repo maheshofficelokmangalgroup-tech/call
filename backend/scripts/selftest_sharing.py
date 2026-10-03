@@ -2,7 +2,8 @@
 
     docker compose exec api python -m scripts.selftest_sharing --really            # (on the server, inside the API container)
 
-It makes up its own administrator, ten employees and some tens of thousands of contacts, all marked ZZSELFTEST; talks to the API of
+It makes up its own administrator, ten employees, some tens of thousands of contacts and a small voter list (one row per number: one contact
+per person with all their numbers), all marked ZZSELFTEST; talks to the API of
 this server over plain HTTP (127.0.0.1) exactly as the panel does; checks the result in the database; and then deletes every row and
 file it created (and puts back every setting it changed). Nothing that belongs to somebody else is read or written: the people who
 receive contacts are always named explicitly, so real employees are never given anything, and the automatic sharing is switched off
@@ -114,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--really", action="store_true", help="yes, make and delete test data in the database this process is connected to")
     parser.add_argument("--base", default="http://127.0.0.1:8000", help="the API of this server (plain http, from inside the container)")
     parser.add_argument("--rows", type=int, default=20_000, help="size of the main sheet")
+    parser.add_argument("--people-rows", type=int, default=3_000, help="lines of the voter list (one row per number); 0 leaves that part out")
     parser.add_argument("--keep", action="store_true", help="do not clean up (for looking at the data by hand)")
     args = parser.parse_args(argv)
     if not args.really:
@@ -124,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.core.database import get_engine, new_session
     from app.core.security import hash_password
     from app.core.timeutils import utcnow
-    from app.models.contact import Contact, ContactAssignment
+    from app.models.contact import Contact, ContactAssignment, ContactPhone
     from app.models.distribution import DistributionRun, EmployeeCredential
     from app.models.employee import Employee, Role
     from app.models.imports import Import
@@ -143,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         return {
             "employees": db.scalar(select(func.count(Employee.id))) or 0,
             "contacts": db.scalar(select(func.count(Contact.id))) or 0,
+            "numbers": db.scalar(select(func.count(ContactPhone.id))) or 0,
             "assignments": db.scalar(select(func.count(ContactAssignment.id))) or 0,
             "imports": db.scalar(select(func.count(Import.id))) or 0,
             "runs": db.scalar(select(func.count(DistributionRun.id))) or 0,
@@ -316,6 +319,10 @@ def main(argv: list[str] | None = None) -> int:
         owned_d = db.scalar(select(func.count(ContactAssignment.id)).join(Contact, Contact.id == ContactAssignment.contact_id).where(Contact.import_id == import_d, ContactAssignment.status == "active")) or 0
         report.check(job["status"] in ("cancelled", "completed") and added_d == job["applied_rows"] and owned_d == added_d, f"{job['status']}: {added_d:,} added, every one with an owner, {job['applied_rows']:,} counted")
 
+        # ---------------------------------------------------------------------------------------- a voter list: one row per number, one contact per person
+        if args.people_rows > 0:
+            _people_phase(db, http, report, run_id, import_ids, choice, ids_param, args.people_rows, BASE_NUMBER + 400_000)
+
         # ---------------------------------------------------------------------------------------- the employee chooses their own password
         who = working[0]
         email = db.scalar(select(Employee.email).where(Employee.id == who))
@@ -351,6 +358,73 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     report.say("\nAll checks passed.")
     return 0
+
+
+def _people_phase(db, http: Http, report: Report, run_id: str, import_ids: list[int], choice: dict, ids_param: str, lines: int, first_number: int) -> None:
+    """A voter list at a small size: the lines of one person become ONE contact with ALL their numbers, a number is never in two contacts, every
+    line is accounted for, and the same list again adds nobody. The numbers are moved into a block of their own (next to the other sheets'),
+    and nothing is added if anybody already has a number in that block - the made-up people can never become part of somebody's real contact."""
+    from sqlalchemy import func, select
+
+    from app.models.contact import Contact, ContactPhone
+    from scripts.make_voter_sheet import HEADER, expected_of, make_rows
+
+    last_number = first_number + max(20_000, lines)
+    taken = db.scalar(select(func.count(ContactPhone.id)).where(ContactPhone.normalized_phone.between(f"+91{first_number}", f"+91{last_number}"))) or 0
+    db.rollback()
+    if taken:
+        report.say(f"\nSheet P (a voter list): left out - {taken:,} numbers of the block it uses belong to somebody already")
+        return
+    rows = make_rows(lines, seed=int(run_id, 16))
+    moved: dict[str, str] = {}
+    for row in rows:
+        number = row[0]
+        if number.isdigit() and len(number) == 10 and number[0] in "6789" and len(set(number)) > 1:  # (a bad line stays bad)
+            row[0] = moved.setdefault(number, str(first_number + len(moved)))
+        row[1] = f"{TAG} {row[1]}"
+    expected = expected_of(rows)
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(HEADER)
+    writer.writerows(rows)
+    content = out.getvalue().encode()
+    report.say(f"\nSheet P: a voter list of {lines:,} lines = {expected['people']:,} people with {expected['numbers']:,} numbers, {expected['invalid']:,} bad lines, {expected['repeated']:,} repeated numbers")
+    started = time.perf_counter()
+    import_p = http.upload("contacts/import", "selftest-p.csv", content, {"mode": "skip", "default_priority": "2"})["id"]
+    import_ids.append(import_p)
+    job = _wait(http, import_p, ("previewed", "failed"))
+    result = job.get("result") or {}
+    report.say(f"  checked in {time.perf_counter() - started:.1f} s")
+    report.check(job["status"] == "previewed", f"the voter list was checked ({job.get('error_message') or 'previewed'})")
+    report.check(
+        job["total_rows"] == lines and job["invalid_rows"] == expected["invalid"] and job["file_duplicate_rows"] == expected["repeated"] and job["valid_rows"] == expected["people"],
+        f"every line is accounted for: {job['invalid_rows']:,} bad + {job['file_duplicate_rows']:,} repeated + {expected['numbers']:,} numbers of people = {lines:,}",
+    )
+    report.check(
+        result.get("sheet_people") == expected["people"] and result.get("sheet_numbers") == expected["numbers"] and result.get("merged_rows") == expected["merged_rows"],
+        f"the lines became {result.get('sheet_people'):,} people with {result.get('sheet_numbers'):,} numbers ({result.get('merged_rows'):,} lines joined a person who was on an earlier line)",
+    )
+    started = time.perf_counter()
+    http.call("POST", f"contacts/import/{import_p}/confirm", {"mode": "skip", "distribution": choice})
+    job = _wait(http, import_p, ("completed", "failed", "cancelled"))
+    report.say(f"  added in {time.perf_counter() - started:.1f} s")
+    report.check(job["status"] == "completed" and job["inserted_rows"] == expected["people"], f"the people were added ({job.get('error_message') or 'completed'}): {job['inserted_rows']:,}")
+    people = db.scalar(select(func.count(Contact.id)).where(Contact.import_id == import_p)) or 0
+    numbers = db.scalar(select(func.count(ContactPhone.id)).join(Contact, Contact.id == ContactPhone.contact_id).where(Contact.import_id == import_p)) or 0
+    distinct = db.scalar(select(func.count(func.distinct(ContactPhone.normalized_phone))).join(Contact, Contact.id == ContactPhone.contact_id).where(Contact.import_id == import_p)) or 0
+    report.check(people == expected["people"] and numbers == expected["numbers"] == distinct, f"{people:,} contacts hold {numbers:,} numbers, {distinct:,} of them different - no number is in two contacts")
+    wrong = 0
+    for person in list(expected["_people"].values())[:40]:  # (people looked up through the API by their LAST number, as the panel does)
+        found, _ = http.call("GET", f"contacts?q={person[-1][3:] if person[-1].startswith('+91') else person[-1]}&page_size=5")
+        if found["total"] != 1 or found["items"][0]["phone_count"] != len(person):
+            wrong += 1
+    report.check(wrong == 0, "40 people looked up one by one: each is one contact with exactly their numbers")
+    # the same list again: everybody is there already
+    again = http.upload("contacts/import", "selftest-p2.csv", content, {"mode": "skip", "default_priority": "2"})["id"]
+    import_ids.append(again)
+    job = _wait(http, again, ("previewed", "failed"))
+    report.check(job["status"] == "previewed" and job["valid_rows"] == 0 and job["existing_rows"] == expected["people"], f"the same list again adds nobody: {job['valid_rows']:,} new, {job['existing_rows']:,} are there already")
+    http.call("POST", f"contacts/import/{again}/cancel", expect=(200, 409))
 
 
 def _wait(http: Http, import_id: int, done: tuple[str, ...], seconds: int = 1800):

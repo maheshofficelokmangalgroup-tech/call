@@ -3,11 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import type { Contact } from '../services/api/types';
 import { colors, radius, shadow } from '../theme';
-import { formatPhone } from '../utils/format';
 import { contactStatusLook } from '../utils/status';
 import { Avatar } from './Avatar';
 import { Tag } from './Chip';
 import { Icon } from './Icon';
+import { PhoneLine } from './PhoneLine';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
 
@@ -27,10 +27,7 @@ export function ContactRow({ contact, onOpen, onCall }: Props) {
         <Text variant="h3" numberOfLines={1}>
           {contact.name}
         </Text>
-        <Text variant="small" color="muted" numberOfLines={1}>
-          {formatPhone(contact.phone)}
-          {contact.location ? `  •  ${contact.location}` : ''}
-        </Text>
+        <PhoneLine contact={contact} />
         <View style={styles.tags}>
           <Tag label={status.label} color={status.color} background={status.bg} />
           {contact.category ? <Tag label={contact.category} color={colors.inkSoft} background="#EEF0F3" /> : null}

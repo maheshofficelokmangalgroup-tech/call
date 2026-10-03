@@ -87,6 +87,11 @@ are marked. Every time somebody listens to or downloads a recording it is writte
 
 * **Contacts** - search and filter; add one, or **Import sheet** (Excel / CSV: checked first, duplicates and bad lines listed, then confirmed);
   open a contact to read the notes and every call made to it; select many and **Give to employees** (one person, or shared evenly).
+  A contact is a **person**: it can have **several numbers** (the list shows the first one and *+N*), and the voter details - relative,
+  age, gender, voter ID (EPIC), pincode and address. The search finds a person by **any** of their numbers, by name, relative, voter
+  ID, pincode or address. The contact drawer lists every number with how often it was called and answered, and *Edit* changes them
+  (the first number is the main one; a number that belongs to another person is refused, naming that person). A voter sheet with one
+  row per number becomes one contact per person - see `docs/IMPORT_AND_DISTRIBUTION.md`.
 * **Campaigns** - a goal with a list of contacts and a target number of calls; choose who calls, hand out the waiting contacts, watch the progress.
 * **Teams** - group employees; a manager sees the team they belong to.
 

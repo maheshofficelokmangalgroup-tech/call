@@ -9,6 +9,7 @@ import { BottomSheet } from '../components/BottomSheet';
 import { Button } from '../components/Button';
 import { CallRow } from '../components/CallRow';
 import { CallbackPicker } from '../components/CallbackPicker';
+import { Tag } from '../components/Chip';
 import { Card } from '../components/Card';
 import { Icon } from '../components/Icon';
 import { PressableScale } from '../components/PressableScale';
@@ -22,7 +23,7 @@ import { useCachedQuery } from '../hooks/useCachedQuery';
 import { useCallAction } from '../hooks/useCallAction';
 import type { RootStackParamList } from '../navigation/types';
 import { api } from '../services/api/endpoints';
-import type { Callback, ContactDetail, Note, ServerCall } from '../services/api/types';
+import type { Callback, ContactDetail, ContactPhone, Note, ServerCall } from '../services/api/types';
 import { mergeCalls } from '../services/data/callModels';
 import { queueCallback, queueCallbackUpdate, queueNote } from '../services/data/actions';
 import { useAuth } from '../store/authStore';
@@ -30,6 +31,7 @@ import { useSyncStore } from '../store/syncStore';
 import { toast } from '../store/toastStore';
 import { colors, radius, shadow } from '../theme';
 import { formatPhone } from '../utils/format';
+import { dialNumber, genderWord, numberStats, numbersOf, otherNumbersLabel, personLine } from '../utils/people';
 import { describeCallbackTime, formatDateTime, parseIso, timeAgo } from '../utils/time';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -83,10 +85,16 @@ export function ContactDetailScreen() {
     setShowStickyCall(y > HERO + 20);
   }, []);
 
+  const dial = useCallback(
+    (phone: string) => {
+      if (!contact) return;
+      void call({ contactId: contact.id, contactName: contact.name, phone, campaignId: detail.data?.campaigns?.[0]?.id ?? null });
+    },
+    [call, contact, detail.data],
+  );
   const startCall = useCallback(() => {
-    if (!contact) return;
-    void call({ contactId: contact.id, contactName: contact.name, phone: contact.phone, campaignId: detail.data?.campaigns?.[0]?.id ?? null });
-  }, [call, contact, detail.data]);
+    if (contact) dial(dialNumber(contact));
+  }, [contact, dial]);
 
   if (!contact) {
     return (
@@ -99,6 +107,10 @@ export function ContactDetailScreen() {
 
   const full = detail.data;
   const last = parseIso(contact.last_called_at);
+  const numbers = numbersOf(contact);
+  const next = dialNumber(contact);
+  const more = otherNumbersLabel(contact);
+  const person = personLine(contact);
 
   return (
     <View style={styles.root}>
@@ -111,8 +123,18 @@ export function ContactDetailScreen() {
             {contact.name}
           </Text>
           <Text variant="h3" color="rgba(255,255,255,0.9)" selectable>
-            {formatPhone(contact.phone)}
+            {formatPhone(next)}
           </Text>
+          {more ? (
+            <Text variant="caption" color="rgba(255,255,255,0.85)">
+              {more}
+            </Text>
+          ) : null}
+          {person ? (
+            <Text variant="caption" color="rgba(255,255,255,0.85)" numberOfLines={1}>
+              {person}
+            </Text>
+          ) : null}
           <View style={styles.actions}>
             {blocked ? (
               <View style={styles.blockedCall}>
@@ -146,6 +168,22 @@ export function ContactDetailScreen() {
             </View>
           ) : null}
 
+          {numbers.length > 1 ? (
+            <View>
+              <Card style={styles.card}>
+                <View style={styles.cardHead}>
+                  <Text variant="h2">Numbers</Text>
+                  <Text variant="small" color="muted">
+                    {numbers.length} in all
+                  </Text>
+                </View>
+                {numbers.map((item, index) => (
+                  <NumberRow key={item.phone} item={item} next={item.phone === next} first={index === 0} blocked={blocked} onCall={() => dial(item.phone)} />
+                ))}
+              </Card>
+            </View>
+          ) : null}
+
           <View>
             <Card style={styles.card}>
               <Text variant="h2" style={styles.cardTitle}>
@@ -158,6 +196,12 @@ export function ContactDetailScreen() {
                 </>
               ) : (
                 <>
+                  <DetailLine icon="user" label="Relative" value={contact.relative_name} />
+                  <DetailLine icon="user" label="Age" value={contact.age ? `${contact.age} yrs` : null} />
+                  <DetailLine icon="user" label="Gender" value={genderWord(contact.gender)} />
+                  <DetailLine icon="badge-check" label="Voter ID" value={contact.epic_no} />
+                  <DetailLine icon="pin" label="Address" value={contact.address} lines={5} />
+                  <DetailLine icon="pin" label="Pincode" value={contact.pincode} />
                   <DetailLine icon="pin" label="Location" value={contact.location} />
                   <DetailLine icon="phone-out" label="Calls so far" value={String(contact.call_count)} />
                   <DetailLine icon="clock" label="Last called" value={last ? timeAgo(last) : 'Never'} />
@@ -293,7 +337,33 @@ function ActionButton({ icon, label, onPress, disabled }: { icon: React.Componen
   );
 }
 
-function DetailLine({ icon, label, value }: { icon: React.ComponentProps<typeof Icon>['name']; label: string; value: string | null | undefined }) {
+/** One number of the person: what happened on it, and a button that dials this very number. */
+function NumberRow({ item, next, first, blocked, onCall }: { item: ContactPhone; next: boolean; first: boolean; blocked: boolean; onCall: () => void }) {
+  return (
+    <View style={[styles.numberRow, first ? null : styles.numberRowBorder]} testID={`number-${item.position}`}>
+      <View style={styles.flex}>
+        <Text variant="bodyMedium" selectable>
+          {formatPhone(item.phone)}
+        </Text>
+        <View style={styles.numberTags}>
+          {next ? <Tag label="Next to call" icon="phone" /> : null}
+          {item.primary ? <Tag label="Main" color={colors.inkSoft} background="#EEF0F3" /> : null}
+          {item.invalid ? <Tag label="Wrong number" color={colors.red} background={colors.redSoft} /> : null}
+        </View>
+        <Text variant="caption" color="muted">
+          {numberStats(item)}
+        </Text>
+      </View>
+      {blocked ? null : (
+        <PressableScale onPress={onCall} style={styles.numberCall} testID={`call-number-${item.position}`}>
+          <Icon name="phone" size={18} color={colors.white} />
+        </PressableScale>
+      )}
+    </View>
+  );
+}
+
+function DetailLine({ icon, label, value, lines = 2 }: { icon: React.ComponentProps<typeof Icon>['name']; label: string; value: string | null | undefined; lines?: number }) {
   if (!value) return null;
   return (
     <View style={styles.line}>
@@ -303,7 +373,7 @@ function DetailLine({ icon, label, value }: { icon: React.ComponentProps<typeof 
       <Text variant="small" color="muted" style={styles.lineLabel}>
         {label}
       </Text>
-      <Text variant="bodyMedium" style={styles.lineValue} numberOfLines={2}>
+      <Text variant="bodyMedium" style={styles.lineValue} numberOfLines={lines}>
         {value}
       </Text>
     </View>
@@ -434,6 +504,10 @@ const styles = StyleSheet.create({
   lineIcon: { width: 24, alignItems: 'center' },
   lineLabel: { width: 88 },
   lineValue: { flex: 1 },
+  numberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  numberRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  numberTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 4 },
+  numberCall: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   note: { paddingVertical: 10, gap: 3, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   sectionTitle: { marginTop: 8, marginLeft: 2 },
   emptyHistory: { marginLeft: 2 },

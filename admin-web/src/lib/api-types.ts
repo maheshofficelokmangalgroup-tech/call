@@ -1942,12 +1942,22 @@ export interface components {
         };
         /** ContactBrief */
         ContactBrief: {
+            /** Address */
+            address?: string | null;
+            /** Age */
+            age?: number | null;
             /** Call Count */
             call_count: number;
+            /** Call Phone */
+            call_phone?: string | null;
             /** Category */
             category?: string | null;
             /** Email */
             email?: string | null;
+            /** Epic No */
+            epic_no?: string | null;
+            /** Gender */
+            gender?: string | null;
             /** Id */
             id: number;
             /** Last Called At */
@@ -1960,8 +1970,22 @@ export interface components {
             name: string;
             /** Phone */
             phone: string;
+            /**
+             * Phone Count
+             * @default 1
+             */
+            phone_count: number;
+            /**
+             * Phones
+             * @default []
+             */
+            phones: components["schemas"]["PhoneOut"][];
+            /** Pincode */
+            pincode?: string | null;
             /** Priority */
             priority: number;
+            /** Relative Name */
+            relative_name?: string | null;
             /** Status */
             status: string;
             /**
@@ -1972,6 +1996,10 @@ export interface components {
         };
         /** ContactCreate */
         ContactCreate: {
+            /** Address */
+            address?: string | null;
+            /** Age */
+            age?: number | null;
             /** Assign To Employee Id */
             assign_to_employee_id?: number | null;
             /** Campaign Id */
@@ -1984,25 +2012,44 @@ export interface components {
             };
             /** Email */
             email?: string | null;
+            /** Epic No */
+            epic_no?: string | null;
+            /** Gender */
+            gender?: ("M" | "F" | "O") | null;
             /** Location */
             location?: string | null;
+            /**
+             * More Phones
+             * @description The other numbers of the same person
+             */
+            more_phones?: string[];
             /** Name */
             name: string;
             /** Phone */
             phone: string;
+            /** Pincode */
+            pincode?: string | null;
             /**
              * Priority
              * @default 2
              */
             priority: number;
+            /** Relative Name */
+            relative_name?: string | null;
             /** Tags */
             tags?: string[];
         };
         /** ContactOut */
         ContactOut: {
+            /** Address */
+            address?: string | null;
+            /** Age */
+            age?: number | null;
             assigned_to?: components["schemas"]["PersonRef"] | null;
             /** Call Count */
             call_count: number;
+            /** Call Phone */
+            call_phone?: string | null;
             /**
              * Campaigns
              * @default []
@@ -2024,6 +2071,10 @@ export interface components {
             };
             /** Email */
             email?: string | null;
+            /** Epic No */
+            epic_no?: string | null;
+            /** Gender */
+            gender?: string | null;
             /** Id */
             id: number;
             /** Last Called At */
@@ -2036,10 +2087,24 @@ export interface components {
             name: string;
             /** Phone */
             phone: string;
+            /**
+             * Phone Count
+             * @default 1
+             */
+            phone_count: number;
             /** Phone Raw */
             phone_raw: string;
+            /**
+             * Phones
+             * @default []
+             */
+            phones: components["schemas"]["PhoneOut"][];
+            /** Pincode */
+            pincode?: string | null;
             /** Priority */
             priority: number;
+            /** Relative Name */
+            relative_name?: string | null;
             /** Source */
             source?: string | null;
             /** Status */
@@ -2079,6 +2144,10 @@ export interface components {
         };
         /** ContactUpdate */
         ContactUpdate: {
+            /** Address */
+            address?: string | null;
+            /** Age */
+            age?: number | null;
             /** Category */
             category?: string | null;
             /** Custom Fields */
@@ -2087,14 +2156,27 @@ export interface components {
             } | null;
             /** Email */
             email?: string | null;
+            /** Epic No */
+            epic_no?: string | null;
+            /** Gender */
+            gender?: ("M" | "F" | "O") | null;
             /** Location */
             location?: string | null;
             /** Name */
             name?: string | null;
             /** Phone */
             phone?: string | null;
+            /**
+             * Phones
+             * @description Every number of the person, the main one first (replaces the numbers it has)
+             */
+            phones?: string[] | null;
+            /** Pincode */
+            pincode?: string | null;
             /** Priority */
             priority?: number | null;
+            /** Relative Name */
+            relative_name?: string | null;
             /** Status */
             status?: ("new" | "in_progress" | "callback" | "follow_up" | "interested" | "not_interested" | "completed" | "invalid" | "unreachable" | "do_not_contact") | null;
             /** Tags */
@@ -3447,6 +3529,39 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+        };
+        /**
+         * PhoneOut
+         * @description One number of a person and what happened on it.
+         */
+        PhoneOut: {
+            /**
+             * Answered
+             * @default 0
+             */
+            answered: number;
+            /**
+             * Calls
+             * @default 0
+             */
+            calls: number;
+            /**
+             * Invalid
+             * @default false
+             */
+            invalid: boolean;
+            /** Last Answered At */
+            last_answered_at?: string | null;
+            /** Last Called At */
+            last_called_at?: string | null;
+            /** Phone */
+            phone: string;
+            /** Phone Raw */
+            phone_raw: string;
+            /** Position */
+            position: number;
+            /** Primary */
+            primary: boolean;
         };
         /** PlanEmployee */
         PlanEmployee: {

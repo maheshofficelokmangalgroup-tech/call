@@ -19,10 +19,33 @@ class CampaignRef(BaseModel):
     name: str
 
 
+class PhoneOut(BaseModel):
+    """One number of a person and what happened on it."""
+
+    phone: str  # +91...
+    phone_raw: str
+    position: int
+    primary: bool
+    calls: int = 0
+    answered: int = 0
+    invalid: bool = False  # an employee reported it as not a valid number
+    last_called_at: datetime | None = None
+    last_answered_at: datetime | None = None
+
+
 class ContactBrief(ORMModel):
     id: int
     name: str
-    phone: str = Field(validation_alias="normalized_phone")
+    phone: str = Field(validation_alias="normalized_phone")  # the first number; all of them are in `phones`
+    phones: list[PhoneOut] = []
+    phone_count: int = 1
+    call_phone: str | None = None  # the number to dial now (the one that was answered, else the one tried least)
+    relative_name: str | None = None
+    age: int | None = None
+    gender: str | None = None
+    epic_no: str | None = None
+    pincode: str | None = None
+    address: str | None = None
     email: str | None = None
     location: str | None = None
     category: str | None = None
@@ -49,6 +72,13 @@ class ContactOut(ContactBrief):
 class ContactCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(min_length=3, max_length=32)
+    more_phones: list[str] = Field(default_factory=list, max_length=19, description="The other numbers of the same person")
+    relative_name: str | None = Field(default=None, max_length=255)
+    age: int | None = Field(default=None, ge=0, le=150)
+    gender: Literal["M", "F", "O"] | None = None
+    epic_no: str | None = Field(default=None, max_length=32)
+    pincode: str | None = Field(default=None, max_length=10)
+    address: str | None = Field(default=None, max_length=2000)
     email: str | None = Field(default=None, max_length=255)
     location: str | None = Field(default=None, max_length=255)
     category: str | None = Field(default=None, max_length=100)
@@ -84,6 +114,13 @@ class ContactCreate(BaseModel):
 class ContactUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     phone: str | None = Field(default=None, min_length=3, max_length=32)
+    phones: list[str] | None = Field(default=None, min_length=1, max_length=20, description="Every number of the person, the main one first (replaces the numbers it has)")
+    relative_name: str | None = Field(default=None, max_length=255)
+    age: int | None = Field(default=None, ge=0, le=150)
+    gender: Literal["M", "F", "O"] | None = None
+    epic_no: str | None = Field(default=None, max_length=32)
+    pincode: str | None = Field(default=None, max_length=10)
+    address: str | None = Field(default=None, max_length=2000)
     email: str | None = Field(default=None, max_length=255)
     location: str | None = Field(default=None, max_length=255)
     category: str | None = Field(default=None, max_length=100)

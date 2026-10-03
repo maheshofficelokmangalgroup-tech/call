@@ -16,6 +16,11 @@ export async function upsertContacts(contacts: Contact[]): Promise<void> {
          ON CONFLICT(id) DO UPDATE SET phone = excluded.phone, name = excluded.name, json = excluded.json, updated_at = excluded.updated_at`,
         [c.id, c.phone, c.name, JSON.stringify(c), now],
       );
+      // every number of the person finds the person (a list that sends no numbers keeps the ones it had)
+      if (c.phones?.length) {
+        await tx.execute('DELETE FROM contact_phones WHERE contact_id = ?', [c.id]);
+        for (const p of c.phones) await tx.execute('INSERT OR IGNORE INTO contact_phones (phone, contact_id) VALUES (?, ?)', [p.phone, c.id]);
+      }
     }
   });
 }
@@ -24,7 +29,14 @@ export async function findContactByPhone(phone: string): Promise<Contact | null>
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 6) return null;
   const suffix = digits.slice(-10);
-  const rows = await query<Row>('SELECT json FROM contacts WHERE replace(replace(phone, "+", ""), " ", "") LIKE ? LIMIT 1', [`%${suffix}`]);
+  // any number of a person finds the person; a copy kept before the update has the main number only
+  const rows = await query<Row>(
+    `SELECT json FROM contacts
+      WHERE replace(replace(phone, "+", ""), " ", "") LIKE ?
+         OR id IN (SELECT contact_id FROM contact_phones WHERE replace(phone, "+", "") LIKE ?)
+      LIMIT 1`,
+    [`%${suffix}`, `%${suffix}`],
+  );
   return rows.length ? (JSON.parse(rows[0].json) as Contact) : null;
 }
 
@@ -36,12 +48,15 @@ export async function getLocalContact(id: number): Promise<Contact | null> {
 export async function searchLocalContacts(text: string, limit = 50): Promise<Contact[]> {
   const like = `%${text.trim().toLowerCase().replace(/[%_]/g, '')}%`;
   const rows = await query<Row>(
-    'SELECT json FROM contacts WHERE lower(name) LIKE ? OR phone LIKE ? ORDER BY name COLLATE NOCASE LIMIT ?',
-    [like, like, limit],
+    `SELECT json FROM contacts
+      WHERE lower(name) LIKE ? OR phone LIKE ? OR id IN (SELECT contact_id FROM contact_phones WHERE phone LIKE ?)
+      ORDER BY name COLLATE NOCASE LIMIT ?`,
+    [like, like, like, limit],
   );
   return rows.map((r) => JSON.parse(r.json) as Contact);
 }
 
 export async function clearContacts(): Promise<void> {
   await run('DELETE FROM contacts');
+  await run('DELETE FROM contact_phones');
 }

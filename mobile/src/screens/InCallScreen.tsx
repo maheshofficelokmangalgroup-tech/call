@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { PressableScale } from '../components/PressableScale';
 import { PulseRing } from '../components/PulseRing';
 import { Text } from '../components/Text';
+import { getLocalContact } from '../database/contacts';
 import type { RootStackParamList } from '../navigation/types';
 import { LiveCallScreen } from '../components/call/LiveCallScreen';
 import { primaryCall, startLiveCallSync, useLiveCalls } from '../services/telephony/liveCalls';
@@ -19,6 +20,7 @@ import { toast } from '../store/toastStore';
 import { colors } from '../theme';
 import { formatDuration, formatPhone } from '../utils/format';
 import { haptics } from '../utils/haptics';
+import { personLine } from '../utils/people';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -57,6 +59,20 @@ function ClassicInCall() {
       navigation.replace('Outcome', { callUuid: call.uuid });
     }
   }, [call?.phase, call?.uuid, navigation]);
+
+  // who the person is (a voter: the relative's name, age, gender) - from the copy of the contact on this phone
+  const contactId = call?.contactId ?? null;
+  const [person, setPerson] = useState<string | null>(null);
+  useEffect(() => {
+    if (contactId === null) return;
+    let alive = true;
+    getLocalContact(contactId)
+      .then((contact) => alive && setPerson(contact ? personLine(contact) : null))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [contactId]);
 
   // nothing to show (already handled): leave
   useEffect(() => {
@@ -116,6 +132,11 @@ function ClassicInCall() {
           {call.contactName ? (
             <Text variant="h3" color="rgba(255,255,255,0.85)" align="center">
               {formatPhone(call.phone)}
+            </Text>
+          ) : null}
+          {person ? (
+            <Text variant="small" color="rgba(255,255,255,0.75)" align="center" numberOfLines={2}>
+              {person}
             </Text>
           ) : null}
           <View style={styles.statusRow}>

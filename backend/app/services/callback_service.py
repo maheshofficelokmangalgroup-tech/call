@@ -14,7 +14,7 @@ from app.models.contact import CONTACT_CALLBACK, CONTACT_FOLLOW_UP, CONTACT_IN_P
 from app.models.employee import Employee
 from app.schemas.call import CallbackCreate, CallbackOut, CallbackUpdate
 from app.schemas.contact import ContactBrief
-from app.services import contact_service
+from app.services import contact_numbers, contact_service
 from app.services.scope import is_admin, visible_employee_ids
 
 PAST_TOLERANCE = timedelta(minutes=5)
@@ -111,7 +111,12 @@ def list_callbacks(
     total = db.scalar(select(func.count()).select_from(stmt.order_by(None).with_only_columns(Callback.id).subquery())) or 0
     rows = db.execute(stmt.order_by(Callback.scheduled_at, Callback.id).limit(page_size).offset((page - 1) * page_size)).all()
     now = utcnow()
-    return [to_out(cb, contact, now) for cb, contact in rows], total
+    briefs = {b.id: b for b in contact_numbers.brief_many(db, [contact for _, contact in rows])}
+    outs = [to_out(cb, contact, now) for cb, contact in rows]
+    for out in outs:
+        if out.contact is not None and out.contact.id in briefs:
+            out.contact = briefs[out.contact.id]
+    return outs, total
 
 
 def get_callback(db: Session, user: Employee, callback_id: int) -> Callback:

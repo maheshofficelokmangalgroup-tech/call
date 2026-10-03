@@ -16,7 +16,7 @@ from sqlalchemy import func, insert, select
 from app.core.config import get_settings
 from app.core.database import new_session
 from app.core.security import hash_password
-from app.models.contact import Contact, ContactAssignment
+from app.models.contact import Contact, ContactAssignment, ContactPhone
 from app.models.employee import Employee, Role, Team
 from app.services.contact_service import build_search_text
 from app.services.phone import normalize_phone
@@ -90,8 +90,11 @@ def main() -> int:
                 )
             db.execute(insert(Contact), rows)
         db.flush()
-        contact_ids = list(db.scalars(select(Contact.id).where(Contact.name.like("Lead %")).order_by(Contact.id.desc()).limit(wanted)))
-        contact_ids.reverse()
+        made = list(db.execute(select(Contact.id, Contact.phone_raw, Contact.normalized_phone).where(Contact.name.like("Lead %")).order_by(Contact.id.desc()).limit(wanted)))
+        made.reverse()
+        contact_ids = [row[0] for row in made]
+        for start in range(0, len(made), CHUNK):  # (rows inserted in bulk skip what the model does for a new contact: its first number goes into the numbers table)
+            db.execute(insert(ContactPhone), [dict(contact_id=cid, phone_raw=raw, normalized_phone=normalized, position=0) for cid, raw, normalized in made[start : start + CHUNK]])
         owners = [e.id for e in employees]
         for start in range(0, len(contact_ids), CHUNK):
             db.execute(

@@ -26,6 +26,7 @@ import { useAuth } from '../store/authStore';
 import { colors, radius, space } from '../theme';
 import { formatDurationWords, greeting, pluralize } from '../utils/format';
 import { haptics } from '../utils/haptics';
+import { dialNumber } from '../utils/people';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -220,7 +221,7 @@ export function HomeScreen() {
                 showTags={false}
                 onOpen={() => navigation.navigate('ContactDetail', { contactId: item.contact.id, preview: item.contact })}
                 onCall={() =>
-                  void call({ contactId: item.contact.id, contactName: item.contact.name, phone: item.contact.phone, campaignId: item.campaign?.id ?? null })
+                  void call({ contactId: item.contact.id, contactName: item.contact.name, phone: dialNumber(item.contact), campaignId: item.campaign?.id ?? null })
                 }
               />
             ))

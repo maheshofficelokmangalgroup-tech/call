@@ -3,10 +3,10 @@ import { StyleSheet, View } from 'react-native';
 
 import type { QueueItem } from '../services/api/types';
 import { colors, radius, shadow } from '../theme';
-import { formatPhone } from '../utils/format';
 import { describeCallbackTime, parseIso, timeAgo } from '../utils/time';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
+import { PhoneLine } from './PhoneLine';
 import { PressableScale } from './PressableScale';
 import { Tag } from './Chip';
 import { Text } from './Text';
@@ -50,10 +50,7 @@ export function QueueCard({ item, onOpen, onCall, highlight = false, showTags = 
         <Text variant="h3" numberOfLines={1}>
           {contact.name}
         </Text>
-        <Text variant="small" color="muted" numberOfLines={1}>
-          {formatPhone(contact.phone)}
-          {contact.location ? `  •  ${contact.location}` : ''}
-        </Text>
+        <PhoneLine contact={contact} />
         {showTags ? (
           <View style={styles.tags}>
             {reasonTag(item)}

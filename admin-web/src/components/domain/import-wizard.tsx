@@ -305,7 +305,9 @@ function ImportBody({ onOpenChange, resumeId }: { onOpenChange: (open: boolean) 
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line p-4 text-sm">
                 <p className="text-muted">
-                  The sheet needs a <b className="text-ink">name</b> and a <b className="text-ink">phone</b> column; email, city, category, tags, priority and any other column are optional. After the check you choose who gets the contacts - by default{" "}
+                  The sheet needs a <b className="text-ink">name</b> and a <b className="text-ink">phone</b> column; email, city, category, tags, priority and any other column are optional. A list of
+                  people (<i>Mobile Number, Voter Name, Relative Name, Age, Gender, EPIC No, Voter Pincode, Voter Address</i>) is kept as it is: the lines of the same person become{" "}
+                  <b className="text-ink">one contact with all their numbers</b>, and a number is never in two contacts. After the check you choose who gets the contacts - by default{" "}
                   <b className="text-ink">everybody who is working, the same number each</b>.
                 </p>
                 <Button variant="secondary" size="sm" onClick={() => downloadText("contacts-sample.csv", SAMPLE)}>
@@ -338,6 +340,12 @@ function ImportBody({ onOpenChange, resumeId }: { onOpenChange: (open: boolean) 
                 <Stat label="already exist" value={j.duplicate_rows} tone="warn" />
                 <Stat label="have a problem" value={j.invalid_rows} tone="danger" />
               </div>
+              {Number(j.result?.merged_rows ?? 0) > 0 ? (
+                <p className="rounded-xl bg-brand-soft px-3.5 py-2 text-sm font-semibold text-brand-strong" data-testid="import-people-note">
+                  {formatNumber(j.total_rows)} lines are {formatNumber(Number(j.result?.sheet_people ?? 0))} people with {formatNumber(Number(j.result?.sheet_numbers ?? 0))} numbers: {formatNumber(Number(j.result?.merged_rows ?? 0))} lines were another
+                  number of a person who is on an earlier line - they are put together, one contact each.
+                </p>
+              ) : null}
               {j.file_duplicate_rows > 0 || j.existing_rows > 0 ? (
                 <p className="text-xs text-muted" data-testid="import-duplicates-note">
                   {[
@@ -522,11 +530,11 @@ function CheckingPanel({ job, now }: { job: ImportJob | undefined; now: number }
   const stage = String(job?.result?.stage ?? "waiting");
   const compared = Number(job?.result?.compared ?? 0);
   const rate = rowsPerSecond(job?.scanned_rows ?? 0, job?.created_at, now);
-  const percent = stage === "comparing" ? 100 : (job?.progress_percent ?? 0);
+  const percent = stage === "comparing" || stage === "grouping" ? 100 : (job?.progress_percent ?? 0);
   return (
     <div className="flex flex-col items-center py-12 text-center" data-testid="import-checking">
       <Loader2 className="size-10 animate-spin text-brand" />
-      <p className="mt-4 text-base font-bold text-ink">{stage === "comparing" ? "Comparing with the contacts you already have..." : stage === "waiting" ? "Waiting for its turn..." : "Reading every line..."}</p>
+      <p className="mt-4 text-base font-bold text-ink">{stage === "comparing" ? "Comparing with the contacts you already have..." : stage === "grouping" ? "Putting the numbers of the same person together..." : stage === "waiting" ? "Waiting for its turn..." : "Reading every line..."}</p>
       <div className="mt-4 w-full max-w-md">
         <ProgressBar value={stage === "comparing" ? Math.min(99, 90 + compared / Math.max(1, job?.valid_rows || compared || 1) * 9) : percent} label="Check" />
       </div>

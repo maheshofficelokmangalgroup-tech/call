@@ -27,7 +27,8 @@ from app.models.contact import (
     ContactAssignment,
 )
 from app.schemas.call import CallbackOut, QueueItem, QueueOut
-from app.schemas.contact import CampaignRef, ContactBrief
+from app.schemas.contact import CampaignRef
+from app.services import contact_numbers
 
 
 def _base(employee_ids: Sequence[int] | None, now: datetime) -> tuple[Select, Any, Any]:
@@ -120,13 +121,14 @@ def build_queue(db: Session, employee_id: int, *, limit: int = 100, offset: int 
         ):
             callback_ids.setdefault(cbk.contact_id, cbk)
 
+    briefs = {b.id: b for b in contact_numbers.brief_many(db, [r[0] for r in rows])}  # (every number of every person, with what happened on it)
     items: list[QueueItem] = []
     for contact, campaign_id, campaign_name, _prio, cb_at, _grp in rows:
         callback = callback_ids.get(contact.id)
         reason = "callback" if callback else ("retry" if contact.call_count > 0 else "new")
         items.append(
             QueueItem(
-                contact=ContactBrief.model_validate(contact),
+                contact=briefs[contact.id],
                 reason=reason,
                 callback=(
                     CallbackOut(

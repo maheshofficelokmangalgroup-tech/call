@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.core.security import hash_password
     from app.core.timeutils import utcnow
     from app.main import app
-    from app.models.contact import Contact, ContactAssignment
+    from app.models.contact import Contact, ContactAssignment, ContactPhone
     from app.models.employee import Employee, Role
     from app.models.imports import Import
     from app.schemas.distribution import DistributionIn
@@ -152,6 +152,11 @@ def main(argv: list[str] | None = None) -> int:
     ]
     for i in range(0, len(rows), 5000):
         db.execute(insert(Contact.__table__), rows[i : i + 5000])
+    # (a row inserted straight into the table skips what the model does for a new contact: its first number goes into the numbers table)
+    ids = dict(db.execute(select(Contact.normalized_phone, Contact.id).where(Contact.source == "seed")).all())
+    numbers = [{"contact_id": ids[r["normalized_phone"]], "phone_raw": r["phone_raw"], "normalized_phone": r["normalized_phone"], "position": 0, "created_at": now} for r in rows]
+    for i in range(0, len(numbers), 5000):
+        db.execute(insert(ContactPhone.__table__), numbers[i : i + 5000])
     db.commit()
     before_total = db.scalar(select(func.count(Contact.id))) or 0
     report.line(f"{before_total:,} contacts seeded in {time.perf_counter() - started:.1f} s")

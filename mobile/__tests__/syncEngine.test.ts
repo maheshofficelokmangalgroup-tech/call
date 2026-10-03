@@ -56,8 +56,15 @@ describe('executeOp', () => {
     calls.getCall.mockResolvedValue(call());
     mockApi.createCall.mockResolvedValue({ id: 99 });
     await executeOp(op('create_call'));
-    expect(mockApi.createCall).toHaveBeenCalledWith(expect.objectContaining({ client_call_id: 'call-1', contact_id: 10, campaign_id: 2, phone_number: undefined }));
+    expect(mockApi.createCall).toHaveBeenCalledWith(expect.objectContaining({ client_call_id: 'call-1', contact_id: 10, campaign_id: 2 }));
     expect(calls.updateCall).toHaveBeenCalledWith('call-1', { serverId: 99 });
+  });
+
+  it('create_call sends the number that was dialled with the contact (a person with several numbers: the server records that one)', async () => {
+    calls.getCall.mockResolvedValue(call({ phone: '+919123456789' }));
+    mockApi.createCall.mockResolvedValue({ id: 98 });
+    await executeOp(op('create_call'));
+    expect(mockApi.createCall).toHaveBeenCalledWith(expect.objectContaining({ contact_id: 10, phone_number: '+919123456789' }));
   });
 
   it('create_call is a no-op when the call already has a server id (replay)', async () => {
