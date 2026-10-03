@@ -19,6 +19,7 @@ TAG="${1:-}"
 SHA="${2:-}"
 HEALTH_ROUNDS="${HEALTH_ROUNDS:-60}"
 HEALTH_PAUSE="${HEALTH_PAUSE:-4}"
+CADDY_SETTLE="${CADDY_SETTLE:-4}"
 env_get() { grep -E "^$1=" .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true; }
 # a new line in .env: the file may not end with a newline, and the new line must never be glued to the last one
 env_add() { [ -z "$(tail -c1 .env)" ] || echo >> .env; printf '%s\n' "$1" >> .env; }
@@ -82,7 +83,26 @@ wait_healthy() {
 
 show_trouble() {
   "${COMPOSE[@]}" ps || true
-  "${COMPOSE[@]}" logs --tail=40 api admin || true
+  "${COMPOSE[@]}" logs --tail=40 api admin caddy || true
+}
+
+# The front door. Caddy reads its Caddyfile once, when its container starts, and the file is mounted into the container as ONE file:
+# `git checkout` replaces it with a new file that the running container never sees (it keeps the old one), and Compose finds nothing to
+# recreate (the Caddy service itself did not change). So a changed Caddyfile does nothing until Caddy's container is created again -
+# which is done here at every deploy (the API and the panel are restarted anyway), after the file has been tried in a throw-away
+# container: a file that does not load would take the front door down while the API and the panel look healthy.
+CADDY_RECREATED=""
+front_door() {
+  local result
+  if ! result="$("${COMPOSE[@]}" run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile 2>&1)"; then
+    printf '%s\n' "$result" >&2
+    return 1
+  fi
+  CADDY_RECREATED=yes
+  "${COMPOSE[@]}" up -d --force-recreate --no-deps caddy || return 1
+  sleep "$CADDY_SETTLE"
+  # (a here-string, not a pipe: see above)
+  grep -qx caddy <<<"$("${COMPOSE[@]}" ps --status running --services 2>/dev/null || true)"
 }
 
 # The new version is not healthy: put the one that was running back (its images are still on this server: the newest three of each
@@ -97,6 +117,10 @@ go_back() {
   sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=$PREVIOUS_TAG|" .env
   "${COMPOSE[@]}" up -d --remove-orphans
   if wait_healthy; then
+    # (Caddy too, when it was restarted with the Caddyfile of the new version: it gets the one that belongs to the earlier version)
+    if [ -n "$CADDY_RECREATED" ] && ! front_door; then
+      echo "Caddy could not be restarted with the earlier Caddyfile: look at the logs." >&2
+    fi
     echo "The earlier version is running again. The new version (${SHA:0:7}) was NOT put into service." >&2
   else
     show_trouble
@@ -116,6 +140,14 @@ if ! wait_healthy; then
 fi
 
 say "Healthy. Version: $("${COMPOSE[@]}" exec -T api curl -fsS -m 4 http://localhost:8000/health)"
+
+say "Restarting the front door with the Caddyfile of this version"
+if ! front_door; then
+  show_trouble
+  echo "Caddy did not accept the Caddyfile of this version, or did not start with it." >&2
+  go_back
+  exit 1
+fi
 
 # the first administrator was created from .env at the first start: prove that password works, then keep it out of the file
 FIRST_ADMIN="$(env_get BOOTSTRAP_ADMIN_EMAIL)"

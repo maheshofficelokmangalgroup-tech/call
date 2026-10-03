@@ -34,10 +34,26 @@ else
   "${COMPOSE[@]}" up -d --build --remove-orphans
 fi
 
+# The front door. Caddy reads its Caddyfile once, when its container starts, and the file is mounted into the container as ONE file that
+# `git pull` replaces with a new one the running container never sees; Compose finds nothing to recreate. So a changed Caddyfile only
+# takes effect when Caddy's container is created again - done here, after the file has been tried in a throw-away container (a file
+# that does not load must not take the front door down). The same as deploy/shared/deploy.sh does on a shared server.
+front_door() {
+  local result
+  if ! result="$("${COMPOSE[@]}" run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile 2>&1)"; then
+    printf '%s\n' "$result" >&2
+    echo "Caddy cannot load deploy/Caddyfile: it keeps running with the one it had. Fix the file and run this update again." >&2
+    return 1
+  fi
+  "${COMPOSE[@]}" up -d --force-recreate --no-deps caddy
+}
+
 say "Waiting until it is healthy"
 for _ in $(seq 1 90); do
   if "${COMPOSE[@]}" exec -T api curl -fsS -m 4 http://localhost:8000/ready >/dev/null 2>&1 \
      && "${COMPOSE[@]}" exec -T admin wget -q -O /dev/null -T 4 "http://127.0.0.1:3000/api/health?deep=1" >/dev/null 2>&1; then
+    say "Restarting the front door with the Caddyfile of this version"
+    front_door || exit 1
     docker image prune -f >/dev/null 2>&1 || true
     say "Updated. Running version: $("${COMPOSE[@]}" exec -T api curl -fsS -m 4 http://localhost:8000/health | sed -e 's/.*"version":"\([^"]*\)".*/\1/')"
     exit 0

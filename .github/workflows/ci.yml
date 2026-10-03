@@ -255,8 +255,11 @@ jobs:
           sudo apt-get install -y shellcheck >/dev/null
           shellcheck -S warning deploy/*.sh deploy/shared/*.sh
 
-      - name: The deploy script goes back to the running version when the new one is not healthy (a pretend Docker, no server needed)
+      - name: The deploy script goes back to the running version when the new one is not healthy, and restarts Caddy with the new Caddyfile (a pretend Docker, no server needed)
         run: bash deploy/shared/test-deploy.sh
+
+      - name: The update script restarts Caddy with the new Caddyfile, and leaves it alone when the file does not load (a pretend Docker)
+        run: bash deploy/test-update.sh
 
       - name: Settings for a throw-away stack on plain http
         run: |
