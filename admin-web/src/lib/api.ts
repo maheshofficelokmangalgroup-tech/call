@@ -42,9 +42,16 @@ export function goToLogin() {
   window.location.assign(target.href);
 }
 
+/** What to say when an answer carries no message of its own (the refusals of the front door - too large, restarting - are not JSON). */
+export function plainStatus(status: number, forUpload = false): string {
+  if (status === 413) return forUpload ? "That file is bigger than the server accepts. A sheet can be up to 200 MB - split it into two files." : "That is more than the server accepts in one request.";
+  if (status === 502 || status === 503 || status === 504) return "The server is restarting or busy. Wait a minute and try again.";
+  return `The server answered ${status}.`;
+}
+
 export async function parseError(res: Response): Promise<ApiError> {
   let code = "http_error";
-  let message = `The server answered ${res.status}.`;
+  let message = plainStatus(res.status);
   let details: unknown;
   try {
     const data = await res.json();
@@ -143,7 +150,7 @@ export function upload<T>(path: string, { form, onProgress, signal }: UploadOpti
         resolve(data as T);
       } else {
         const retry = Number(request.getResponseHeader("retry-after"));
-        reject(new ApiError(request.status, data?.error?.code ?? "http_error", data?.error?.message ?? `The server answered ${request.status}.`, data?.error?.details, Number.isFinite(retry) && retry > 0 ? retry : undefined));
+        reject(new ApiError(request.status, data?.error?.code ?? "http_error", data?.error?.message ?? plainStatus(request.status, true), data?.error?.details, Number.isFinite(retry) && retry > 0 ? retry : undefined));
       }
     };
     signal?.addEventListener("abort", () => request.abort(), { once: true });
