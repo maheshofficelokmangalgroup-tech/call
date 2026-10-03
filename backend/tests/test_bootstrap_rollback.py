@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 
 import pytest
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 from app.core.database import get_engine
 from scripts import bootstrap
+from tests.conftest import _alembic_config
 
 
 @pytest.fixture()
@@ -34,5 +36,6 @@ def test_a_database_that_is_up_to_date_or_behind_is_still_migrated(caplog):
     with caplog.at_level(logging.WARNING, logger="bootstrap"):
         bootstrap.run_migrations()
     assert "newer than this version knows" not in caplog.text
+    head = ScriptDirectory.from_config(_alembic_config()).get_current_head()  # (the newest migration of this version, whichever it is)
     with get_engine().connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0005"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == head

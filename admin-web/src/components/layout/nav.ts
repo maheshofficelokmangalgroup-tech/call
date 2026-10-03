@@ -1,4 +1,4 @@
-import { ArrowRightLeft, BookUser, Headphones, LayoutDashboard, Megaphone, PhoneCall, ScrollText, Settings, Users, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, BookUser, CalendarClock, Headphones, LayoutDashboard, Megaphone, PhoneCall, ScrollText, Settings, Users, UsersRound, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -19,7 +19,10 @@ export interface NavGroup {
 export const NAV: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, usesRange: true, keywords: "home overview live kpi" }],
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, usesRange: true, keywords: "home overview live kpi" },
+      { href: "/followups", label: "Follow-ups", icon: CalendarClock, usesRange: true, keywords: "callbacks responses interested not interested what customers said who to call back overdue" },
+    ],
   },
   {
     label: "People",

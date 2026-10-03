@@ -85,7 +85,7 @@ export class FakePhone {
   }
 
   /** Hang up. `talkSeconds` 0 means nobody answered. `recording` is what the phone reports about its recorder. */
-  async hangUp(call: PlacedCall, opts: { startedAt: Date; ringSeconds?: number; talkSeconds: number; outcome?: string; recording?: string; note?: string }) {
+  async hangUp(call: PlacedCall, opts: { startedAt: Date; ringSeconds?: number; talkSeconds: number; outcome?: string; recording?: string; note?: string; callbackAt?: Date; callbackNote?: string }) {
     const ring = opts.ringSeconds ?? 8;
     const answered = opts.talkSeconds > 0;
     const answeredAt = new Date(opts.startedAt.getTime() + ring * 1000);
@@ -104,7 +104,7 @@ export class FakePhone {
     await this.json(await this.request.post(`${BACKEND}/api/v1/calls/${call.id}/events`, { headers: this.headers(), data: { events } }), "events");
     if (opts.outcome) {
       await this.json(
-        await this.request.post(`${BACKEND}/api/v1/calls/${call.id}/disposition`, { headers: this.headers(), data: { disposition_code: opts.outcome, notes: opts.note ?? null } }),
+        await this.request.post(`${BACKEND}/api/v1/calls/${call.id}/disposition`, { headers: this.headers(), data: { disposition_code: opts.outcome, notes: opts.note ?? null, callback_at: opts.callbackAt?.toISOString(), callback_note: opts.callbackNote } }),
         "outcome",
       );
     }

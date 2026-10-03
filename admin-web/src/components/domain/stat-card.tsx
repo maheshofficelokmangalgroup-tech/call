@@ -16,6 +16,7 @@ const TONES = {
   warn: { bg: "bg-warn-soft", fg: "text-warn", color: "var(--warn)" },
   teal: { bg: "bg-teal-soft", fg: "text-teal", color: "var(--teal)" },
   pink: { bg: "bg-pink-soft", fg: "text-pink", color: "var(--pink)" },
+  danger: { bg: "bg-danger-soft", fg: "text-danger", color: "var(--danger)" },
 } as const;
 
 export type StatTone = keyof typeof TONES;

@@ -4,6 +4,47 @@
  */
 
 export interface paths {
+    "/api/v1/analytics/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversations
+         * @description Who each employee spoke to in the period - one row per employee and phone number, newest first - with the latest response, the
+         *     last note, the next follow-up, and the latest calls.
+         */
+        get: operations["conversations_api_v1_analytics_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/conversations/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation Timeline
+         * @description Everything between one employee and one phone number: every call with its outcome and notes, the follow-ups, the recordings.
+         */
+        get: operations["conversation_timeline_api_v1_analytics_conversations_timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/employees": {
         parameters: {
             query?: never;
@@ -53,6 +94,47 @@ export interface paths {
          * @description One employee: figures, daily / hourly pattern, outcomes, the contacts they called most, recent calls and devices.
          */
         get: operations["employee_detail_api_v1_analytics_employees__employee_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/followups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Followups Summary
+         * @description The follow-up dashboard: how many people were spoken to and what came of it (by each person's latest response), the follow-ups
+         *     that are due, and the same for every employee.
+         */
+        get: operations["followups_summary_api_v1_analytics_followups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/followups/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Followups List
+         * @description Scheduled callbacks, the longest-waiting first, each with the person, the employee, and what was said before.
+         */
+        get: operations["followups_list_api_v1_analytics_followups_list_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1495,6 +1577,7 @@ export interface components {
             default_priority: number;
             /**
              * File
+             * Format: binary
              * @description CSV or XLSX file with a header row
              */
             file: string;
@@ -1509,6 +1592,7 @@ export interface components {
         Body_upload_recording_api_v1_recordings__recording_id__upload_post: {
             /**
              * File
+             * Format: binary
              * @description The audio file
              */
             file: string;
@@ -2019,6 +2103,65 @@ export interface components {
             tags?: string[] | null;
         };
         /**
+         * ConversationOut
+         * @description One employee and one phone number: the calls of the period, and what came of them.
+         */
+        ConversationOut: {
+            /** Answered */
+            answered: number;
+            /** Calls */
+            calls: number;
+            /** Contact Id */
+            contact_id: number | null;
+            /** Contact Name */
+            contact_name: string | null;
+            /** Contact Status */
+            contact_status: string | null;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Employee Name */
+            employee_name: string;
+            /**
+             * First Call At
+             * Format: date-time
+             */
+            first_call_at: string;
+            followup: components["schemas"]["FollowupBrief"] | null;
+            /** Followups Pending */
+            followups_pending: number;
+            /** Has Recording */
+            has_recording: boolean;
+            /** History */
+            history: components["schemas"]["ResponseChip"][];
+            /**
+             * Last Call At
+             * Format: date-time
+             */
+            last_call_at: string;
+            /** Last Call Has Outcome */
+            last_call_has_outcome: boolean;
+            /** Last Call Id */
+            last_call_id: number;
+            /** Last Call Seconds */
+            last_call_seconds: number;
+            /** Last Call Status */
+            last_call_status: string;
+            last_note: components["schemas"]["NoteBrief"] | null;
+            /** Notes */
+            notes: number;
+            /** Phone */
+            phone: string;
+            response: components["schemas"]["DispositionRef"] | null;
+            /** Response At */
+            response_at: string | null;
+            /** Talk Seconds */
+            talk_seconds: number;
+            /** Team Name */
+            team_name: string | null;
+        };
+        /**
          * CredentialOut
          * @description What an administrator may see of an employee's login: the first password, while the employee has not chosen their own.
          */
@@ -2364,6 +2507,37 @@ export interface components {
             /** Top Contacts */
             top_contacts: components["schemas"]["ContactStat"][];
         };
+        /** EmployeeFollowups */
+        EmployeeFollowups: {
+            /** Calls */
+            calls: number;
+            /** Employee Code */
+            employee_code: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Call At */
+            last_call_at: string | null;
+            /** Next Followup At */
+            next_followup_at: string | null;
+            /** Overdue */
+            overdue: number;
+            /** Pending */
+            pending: number;
+            /** People */
+            people: number;
+            /** Responses */
+            responses: {
+                [key: string]: number;
+            };
+            /** Spoken */
+            spoken: number;
+            /** Team Name */
+            team_name: string | null;
+        };
         /** EmployeeMetrics */
         EmployeeMetrics: {
             /** Active Days */
@@ -2540,6 +2714,147 @@ export interface components {
             role?: ("admin" | "manager" | "employee") | null;
             /** Team Id */
             team_id?: number | null;
+        };
+        /**
+         * FollowupBrief
+         * @description One scheduled callback.
+         */
+        FollowupBrief: {
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Note */
+            note: string | null;
+            /** Overdue */
+            overdue: boolean;
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * FollowupCounts
+         * @description Scheduled callbacks. `pending` and its three parts are as of now (whenever the callback was made); the last two are the period.
+         */
+        FollowupCounts: {
+            /**
+             * Closed
+             * @default 0
+             */
+            closed: number;
+            /**
+             * Created
+             * @default 0
+             */
+            created: number;
+            /**
+             * Overdue
+             * @default 0
+             */
+            overdue: number;
+            /**
+             * Pending
+             * @default 0
+             */
+            pending: number;
+            /**
+             * Today
+             * @default 0
+             */
+            today: number;
+            /**
+             * Upcoming
+             * @default 0
+             */
+            upcoming: number;
+        };
+        /**
+         * FollowupItemOut
+         * @description A scheduled callback with the person, the employee and what was said before.
+         */
+        FollowupItemOut: {
+            /** Call Id */
+            call_id: number | null;
+            /** Calls */
+            calls: number;
+            /** Completed At */
+            completed_at: string | null;
+            /** Contact Id */
+            contact_id: number;
+            /** Contact Name */
+            contact_name: string;
+            /** Contact Status */
+            contact_status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Employee Name */
+            employee_name: string;
+            /** Id */
+            id: number;
+            /** Last Call At */
+            last_call_at: string | null;
+            /** Last Call Id */
+            last_call_id: number | null;
+            last_note: components["schemas"]["NoteBrief"] | null;
+            /** Note */
+            note: string | null;
+            /** Overdue */
+            overdue: boolean;
+            /** Phone */
+            phone: string;
+            response: components["schemas"]["DispositionRef"] | null;
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Status */
+            status: string;
+            /** Team Name */
+            team_name: string | null;
+        };
+        /** FollowupSummaryOut */
+        FollowupSummaryOut: {
+            /** Calls */
+            calls: number;
+            /** Employees */
+            employees: components["schemas"]["EmployeeFollowups"][];
+            followups: components["schemas"]["FollowupCounts"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** People */
+            people: number;
+            period: components["schemas"]["PeriodOut"];
+            /** Responses */
+            responses: {
+                [key: string]: number;
+            };
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "organization" | "team" | "employee";
+            /** Spoken */
+            spoken: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2840,6 +3155,20 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** NoteBrief */
+        NoteBrief: {
+            /** Author Name */
+            author_name: string | null;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+        };
         /** NoteIn */
         NoteIn: {
             /** Body */
@@ -2987,10 +3316,32 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[ConversationOut] */
+        Page_ConversationOut_: {
+            /** Items */
+            items: components["schemas"]["ConversationOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
         /** Page[EmployeeOut] */
         Page_EmployeeOut_: {
             /** Items */
             items: components["schemas"]["EmployeeOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[FollowupItemOut] */
+        Page_FollowupItemOut_: {
+            /** Items */
+            items: components["schemas"]["FollowupItemOut"][];
             /** Page */
             page: number;
             /** Page Size */
@@ -3414,6 +3765,23 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /**
+         * ResponseChip
+         * @description One call of the history of a conversation, small.
+         */
+        ResponseChip: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Code */
+            code: string | null;
+            /** Label */
+            label: string | null;
+            /** Status */
+            status: string;
+        };
         /** SessionOut */
         SessionOut: {
             /**
@@ -3519,6 +3887,56 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** TimelineCallOut */
+        TimelineCallOut: {
+            /** Answered At */
+            answered_at: string | null;
+            /** Callback At */
+            callback_at: string | null;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Ended At */
+            ended_at: string | null;
+            /** Id */
+            id: number;
+            /** Notes */
+            notes: components["schemas"]["NoteBrief"][];
+            /** Recording Id */
+            recording_id: number | null;
+            /** Recording Seconds */
+            recording_seconds: number | null;
+            response: components["schemas"]["DispositionRef"] | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * TimelineOut
+         * @description Everything between one employee and one phone number.
+         */
+        TimelineOut: {
+            /** Calls */
+            calls: components["schemas"]["TimelineCallOut"][];
+            contact: components["schemas"]["ContactBrief"] | null;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Employee Name */
+            employee_name: string;
+            /** Followups */
+            followups: components["schemas"]["FollowupBrief"][];
+            /** Other Notes */
+            other_notes: components["schemas"]["NoteBrief"][];
+            /** Phone */
+            phone: string;
+            /** Total Calls */
+            total_calls: number;
+        };
         /** TokenPair */
         TokenPair: {
             /** Access Token */
@@ -3616,10 +4034,6 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
@@ -3636,6 +4050,81 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    conversations_api_v1_analytics_conversations_get: {
+        parameters: {
+            query?: {
+                /** @description First business day (inclusive), YYYY-MM-DD. Default: 6 days before date_to. */
+                date_from?: string | null;
+                /** @description Last business day (inclusive), YYYY-MM-DD. Default: today. */
+                date_to?: string | null;
+                employee_id?: number | null;
+                team_id?: number | null;
+                /** @description Outcome codes, comma separated; NONE = no outcome chosen yet */
+                response?: string | null;
+                /** @description Only people with a pending (or late) follow-up */
+                followup?: string | null;
+                q?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ConversationOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversation_timeline_api_v1_analytics_conversations_timeline_get: {
+        parameters: {
+            query: {
+                employee_id: number;
+                phone: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     employees_api_v1_analytics_employees_get: {
         parameters: {
             query?: {
@@ -3736,6 +4225,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmployeeDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    followups_summary_api_v1_analytics_followups_get: {
+        parameters: {
+            query?: {
+                /** @description First business day (inclusive), YYYY-MM-DD. Default: 6 days before date_to. */
+                date_from?: string | null;
+                /** @description Last business day (inclusive), YYYY-MM-DD. Default: today. */
+                date_to?: string | null;
+                employee_id?: number | null;
+                team_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowupSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    followups_list_api_v1_analytics_followups_list_get: {
+        parameters: {
+            query?: {
+                /** @description pending = overdue + today + upcoming; closed = done or cancelled in the period */
+                state?: string;
+                /** @description First business day (inclusive), YYYY-MM-DD. Default: 6 days before date_to. */
+                date_from?: string | null;
+                /** @description Last business day (inclusive), YYYY-MM-DD. Default: today. */
+                date_to?: string | null;
+                employee_id?: number | null;
+                team_id?: number | null;
+                q?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FollowupItemOut_"];
                 };
             };
             /** @description Validation Error */
