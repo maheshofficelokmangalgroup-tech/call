@@ -5,6 +5,8 @@
 #   * a healthy new version is put into service
 #   * a new version that does not become healthy is replaced by the one that was running (files and image tag), and the run FAILS
 #     (so the pipeline shows red) while the service is up again
+#   * "the one that was running" is what the container runs, not what the files and .env say (an attempt that stopped early had
+#     already moved those forward - this happened)
 #   * when there is nothing to go back to, nothing is touched
 #   * the front door: after a healthy deploy the Caddyfile is tried in a throw-away container and Caddy's container is created again
 #     (a changed Caddyfile does nothing otherwise); a Caddyfile that does not load, or that Caddy does not start with, fails the run and
@@ -35,6 +37,7 @@ case "$*" in
     tag="$(grep -E '^IMAGE_TAG=' .env | cut -d= -f2-)"
     [ "$FAKE_HEALTHY_TAG" = "*" ] || [ "$tag" = "$FAKE_HEALTHY_TAG" ] || exit 1 ;;
   *"exec -T api curl"*"/health"*) echo '{"status":"ok"}' ;;
+  *"ps --filter"*"label=com.docker.compose.service=api"*) echo "ghcr.io/example/call/api:$FAKE_RUNNING_TAG" ;;
   *"caddy validate"*) if grep -q BROKEN Caddyfile; then echo "Error: adapting config using caddyfile: the Caddyfile is BROKEN" >&2; exit 1; fi ;;
   *"up -d --force-recreate --no-deps caddy"*) if grep -q NOSTART Caddyfile; then rm -f "$FAKE_STATE/caddy_up"; else : > "$FAKE_STATE/caddy_up"; fi ;;
   *"ps --status running --services"*) if [ -f "$FAKE_STATE/caddy_up" ]; then echo caddy; fi ;;
@@ -62,6 +65,7 @@ OLD_TAG="sha-${OLD:0:7}"; NEW_TAG="sha-${NEW:0:7}"; BAD_TAG="sha-${BAD:0:7}"; ST
 
 fresh_server() { # $1 = the image tag that is running now; the file deliberately has no newline at the end
   : > "$FAKE_LOG"
+  export FAKE_RUNNING_TAG="$1"
   git checkout -q --detach "$OLD"
   printf 'PUBLIC_HOST=%s\nIMAGE_TAG=%s\nAPI_IMAGE=calling-api\nADMIN_IMAGE=calling-admin' "$FAKE_HOST" "$1" > deploy/shared/.env
   : > "$FAKE_STATE/caddy_up"  # Caddy is running (with the old Caddyfile)
@@ -113,7 +117,15 @@ if deploy "$NEW_TAG" "$NEW"; then fail "must fail"; fi
 [ "$(ups)" = 1 ] || fail "a version must not 'go back' to itself, got $(ups) up"
 echo "ok 4: the same version is not 'gone back' to"
 
-# 5. a file that is not understood by compose stops the deploy before anything is changed
+# 5. an attempt that stopped early had moved the files and .env to the new version, but the old one still RUNS: going back means that one
+fresh_server "$OLD_TAG"; git checkout -q --detach "$NEW"; sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=$NEW_TAG|" deploy/shared/.env
+export FAKE_RUNNING_TAG="$OLD_TAG" FAKE_HEALTHY_TAG="$OLD_TAG"
+if deploy "$NEW_TAG" "$NEW"; then fail "an unhealthy new version must make the run fail"; fi
+[ "$(tag_now)" = "$OLD_TAG" ] || fail "the RUNNING version's tag should be back, is $(tag_now)"
+[ "$(git rev-parse HEAD)" = "$OLD" ] || fail "the RUNNING version's files should be back"
+echo "ok 5: after an attempt that stopped early, going back means the version that really runs"
+
+# 6. a file that is not understood by compose stops the deploy before anything is changed
 fresh_server "$OLD_TAG"
 cat > "$WORK/bin/docker" <<'EOS'
 #!/usr/bin/env bash
@@ -123,7 +135,7 @@ exit 0
 EOS
 if deploy "$NEW_TAG" "$NEW"; then fail "a broken compose file must stop the deploy"; fi
 [ "$(ups)" = 0 ] || fail "nothing may be started when the files are wrong"
-echo "ok 5: a broken compose file stops the deploy before anything is started"
+echo "ok 6: a broken compose file stops the deploy before anything is started"
 
 # (the pretend docker of the first cases again)
 cat > "$WORK/bin/docker" <<'EOS'
@@ -135,6 +147,7 @@ case "$*" in
     tag="$(grep -E '^IMAGE_TAG=' .env | cut -d= -f2-)"
     [ "$FAKE_HEALTHY_TAG" = "*" ] || [ "$tag" = "$FAKE_HEALTHY_TAG" ] || exit 1 ;;
   *"exec -T api curl"*"/health"*) echo '{"status":"ok"}' ;;
+  *"ps --filter"*"label=com.docker.compose.service=api"*) echo "ghcr.io/example/call/api:$FAKE_RUNNING_TAG" ;;
   *"caddy validate"*) if grep -q BROKEN Caddyfile; then echo "Error: adapting config using caddyfile: the Caddyfile is BROKEN" >&2; exit 1; fi ;;
   *"up -d --force-recreate --no-deps caddy"*) if grep -q NOSTART Caddyfile; then rm -f "$FAKE_STATE/caddy_up"; else : > "$FAKE_STATE/caddy_up"; fi ;;
   *"ps --status running --services"*) if [ -f "$FAKE_STATE/caddy_up" ]; then echo caddy; fi ;;
@@ -142,7 +155,7 @@ esac
 exit 0
 EOS
 
-# 6. everything is healthy, but Caddy cannot load the Caddyfile of the new version: Caddy is NOT restarted (it keeps the working
+# 7. everything is healthy, but Caddy cannot load the Caddyfile of the new version: Caddy is NOT restarted (it keeps the working
 #    settings it has), the run fails, and the earlier version is put back
 fresh_server "$OLD_TAG"; export FAKE_HEALTHY_TAG="*"
 if deploy "$BAD_TAG" "$BAD"; then fail "a Caddyfile that does not load must make the run fail"; fi
@@ -153,9 +166,9 @@ grep -q "BROKEN" "$WORK/out.txt" || fail "the reason Caddy gave should be shown"
 [ "$(ups)" = 2 ] || fail "two 'up' expected (new, then back), got $(ups)"
 [ -f "$WORK/caddy_up" ] || fail "Caddy must still be running"
 grep -q "earlier version is running again" "$WORK/out.txt" || fail "the output should say the earlier version is running again"
-echo "ok 6: a Caddyfile that does not load: Caddy keeps what it has, the run fails, the earlier version is back"
+echo "ok 7: a Caddyfile that does not load: Caddy keeps what it has, the run fails, the earlier version is back"
 
-# 7. the Caddyfile loads but Caddy does not come up with it: the run fails, the earlier version is put back, and Caddy is restarted
+# 8. the Caddyfile loads but Caddy does not come up with it: the run fails, the earlier version is put back, and Caddy is restarted
 #    with the Caddyfile of the earlier version
 fresh_server "$OLD_TAG"; export FAKE_HEALTHY_TAG="*"
 if deploy "$STUCK_TAG" "$STUCK"; then fail "a Caddy that does not start must make the run fail"; fi
@@ -164,5 +177,5 @@ grep -q "did not accept the Caddyfile of this version, or did not start with it"
 [ "$(git rev-parse HEAD)" = "$OLD" ] && [ "$(tag_now)" = "$OLD_TAG" ] || fail "the earlier version (files and image tag) should be back"
 [ -f "$WORK/caddy_up" ] || fail "Caddy must be running again, with the Caddyfile of the earlier version"
 grep -q "earlier version is running again" "$WORK/out.txt" || fail "the output should say the earlier version is running again"
-echo "ok 7: Caddy does not start with the new Caddyfile: the earlier version AND its Caddyfile are put back"
+echo "ok 8: Caddy does not start with the new Caddyfile: the earlier version AND its Caddyfile are put back"
 echo "all deploy script checks passed"
