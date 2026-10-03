@@ -195,3 +195,29 @@ def test_managers_may_use_the_panel(client, make, db):
     manager = make.employee(role="manager", code="MGRW", email="mgrw@example.com")
     assert login(client, manager.email, device=WEB)["employee"]["role"] == "manager"
     assert db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == manager.id).count() == 0
+
+
+WEB_APP = {"device_uid": "employee-web-app", "name": "Web app (Chrome on Windows)", "platform": "webapp"}
+
+
+def test_employees_sign_in_to_the_web_app_without_registering_a_device(client, emp_a, db):
+    # the browser version of the phone app is for employees (the admin panel, platform "web", is not)
+    assert login(client, emp_a.email, device=WEB_APP)["employee"]["id"] == emp_a.id
+    assert db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == emp_a.id).count() == 0
+    session = db.query(EmployeeSession).filter(EmployeeSession.employee_id == emp_a.id).one()
+    assert session.device_id is None and session.user_agent  # visible as a sign-in, with its browser
+    assert client.post("/api/v1/auth/login", json={"identifier": emp_a.email, "password": PASSWORD, "device": WEB}).status_code == 403
+
+
+def test_the_web_app_is_no_way_around_a_bound_phone(client, make, db):
+    emp = make.employee(code="BOUND3")
+    emp.device_binding_enabled = True
+    db.commit()
+    refused = client.post("/api/v1/auth/login", json={"identifier": emp.email, "password": PASSWORD, "device": WEB_APP})
+    assert refused.status_code == 403 and refused.json()["error"]["code"] == "device_not_allowed"
+    assert db.query(EmployeeSession).filter(EmployeeSession.employee_id == emp.id).count() == 0
+    blocked = db.query(AuditLog).filter(AuditLog.action == "auth.login_blocked", AuditLog.actor_id == emp.id).all()
+    assert [b.details["reason"] for b in blocked] == ["device_not_allowed"]
+    # the bound phone itself still signs in and is the one that gets registered
+    login(client, emp.email, device={**DEVICE, "device_uid": "the-real-phone-03"})
+    assert [d.device_uid for d in db.query(EmployeeDevice).filter(EmployeeDevice.employee_id == emp.id)] == ["the-real-phone-03"]

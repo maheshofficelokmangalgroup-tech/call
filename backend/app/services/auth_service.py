@@ -39,13 +39,21 @@ def find_employee_by_identifier(db: Session, identifier: str) -> Employee | None
 
 
 WEB_PLATFORM = "web"  # the admin panel signs in with this platform; phones say "android"
+WEB_APP_PLATFORM = "webapp"  # the employee web app (the browser version of the phone app)
+BROWSER_PLATFORMS = {WEB_PLATFORM, WEB_APP_PLATFORM}
 
 
 def _register_device(db: Session, employee: Employee, info: DeviceInfo | None, ip: str | None) -> EmployeeDevice | None:
     """Create/refresh the device record and enforce optional device binding."""
-    if info is not None and info.platform == WEB_PLATFORM:
+    if info is not None and info.platform in BROWSER_PLATFORMS:
         # A browser is not a phone: it never becomes a registered device (and so can never take the "first phone" place of a
         # bound account). Web sign-ins are visible as sessions, with their browser and address.
+        if info.platform == WEB_APP_PLATFORM and employee.device_binding_enabled:
+            # an account bound to one phone is not for browsers either: the browser app would be a way around the binding
+            raise Forbidden(
+                "This account is bound to a registered phone. Use the mobile app, or ask your administrator to unbind it.",
+                code="device_not_allowed",
+            )
         return None
     if info is None:
         if employee.device_binding_enabled:

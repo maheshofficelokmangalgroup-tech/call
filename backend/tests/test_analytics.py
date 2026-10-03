@@ -321,6 +321,15 @@ def test_recording_coverage_and_the_reasons_phones_reported(client, db, as_admin
     assert data["totals"]["recordings"] == 1
 
 
+def test_calls_made_from_the_web_app_say_why_they_have_no_recording(client, db, as_admin, staff):
+    today = business_date()
+    call = add_call(db, staff["a1"], local(today, 9), talk=50, outcome="CONNECTED")
+    add_ended_event(db, call, {"source": "web_app", "recording": "web"})
+    rec = get(client, "/analytics/overview", as_admin, date_from=today.isoformat(), date_to=today.isoformat()).json()["recording"]
+    assert [(r["reason"], r["count"]) for r in rec["not_recorded"]] == [("web", 1)]
+    assert "web app" in rec["not_recorded"][0]["label"]
+
+
 # ------------------------------------------------------------------------------------------- calls list + export
 def test_call_list_filters_by_recording_duration_range_and_sort(client, db, as_admin, staff):
     today = business_date()

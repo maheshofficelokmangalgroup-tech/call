@@ -77,6 +77,7 @@ NOT_RECORDED_LABELS = {
     "no_permission": "Microphone permission is off",
     "failed": "The recorder could not run",
     "saved": "Saved on the phone, upload pending",
+    "web": "Made from the web app (browsers cannot record calls)",
     "unreported": "No report (older app or the phone's own dialer)",
 }
 
