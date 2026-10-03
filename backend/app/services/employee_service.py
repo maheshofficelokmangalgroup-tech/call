@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import secrets
 import string
 
@@ -15,8 +16,9 @@ from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.security import hash_password, validate_password_strength
 from app.core.timeutils import utcnow
 from app.models.employee import Employee, EmployeeDevice, EmployeeSession, Role, Team
-from app.schemas.employee import EmployeeCreate, EmployeeUpdate, TeamCreate, TeamUpdate
-from app.services import audit_service
+from app.core.config import get_settings
+from app.schemas.employee import CredentialOut, EmployeeCreate, EmployeeUpdate, TeamCreate, TeamUpdate
+from app.services import audit_service, credential_vault
 from app.services.auth_service import revoke_all_sessions
 from app.services.settings_service import get_setting
 
@@ -124,12 +126,27 @@ def create_employee(db: Session, *, data: EmployeeCreate, actor: Employee, reque
         password_changed_at=utcnow(),
     )
     db.add(employee)
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise Conflict("Employee email or ID already exists.", code="employee_exists") from exc
+    for attempt in range(1, 6):
+        try:
+            db.flush()
+            break
+        except IntegrityError as exc:
+            db.rollback()
+            # two administrators creating somebody at the same moment are given the same next number: the second takes the one after
+            if data.employee_code or attempt == 5 or db.scalars(select(Employee.id).where(Employee.email == data.email)).first():
+                raise Conflict("Employee email or ID already exists.", code="employee_exists") from exc
+            employee = Employee(
+                employee_code=f"EMP{(db.scalar(select(func.max(Employee.id))) or 0) + 1 + secrets.randbelow(5 * attempt):04d}",
+                email=data.email, full_name=data.full_name, phone=data.phone, password_hash=employee.password_hash, role_id=role.id,
+                team_id=data.team_id, is_active=True, daily_target=target, must_change_password=data.must_change_password,
+                device_binding_enabled=data.device_binding_enabled, password_changed_at=employee.password_changed_at,
+            )
+            db.add(employee)
     db.refresh(employee)
+    # the first password stays visible to administrators (encrypted) until the employee chooses their own
+    credential_vault.store(
+        db, employee_id=employee.id, password=password, kind=credential_vault.KIND_GENERATED if temporary else credential_vault.KIND_ADMIN_SET, actor_id=actor.id
+    )
     audit_service.record(
         db, action="employee.create", actor=actor, entity_type="employee", entity_id=employee.id, request=request,
         details={"employee_code": employee.employee_code, "role": data.role},
@@ -188,6 +205,7 @@ def set_active(db: Session, *, employee: Employee, active: bool, actor: Employee
     revoked = 0
     if not active:
         revoked = revoke_all_sessions(db, employee.id, reason="deactivated")
+        credential_vault.forget(db, employee.id)  # nobody signs in with it any more
     auth_cache.forget_employee(db, employee.id)
     audit_service.record(
         db,
@@ -213,6 +231,9 @@ def reset_password(db: Session, *, employee: Employee, new_password: str | None,
     employee.password_hash = hash_password(password)
     employee.must_change_password = True
     employee.password_changed_at = utcnow()
+    credential_vault.store(
+        db, employee_id=employee.id, password=password, kind=credential_vault.KIND_ADMIN_SET if new_password else credential_vault.KIND_GENERATED, actor_id=actor.id
+    )
     revoked = revoke_all_sessions(db, employee.id, reason="password_reset")
     auth_cache.forget_employee(db, employee.id)
     audit_service.record(
@@ -221,6 +242,80 @@ def reset_password(db: Session, *, employee: Employee, new_password: str | None,
     )
     db.commit()
     return password
+
+
+def view_credentials(db: Session, *, employee: Employee, actor: Employee, request: Request) -> CredentialOut:
+    """The first password of an employee, for the administrator who is looking at their page. Audited every time."""
+    stored = credential_vault.read(db, employee.id)
+    audit_service.record(
+        db, action="employee.credentials_viewed", actor=actor, entity_type="employee", entity_id=employee.id, request=request,
+        details={"available": stored is not None},
+    )
+    setter = db.get(Employee, stored.created_by) if stored and stored.created_by else None
+    if stored is not None:
+        credential_vault.note_viewed(db, employee.id)
+    db.commit()
+    return CredentialOut(
+        employee_id=employee.id,
+        employee_code=employee.employee_code,
+        full_name=employee.full_name,
+        email=employee.email,
+        phone=employee.phone,
+        available=stored is not None,
+        password=stored.password if stored else None,
+        kind=stored.kind if stored else None,
+        set_at=stored.created_at if stored else None,
+        set_by=setter.full_name if setter else None,
+        must_change_password=employee.must_change_password,
+        view_count=(stored.view_count + 1) if stored else 0,
+        keep_days=get_settings().credential_keep_days,
+    )
+
+
+def credentials_sheet(db: Session, *, ids: list[int], actor: Employee, request: Request) -> tuple[bytes, int]:
+    """An Excel sheet with the login of every employee whose first password can still be looked at (or of the ones named).
+
+    Every cell is written as TEXT: a password that starts with = + - @ must not become a formula when the sheet is opened.
+    """
+    from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
+
+    wanted = ids or credential_vault.pending_employee_ids(db)
+    employees = {e.id: e for e in db.scalars(select(Employee).where(Employee.id.in_(wanted)).order_by(Employee.full_name, Employee.id)).unique()}
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("Logins")
+
+    def text(value: str) -> WriteOnlyCell:
+        cell = WriteOnlyCell(sheet, value=value)
+        cell.data_type = "s"
+        return cell
+
+    sheet.append([text(h) for h in ("Employee ID", "Name", "Email", "Phone", "Password", "Must change it at the first sign-in", "Team")])
+    count = 0
+    for employee in employees.values():
+        stored = credential_vault.read(db, employee.id)
+        if stored is None:
+            continue
+        sheet.append(
+            [
+                text(employee.employee_code),
+                text(employee.full_name),
+                text(employee.email),
+                text(employee.phone or ""),
+                text(stored.password),
+                text("Yes" if employee.must_change_password else "No"),
+                text(employee.team_name or ""),
+            ]
+        )
+        credential_vault.note_viewed(db, employee.id)
+        count += 1
+    audit_service.record(
+        db, action="employee.credentials_exported", actor=actor, entity_type="employee", request=request, details={"employees": count}
+    )
+    db.commit()
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue(), count
 
 
 def revoke_sessions(db: Session, *, employee: Employee, actor: Employee, request: Request) -> int:

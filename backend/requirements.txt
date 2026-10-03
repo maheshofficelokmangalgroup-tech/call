@@ -14,5 +14,6 @@ bcrypt>=4.1,<6.0
 python-multipart>=0.0.9
 phonenumbers>=8.13,<10.0
 openpyxl>=3.1,<4.0
+defusedxml>=0.7.1,<1.0  # openpyxl uses it, when it is there, to refuse the XML tricks of a hostile .xlsx (entity bombs, external entities)
 boto3>=1.34,<2.0
 tzdata>=2024.1

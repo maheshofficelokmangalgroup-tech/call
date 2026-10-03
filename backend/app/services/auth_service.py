@@ -26,7 +26,7 @@ from app.core.security import (
 from app.core.timeutils import utcnow
 from app.models.employee import ROLE_ADMIN, ROLE_MANAGER, Employee, EmployeeDevice, EmployeeSession
 from app.schemas.employee import DeviceInfo, EmployeeOut, TokenPair
-from app.services import audit_service
+from app.services import audit_service, credential_vault
 
 
 def find_employee_by_identifier(db: Session, identifier: str) -> Employee | None:
@@ -267,6 +267,7 @@ def change_password(
     employee.password_hash = hash_password(new_password)
     employee.must_change_password = False
     employee.password_changed_at = utcnow()
+    credential_vault.forget(db, employee.id)  # their own password is nobody else's to see
     auth_cache.forget_employee(db, employee.id)
     # Sign out every other device; keep the session that made the change.
     revoke_all_sessions(db, employee.id, reason="password_changed", except_session_id=current_session_id)

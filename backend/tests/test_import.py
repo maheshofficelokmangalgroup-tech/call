@@ -1,5 +1,6 @@
 """Acceptance: admin can upload a 10,000-row dataset and receive an import summary; duplicates follow the policy.
-Section 15: transactional, preview-first import."""
+Section 15: preview-first import. (How the contacts are shared out, and what happens to a sheet of a million rows, is in
+test_import_distribution.py and test_import_pipeline.py.)"""
 
 import csv
 import io
@@ -9,6 +10,8 @@ from openpyxl import Workbook
 
 from app.models.contact import CampaignContact, Contact, ContactAssignment
 from app.models.system import Notification
+
+UNASSIGNED = {"distribution": {"leave_unassigned": True}}  # for the tests that are not about who receives the contacts
 
 
 def make_csv(rows: list[list], header=("Name", "Mobile", "Email", "City", "Category", "Priority", "Tags", "Company")) -> bytes:
@@ -32,7 +35,7 @@ def get_import(client, headers, import_id):
 def confirm(client, headers, import_id, **body):
     resp = client.post(f"/api/v1/contacts/import/{import_id}/confirm", headers=headers, json=body)
     assert resp.status_code == 202, resp.text
-    return get_import(client, headers, import_id)  # background task has finished when the call returns
+    return get_import(client, headers, import_id)  # the background job has finished when the call returns (JOBS_INLINE)
 
 
 MIXED_ROWS = [
@@ -54,6 +57,7 @@ def test_upload_is_validated_in_the_background_and_previewed(client, make, as_ad
 
     assert preview["status"] == "previewed"
     assert (preview["total_rows"], preview["valid_rows"], preview["invalid_rows"], preview["duplicate_rows"]) == (8, 2, 4, 2)
+    assert (preview["file_duplicate_rows"], preview["existing_rows"]) == (1, 1)
     assert preview["inserted_rows"] == preview["updated_rows"] == preview["skipped_rows"] == 0
     # preview-first: nothing has been written to contacts yet
     assert db.query(Contact).count() == 1
@@ -64,12 +68,14 @@ def test_upload_is_validated_in_the_background_and_previewed(client, make, as_ad
     assert "Invalid mobile number" in reasons and "Name is required" in reasons and "Invalid email" in reasons and "Invalid priority" in reasons
     dups = client.get(f"/api/v1/contacts/import/{imp['id']}/rows?status=duplicate", headers=as_admin).json()
     assert {r["duplicate_of"] for r in dups["items"]} == {"file", "existing"}
+    valid = client.get(f"/api/v1/contacts/import/{imp['id']}/rows?status=valid", headers=as_admin).json()
+    assert [r["data"]["name"] for r in valid["items"]] == ["Alice", "Bob"]
 
 
 def test_confirm_in_skip_mode_reports_inserted_and_skipped(client, make, as_admin, db):
     make.contact(name="Dave (existing)", phone="9876500004")
     imp = upload(client, as_admin, make_csv(MIXED_ROWS), mode="skip")
-    done = confirm(client, as_admin, imp["id"])
+    done = confirm(client, as_admin, imp["id"], **UNASSIGNED)
 
     assert done["status"] == "completed", done
     assert (done["inserted_rows"], done["updated_rows"], done["skipped_rows"], done["invalid_rows"]) == (2, 0, 2, 4)
@@ -85,7 +91,7 @@ def test_update_mode_updates_existing_duplicates(client, make, as_admin, db):
     make.contact(name="Old Name", phone="9876500004")
     rows = [["Dave New", "9876500004", "dave@example.com", "Mumbai", "", "", "hot", ""]]
     imp = upload(client, as_admin, make_csv(rows), mode="update")
-    done = confirm(client, as_admin, imp["id"])
+    done = confirm(client, as_admin, imp["id"], **UNASSIGNED)
     assert (done["inserted_rows"], done["updated_rows"], done["skipped_rows"]) == (0, 1, 0)
     dave = db.query(Contact).filter(Contact.normalized_phone == "+919876500004").one()
     assert (dave.name, dave.email, dave.location, dave.tags) == ("Dave New", "dave@example.com", "Mumbai", ["hot"])
@@ -95,7 +101,7 @@ def test_update_mode_updates_existing_duplicates(client, make, as_admin, db):
 def test_confirm_can_override_the_mode_chosen_at_upload(client, make, as_admin, db):
     make.contact(name="Old", phone="9876500004")
     imp = upload(client, as_admin, make_csv([["New", "9876500004", "", "", "", "", "", ""]]), mode="skip")
-    done = confirm(client, as_admin, imp["id"], mode="update")
+    done = confirm(client, as_admin, imp["id"], mode="update", **UNASSIGNED)
     assert done["updated_rows"] == 1 and db.query(Contact).one().name == "New"
 
 
@@ -143,7 +149,7 @@ def test_xlsx_with_numeric_phone_cells(client, as_admin, db):
     imp = upload(client, as_admin, buf.getvalue(), name="leads.xlsx")
     preview = get_import(client, as_admin, imp["id"])
     assert (preview["valid_rows"], preview["invalid_rows"]) == (3, 0), preview
-    confirm(client, as_admin, imp["id"])
+    confirm(client, as_admin, imp["id"], **UNASSIGNED)
     assert {c.normalized_phone for c in db.query(Contact)} == {"+919876500201", "+919876500202", "+919876500203"}
 
 
@@ -161,7 +167,7 @@ def test_bad_files_are_rejected_or_fail_with_a_clear_reason(client, as_admin):
 
 def test_confirm_twice_and_cancel_rules(client, as_admin, db):
     imp = upload(client, as_admin, make_csv([["One", "9876500301", "", "", "", "", "", ""]]))
-    assert confirm(client, as_admin, imp["id"])["status"] == "completed"
+    assert confirm(client, as_admin, imp["id"], **UNASSIGNED)["status"] == "completed"
     again = client.post(f"/api/v1/contacts/import/{imp['id']}/confirm", headers=as_admin, json={})
     assert again.status_code == 409 and again.json()["error"]["code"] == "bad_import_state"
     assert db.query(Contact).count() == 1
@@ -193,7 +199,7 @@ def test_deleted_contacts_are_revived_by_import(client, make, as_admin, db):
     db.commit()
     imp = upload(client, as_admin, make_csv([["Back Again", "9876500501", "", "", "", "", "", ""]]))
     assert get_import(client, as_admin, imp["id"])["valid_rows"] == 1
-    done = confirm(client, as_admin, imp["id"])
+    done = confirm(client, as_admin, imp["id"], **UNASSIGNED)
     assert done["inserted_rows"] == 1
     db.expire_all()
     revived = db.get(Contact, gone.id)
@@ -226,6 +232,6 @@ def test_a_10000_row_dataset_imports_with_a_full_summary(client, make, emp_a, em
     assert done["assigned_rows"] == preview["valid_rows"]
     assert db.query(Contact).count() == preview["valid_rows"]
     per_owner = [db.query(ContactAssignment).filter_by(employee_id=e.id, status="active").count() for e in (emp_a, emp_b)]
-    assert abs(per_owner[0] - per_owner[1]) <= 1  # balanced strategy
+    assert abs(per_owner[0] - per_owner[1]) <= 1  # shared equally
     print(f"\n10k import: validate {validated_in:.1f}s, apply {applied_in:.1f}s, valid={preview['valid_rows']}")
     assert validated_in < 60 and applied_in < 60

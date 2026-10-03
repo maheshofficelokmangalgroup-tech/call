@@ -73,10 +73,13 @@ def _queue_notes(session: Session) -> dict:
     return notes
 
 
+QUIET = "queue_quiet"  # a session that sets this clears the queues it changes by itself (a bulk job that says exactly whose queue it touched)
+
+
 @event.listens_for(Session, "after_flush")
 def _after_flush(session: Session, _context) -> None:
     notes = None
-    for obj in (*session.new, *session.dirty, *session.deleted):
+    for obj in () if session.info.get(QUIET) else (*session.new, *session.dirty, *session.deleted):
         if isinstance(obj, _PERSONAL):
             if obj.employee_id is not None:
                 notes = notes or _queue_notes(session)
@@ -97,7 +100,7 @@ def _bulk_statements(state) -> None:
         return
     table = getattr(state.statement, "table", None)
     name = getattr(table, "name", None)
-    if name in _BULK_TABLES:
+    if name in _BULK_TABLES and not state.session.info.get(QUIET):
         # a statement that says whose queue it is about (the outcome of a call closes that person's callback) clears that queue only
         person = state.execution_options.get("queue_employee")
         notes = _queue_notes(state.session)

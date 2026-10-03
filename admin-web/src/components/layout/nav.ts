@@ -1,4 +1,4 @@
-import { BookUser, Headphones, LayoutDashboard, Megaphone, PhoneCall, ScrollText, Settings, Users, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, BookUser, Headphones, LayoutDashboard, Megaphone, PhoneCall, ScrollText, Settings, Users, UsersRound, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -26,6 +26,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/employees", label: "Employees", icon: Users, usesRange: true, keywords: "staff team members performance create new" },
       { href: "/teams", label: "Teams", icon: UsersRound, keywords: "groups" },
+      { href: "/distribution", label: "Work sharing", icon: ArrowRightLeft, adminOnly: true, keywords: "rebalance inactive working absent split share contacts equally who is working" },
     ],
   },
   {

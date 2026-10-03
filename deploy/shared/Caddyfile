@@ -16,8 +16,8 @@ https://{$PUBLIC_HOST}:{$HTTPS_PORT} {
 	encode zstd gzip
 
 	# Only these carry a file; everything else is a small JSON document. (The API enforces the same limits itself.)
-	@upload path_regexp upload ^/api/(v1|backend)/(recordings/[0-9]+/upload|contacts/import)$
-	handle @upload {
+	@recording path_regexp recording ^/api/(v1|backend)/recordings/[0-9]+/upload$
+	handle @recording {
 		request_body {
 			max_size 120MB
 		}
@@ -32,6 +32,27 @@ https://{$PUBLIC_HOST}:{$HTTPS_PORT} {
 			transport http {
 				read_timeout 10m
 				write_timeout 10m
+			}
+		}
+	}
+
+	# A sheet of contacts: up to 200 MB (about a million contacts), plus the form around it. The API checks the size again itself.
+	@sheet path_regexp sheet ^/api/(v1|backend)/contacts/import$
+	handle @sheet {
+		request_body {
+			max_size 210MB
+		}
+		@toapi path /api/v1/*
+		reverse_proxy @toapi api:8000 {
+			transport http {
+				read_timeout 30m
+				write_timeout 30m
+			}
+		}
+		reverse_proxy admin:3000 {
+			transport http {
+				read_timeout 30m
+				write_timeout 30m
 			}
 		}
 	}

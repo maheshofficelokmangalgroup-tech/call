@@ -312,7 +312,7 @@ def test_unknown_disposition_is_rejected(client, make, emp_a, as_a):
 def test_employee_cannot_read_or_modify_other_employees_calls_and_callbacks(client, make, emp_a, emp_b, as_a, as_b):
     contact = make.contact(assign_to=emp_a)
     call = start_call(client, as_a, contact).json()
-    cb = client.post("/api/v1/callbacks", headers=as_a, json={"contact_id": contact.id, "scheduled_at": iso(now_utc() + timedelta(hours=1))}).json()
+    cb = client.post("/api/v1/callbacks", headers=as_a, json={"contact_id": contact.id, "scheduled_at": iso(now_utc() + timedelta(minutes=1))}).json()
 
     assert client.get(f"/api/v1/calls/{call['id']}", headers=as_b).status_code == 404
     assert client.patch(f"/api/v1/calls/{call['id']}", headers=as_b, json={"duration_seconds": 5}).status_code == 404
@@ -339,7 +339,7 @@ def test_callbacks_can_be_rescheduled_and_cancelled(client, make, emp_a, as_a, d
 
 def test_reassigning_a_contact_cancels_the_previous_owners_callbacks(client, make, emp_a, emp_b, as_a, as_b, as_admin):
     contact = make.contact(assign_to=emp_a)
-    client.post("/api/v1/callbacks", headers=as_a, json={"contact_id": contact.id, "scheduled_at": iso(now_utc() + timedelta(hours=1))})
+    client.post("/api/v1/callbacks", headers=as_a, json={"contact_id": contact.id, "scheduled_at": iso(now_utc() + timedelta(minutes=1))})
     resp = client.post("/api/v1/contacts/assign", headers=as_admin, json={"contact_ids": [contact.id], "employee_ids": [emp_b.id], "reassign": True})
     assert resp.status_code == 200 and resp.json()["reassigned"] == 1
     assert client.get("/api/v1/callbacks", headers=as_a).json()["total"] == 0

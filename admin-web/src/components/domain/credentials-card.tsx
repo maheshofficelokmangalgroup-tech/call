@@ -77,8 +77,8 @@ function Row({ label, value, mono = true, secret = false }: { label: string; val
   );
 }
 
-/** Login details of one employee, with one-tap copy and WhatsApp. Shown once, right after the account (or a new password) is created. */
-export function CredentialsCard({ credentials, title = "Login details", className }: { credentials: Credentials; title?: string; className?: string }) {
+/** Login details of one employee, with one-tap copy and WhatsApp. Shown right after the account (or a new password) is created, and again from the employee's menu. */
+export function CredentialsCard({ credentials, title = "Login details", className, showOnceWarning = true }: { credentials: Credentials; title?: string; className?: string; showOnceWarning?: boolean }) {
   const [copied, setCopied] = React.useState(false);
 
   async function copyAll() {
@@ -106,13 +106,13 @@ export function CredentialsCard({ credentials, title = "Login details", classNam
       <div className="space-y-2">
         <Row label="Employee ID" value={credentials.employeeCode} />
         <Row label="Email" value={credentials.email} mono={false} />
-        {credentials.password ? <Row label="Password" value={credentials.password} secret /> : <p className="rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-muted">The password is the one you typed. It is not shown again.</p>}
+        {credentials.password ? <Row label="Password" value={credentials.password} secret /> : <p className="rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-muted">The password is the one you typed. You can look at it again from the employee&apos;s menu (Show password) until they choose their own.</p>}
       </div>
 
-      {credentials.password ? (
+      {credentials.password && showOnceWarning ? (
         <p className="mt-3 flex items-start gap-2 rounded-xl bg-warn-soft px-3 py-2.5 text-xs font-medium text-warn">
           <ShieldAlert className="mt-px size-4 shrink-0" />
-          <span>This password is shown only now. Copy it and send it to the employee - you can always create a new one later from the employee page.</span>
+          <span>Copy this password and send it to the employee. You can look at it again from the employee&apos;s menu (Show password) until they choose their own - then nobody can see it any more.</span>
         </p>
       ) : null}
 

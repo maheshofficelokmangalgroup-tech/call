@@ -1,15 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Query, Request, Response, status
 
 from app.api.deps import AdminUser, DbSession, Paging, StaffUser
 from app.core import rate_limit
-from app.core.errors import AppError
+from app.core.errors import AppError, ValidationFailed
 from app.schemas.common import Message, Page
 from app.schemas.employee import (
     BulkEmployeeResult,
     BulkEmployeesIn,
     BulkEmployeesOut,
+    CredentialOut,
     DeviceOut,
     EmployeeCreate,
     EmployeeCreated,
@@ -71,6 +72,30 @@ def create_employees_bulk(payload: BulkEmployeesIn, request: Request, db: DbSess
     return BulkEmployeesOut(created=created, failed=len(results) - created, results=results)
 
 
+@router.get("/credentials.xlsx")
+def credentials_sheet(
+    request: Request,
+    db: DbSession,
+    admin: AdminUser,
+    ids: Annotated[str, Query(max_length=4000, description="comma separated employee ids; empty = everybody whose first password can still be seen")] = "",
+):
+    """One Excel sheet with the logins to hand out. Administrators only; the download is written to the audit log."""
+    rate_limit.enforce_sensitive(request, "credential_export", admin.id)
+    wanted: list[int] = []
+    for part in ids.split(","):
+        part = part.strip()
+        if part:
+            if not part.isdigit() or len(part) > 18:
+                raise ValidationFailed("ids must be a comma separated list of numbers.", code="bad_employee_ids")
+            wanted.append(int(part))
+    body, _count = employee_service.credentials_sheet(db, ids=wanted[:2000], actor=admin, request=request)
+    return Response(
+        content=body,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="logins.xlsx"', "Cache-Control": "no-store"},
+    )
+
+
 @router.get("/{employee_id}", response_model=EmployeeOut)
 def get_employee(employee_id: int, db: DbSession, user: StaffUser):
     require_view_employee(db, user, employee_id)
@@ -93,6 +118,14 @@ def deactivate(employee_id: int, request: Request, db: DbSession, admin: AdminUs
 def activate(employee_id: int, request: Request, db: DbSession, admin: AdminUser):
     employee = employee_service.get_employee(db, employee_id)
     return EmployeeOut.model_validate(employee_service.set_active(db, employee=employee, active=True, actor=admin, request=request))
+
+
+@router.get("/{employee_id}/credentials", response_model=CredentialOut)
+def get_credentials(employee_id: int, request: Request, db: DbSession, admin: AdminUser):
+    """The first password handed out to this employee, as long as they have not chosen their own (see credential_vault)."""
+    rate_limit.enforce_sensitive(request, "credential_view", admin.id)
+    employee = employee_service.get_employee(db, employee_id)
+    return employee_service.view_credentials(db, employee=employee, actor=admin, request=request)
 
 
 @router.post("/{employee_id}/reset-password", response_model=PasswordResetResult)

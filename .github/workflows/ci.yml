@@ -201,6 +201,7 @@ jobs:
           BCRYPT_ROUNDS: '6'
           LOG_LEVEL: WARNING
           RATE_LIMIT_LOGIN_PER_IP: '1000'
+          BACKGROUND_JOBS: 'false' # the demo employees are old accounts: the automatic sharing would move their contacts under the tests' feet
         run: |
           python -m pip install -r requirements.txt
           python -m scripts.bootstrap
@@ -472,7 +473,8 @@ jobs:
       - name: The panel and the app - a package with a known vulnerability (what ships to users)
         run: |
           (cd admin-web && npm audit --package-lock-only --omit=dev --audit-level=high)
-          (cd mobile && npm audit --package-lock-only --omit=dev --audit-level=high)
+          # (the app: same check, with the short written list of advisories accepted on purpose - see .github/scripts/audit_allowlist.py)
+          (cd mobile && npm audit --package-lock-only --omit=dev --json | python3 ../.github/scripts/audit_allowlist.py --level high)
 
   load-test:
     name: Load test (many phones calling at once, on MySQL and Redis, with the production pool and two workers)
@@ -503,6 +505,7 @@ jobs:
       REDIS_URL: redis://127.0.0.1:6379/0
       BCRYPT_ROUNDS: '10'
       LOG_LEVEL: WARNING
+      BACKGROUND_JOBS: 'false'
     steps:
       - uses: actions/checkout@v7
 
@@ -634,3 +637,50 @@ jobs:
       - name: What the server logged
         if: always()
         run: grep -c 'Traceback' "$RUNNER_TEMP/api.log" || true
+
+  import-scale:
+    name: Import at scale (a sheet of 300,000 contacts shared equally between 20 employees, on MySQL; no duplicate, memory and pages checked)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: calling_scale
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/calling_scale?charset=utf8mb4
+      APP_ENV: development
+      REDIS_URL: ''
+      LOG_LEVEL: WARNING
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Prepare the database
+        run: python -m scripts.bootstrap
+
+      - name: Check the sheet, add it, and prove the result (every number once, equal shares, memory, pages that stay quick)
+        run: python -m scripts.scale_check --rows 300000 --existing 30000 --max-rss-mb 1200 --max-endpoint-seconds 20
+
+      - name: The same with an Excel file (the reader that cannot be streamed from the first byte)
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot -e 'DROP DATABASE calling_scale; CREATE DATABASE calling_scale CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;' 2>/dev/null || true
+          python -m scripts.bootstrap
+          python -m scripts.scale_check --rows 100000 --existing 10000 --xlsx --max-rss-mb 1200 --max-endpoint-seconds 20

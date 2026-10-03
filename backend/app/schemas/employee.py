@@ -90,6 +90,24 @@ class EmployeeCreated(BaseModel):
     temporary_password: str | None = None
 
 
+class CredentialOut(BaseModel):
+    """What an administrator may see of an employee's login: the first password, while the employee has not chosen their own."""
+
+    employee_id: int
+    employee_code: str
+    full_name: str
+    email: str
+    phone: str | None = None
+    available: bool  # false: the employee has chosen their own password, or it was kept for too long
+    password: str | None = None
+    kind: str | None = None  # generated | admin_set
+    set_at: datetime | None = None
+    set_by: str | None = None
+    must_change_password: bool = False
+    view_count: int = 0
+    keep_days: int = 30
+
+
 class PasswordReset(BaseModel):
     new_password: str | None = Field(default=None, max_length=128)
 

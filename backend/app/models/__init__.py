@@ -3,6 +3,7 @@
 from app.models.base import Base
 from app.models.call import Call, CallDisposition, CallEvent, CallNote, Callback
 from app.models.contact import Campaign, CampaignAssignee, CampaignContact, Contact, ContactAssignment
+from app.models.distribution import DistributionRun, EmployeeCredential
 from app.models.employee import Employee, EmployeeDevice, EmployeeSession, Role, Team
 from app.models.imports import Import, ImportRow
 from app.models.recording import Recording, RecordingAccessLog
@@ -22,7 +23,9 @@ __all__ = [
     "CampaignContact",
     "Contact",
     "ContactAssignment",
+    "DistributionRun",
     "Employee",
+    "EmployeeCredential",
     "EmployeeDevice",
     "EmployeeSession",
     "Import",

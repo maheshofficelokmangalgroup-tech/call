@@ -46,4 +46,6 @@ class SettingsOut(BaseModel):
     retry_rules: dict
     default_daily_target: int
     duplicate_policy: Literal["skip", "update"]
+    inactive_after_days: int
+    auto_rebalance: bool
     items: list[SettingOut]

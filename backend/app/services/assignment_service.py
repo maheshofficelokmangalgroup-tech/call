@@ -10,6 +10,7 @@ from sqlalchemy import and_, exists, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.redis_client import redis_lock
 from app.core.timeutils import utcnow
@@ -79,7 +80,15 @@ def _resolve_contact_ids(db: Session, req: AssignRequest) -> list[int]:
         stmt = stmt.where(~exists().where(and_(ContactAssignment.contact_id == Contact.id, ContactAssignment.status == "active")))
     if req.campaign_id:
         stmt = stmt.where(exists().where(and_(CampaignContact.contact_id == Contact.id, CampaignContact.campaign_id == req.campaign_id)))
-    return list(db.scalars(stmt.order_by(Contact.priority, Contact.id)))
+    limit = get_settings().assign_max_contacts
+    ids = list(db.scalars(stmt.order_by(Contact.priority, Contact.id).limit(limit + 1)))
+    if len(ids) > limit:
+        raise ValidationFailed(
+            f"More than {limit:,} contacts match. Narrow the filter - or add a sheet from Contacts > Import sheet, which shares what it adds "
+            "equally between the employees who are working.",
+            code="too_many_contacts",
+        )
+    return ids
 
 
 def current_loads(db: Session, employee_ids: list[int]) -> dict[int, int]:

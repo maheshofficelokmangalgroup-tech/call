@@ -61,6 +61,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       LOCAL_STORAGE_PATH: /app/var/storage
       IMPORT_STORAGE_PATH: /app/var/imports
+      UPLOAD_TMP_PATH: /app/var/tmp # a sheet being received waits on the data volume, not in memory (/tmp is memory here)
       ADMIN_WEB_ORIGIN: ${PUBLIC_URL:-http://localhost}
     volumes:
       - api_data:/app/var

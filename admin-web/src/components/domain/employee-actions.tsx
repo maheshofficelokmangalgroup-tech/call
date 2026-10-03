@@ -1,11 +1,12 @@
 "use client";
 
-import { KeyRound, LogOut, MoreHorizontal, Pencil, UserCheck, UserX, Eye } from "lucide-react";
+import { Eye, KeyRound, Lock, LogOut, MoreHorizontal, Pencil, UserCheck, UserX } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { CredentialsCard } from "@/components/domain/credentials-card";
+import { CredentialsDialog } from "@/components/domain/credentials-dialog";
 import { EmployeeFormDialog } from "@/components/domain/employee-form-dialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -16,7 +17,7 @@ import { errorMessage } from "@/lib/api";
 import { useEmployeeAction, useMe, useResetPassword } from "@/lib/queries";
 import type { Employee } from "@/lib/types";
 
-type Dialogs = "edit" | "reset" | "revoke" | "deactivate" | "activate" | null;
+type Dialogs = "edit" | "reset" | "revoke" | "deactivate" | "activate" | "credentials" | null;
 
 /** Everything an administrator can do to one employee, behind a "..." button. Managers only get "Open profile". */
 export function EmployeeActions({ employee, showOpen = true, trigger }: { employee: Employee; showOpen?: boolean; trigger?: React.ReactNode }) {
@@ -52,6 +53,9 @@ export function EmployeeActions({ employee, showOpen = true, trigger }: { employ
               <DropdownMenuItem onSelect={() => setDialog("edit")}>
                 <Pencil /> Edit details
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDialog("credentials")} data-testid="show-password">
+                <Lock /> Show password
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setDialog("reset")}>
                 <KeyRound /> Reset password
               </DropdownMenuItem>
@@ -77,6 +81,7 @@ export function EmployeeActions({ employee, showOpen = true, trigger }: { employ
         <>
           <EmployeeFormDialog open={dialog === "edit"} onOpenChange={(o) => !o && setDialog(null)} employee={employee} selfId={selfId} />
           <ResetPasswordDialog open={dialog === "reset"} onOpenChange={(o) => !o && setDialog(null)} employee={employee} />
+          <CredentialsDialog open={dialog === "credentials"} onOpenChange={(o) => !o && setDialog(null)} employee={employee} />
           <ConfirmDialog
             open={dialog === "revoke"}
             onOpenChange={(o) => !o && setDialog(null)}

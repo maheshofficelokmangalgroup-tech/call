@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from contextlib import asynccontextmanager
 
 import anyio.to_thread
@@ -11,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app import __version__
+from app import __version__, jobs
 from app.api.v1 import api_router
 from app.core.config import get_settings
 from app.core.database import get_engine
@@ -30,12 +32,17 @@ async def lifespan(_: FastAPI):
     log.info("Starting %s v%s (env=%s, db=%s)", settings.app_name, __version__, settings.app_env, get_engine().dialect.name)
     get_redis()  # connect early so a missing Redis is reported at boot, not on the first login
     configure_upload_slots()
+    if settings.upload_tmp_path:
+        os.makedirs(settings.upload_tmp_path, exist_ok=True)
+        tempfile.tempdir = settings.upload_tmp_path
     # the handlers run in threads; there must always be a free one for a request that is in the middle of its work (see
     # InFlightLimitMiddleware): more threads than requests that are allowed to be in progress
     threads = anyio.to_thread.current_default_thread_limiter()
     threads.total_tokens = max(threads.total_tokens, settings.max_inflight_requests + 16)
+    jobs.start_scheduler()  # takes over an import that was running when the last process stopped, rebalances, tidies up
     yield
     log.info("Shutting down")
+    jobs.stop_scheduler()
 
 
 def create_app() -> FastAPI:

@@ -527,7 +527,7 @@ export interface paths {
         put?: never;
         /**
          * Upload Import
-         * @description Step 1: upload. The file is validated in the background; poll GET /contacts/import/{id} until status=previewed.
+         * @description Step 1: upload. The file is checked in the background; poll GET /contacts/import/{id} until status=previewed.
          */
         post: operations["upload_import_api_v1_contacts_import_post"];
         delete?: never;
@@ -562,7 +562,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel Import */
+        /**
+         * Cancel Import
+         * @description Cancel an upload; while contacts are being added, stop after the step that is running (what was added stays).
+         */
         post: operations["cancel_import_api_v1_contacts_import__import_id__cancel_post"];
         delete?: never;
         options?: never;
@@ -581,7 +584,8 @@ export interface paths {
         put?: never;
         /**
          * Confirm Import
-         * @description Step 2: apply the previewed import in one transaction. Poll until status=completed.
+         * @description Step 2: add the contacts and give them out. Poll until status=completed (a big sheet takes minutes; it carries on by itself
+         *     after a restart).
          */
         post: operations["confirm_import_api_v1_contacts_import__import_id__confirm_post"];
         delete?: never;
@@ -599,11 +603,51 @@ export interface paths {
         };
         /**
          * Download Issues
-         * @description CSV of rows that were invalid or duplicates, with the reason for each.
+         * @description CSV of every row that was invalid or a duplicate, with the reason for each (and the original cells, to fix and upload again).
          */
         get: operations["download_issues_api_v1_contacts_import__import_id__issues_csv_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contacts/import/{import_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan Import
+         * @description Who is working, and how many of the sheet each of them would get. Nothing is changed.
+         */
+        get: operations["plan_import_api_v1_contacts_import__import_id__plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contacts/import/{import_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Import
+         * @description Carry on with an import that stopped while adding the contacts (what was added stays).
+         */
+        post: operations["retry_import_api_v1_contacts_import__import_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -617,7 +661,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Rows */
+        /**
+         * List Rows
+         * @description A sample of what the check found: the first problem rows and the first valid rows. The whole list of problems is in issues.csv.
+         */
         get: operations["list_rows_api_v1_contacts_import__import_id__rows_get"];
         put?: never;
         post?: never;
@@ -721,6 +768,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/distribution/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description Every employee with the state they are in (active / new / inactive / deactivated), what they own, and what could be taken back.
+         */
+        get: operations["overview_api_v1_distribution_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/distribution/rebalance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rebalance
+         * @description Give the waiting contacts of people who are not working to the people who are. Poll GET /distribution/runs/{id}.
+         */
+        post: operations["rebalance_api_v1_distribution_rebalance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/distribution/rebalance/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description What a rebalancing would do right now. Nothing is changed.
+         */
+        post: operations["preview_api_v1_distribution_rebalance_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/distribution/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_v1_distribution_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/distribution/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Detail */
+        get: operations["run_detail_api_v1_distribution_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees": {
         parameters: {
             query?: never;
@@ -759,6 +900,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/employees/credentials.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Credentials Sheet
+         * @description One Excel sheet with the logins to hand out. Administrators only; the download is written to the audit log.
+         */
+        get: operations["credentials_sheet_api_v1_employees_credentials_xlsx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees/{employee_id}": {
         parameters: {
             query?: never;
@@ -788,6 +949,26 @@ export interface paths {
         put?: never;
         /** Activate */
         post: operations["activate_api_v1_employees__employee_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{employee_id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Credentials
+         * @description The first password handed out to this employee, as long as they have not chosen their own (see credential_vault).
+         */
+        get: operations["get_credentials_api_v1_employees__employee_id__credentials_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1194,6 +1375,22 @@ export interface components {
             /** Ip */
             ip: string | null;
         };
+        /** ActivityOverviewOut */
+        ActivityOverviewOut: {
+            /** Auto Rebalance */
+            auto_rebalance: boolean;
+            /** Employees */
+            employees: components["schemas"]["EmployeeStateOut"][];
+            /** Inactive After Days */
+            inactive_after_days: number;
+            last_run?: components["schemas"]["RebalanceRunOut"] | null;
+            /** Movable */
+            movable: number;
+            /** Not Working */
+            not_working: number;
+            /** Working */
+            working: number;
+        };
         /** AssignRequest */
         AssignRequest: {
             /** Assignment Campaign Id */
@@ -1279,13 +1476,14 @@ export interface components {
         Body_upload_import_api_v1_contacts_import_post: {
             /**
              * Assign Employee Ids
-             * @description comma separated employee ids to distribute the new contacts to
+             * @description comma separated employee ids that receive the new contacts (default: every employee who is working)
              * @default
              */
             assign_employee_ids: string;
             /**
              * Assign Strategy
-             * @default round_robin
+             * @description equal | balance_total
+             * @default equal
              */
             assign_strategy: string;
             /** Campaign Id */
@@ -1820,6 +2018,47 @@ export interface components {
             /** Tags */
             tags?: string[] | null;
         };
+        /**
+         * CredentialOut
+         * @description What an administrator may see of an employee's login: the first password, while the employee has not chosen their own.
+         */
+        CredentialOut: {
+            /** Available */
+            available: boolean;
+            /** Email */
+            email: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Keep Days
+             * @default 30
+             */
+            keep_days: number;
+            /** Kind */
+            kind?: string | null;
+            /**
+             * Must Change Password
+             * @default false
+             */
+            must_change_password: boolean;
+            /** Password */
+            password?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Set At */
+            set_at?: string | null;
+            /** Set By */
+            set_by?: string | null;
+            /**
+             * View Count
+             * @default 0
+             */
+            view_count: number;
+        };
         /** DashboardOut */
         DashboardOut: {
             /** Active Employees */
@@ -2026,6 +2265,32 @@ export interface components {
              */
             strategy: "round_robin" | "balanced";
         };
+        /**
+         * DistributionIn
+         * @description How a sheet is shared out. `equal`: everybody the same number (the remainder to whoever has the least). `balance_total`:
+         *     whoever has the least work gets the most, until everybody has the same in total.
+         */
+        DistributionIn: {
+            /** Employee Ids */
+            employee_ids?: number[] | null;
+            /**
+             * Leave Unassigned
+             * @default false
+             */
+            leave_unassigned: boolean;
+            /**
+             * Order
+             * @default interleave
+             * @enum {string}
+             */
+            order: "interleave" | "blocks";
+            /**
+             * Strategy
+             * @default equal
+             * @enum {string}
+             */
+            strategy: "equal" | "balance_total";
+        };
         /** EmployeeCounts */
         EmployeeCounts: {
             /** Active */
@@ -2217,6 +2482,35 @@ export interface components {
             /** Team Name */
             team_name: string | null;
         };
+        /** EmployeeStateOut */
+        EmployeeStateOut: {
+            /** Assigned */
+            assigned: number;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Full Name */
+            full_name: string;
+            /** Last Active At */
+            last_active_at: string | null;
+            /**
+             * Movable
+             * @default 0
+             */
+            movable: number;
+            /** Reason */
+            reason: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "new" | "inactive" | "deactivated";
+            /** Team Id */
+            team_id: number | null;
+            /** Team Name */
+            team_name: string | null;
+        };
         /** EmployeeStatsOut */
         EmployeeStatsOut: {
             /** Items */
@@ -2305,15 +2599,36 @@ export interface components {
         };
         /** ImportConfirm */
         ImportConfirm: {
+            distribution?: components["schemas"]["DistributionIn"] | null;
             /** Mode */
             mode?: ("skip" | "update") | null;
         };
         /** ImportOut */
         ImportOut: {
+            /**
+             * Applied Existing
+             * @default 0
+             */
+            applied_existing: number;
+            /**
+             * Applied Rows
+             * @default 0
+             */
+            applied_rows: number;
             /** Assigned Rows */
             assigned_rows: number;
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
             /** Campaign Id */
             campaign_id: number | null;
+            /**
+             * Cancel Requested
+             * @default false
+             */
+            cancel_requested: boolean;
             /** Completed At */
             completed_at: string | null;
             /** Confirmed At */
@@ -2323,10 +2638,30 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Distributed Rows
+             * @default 0
+             */
+            distributed_rows: number;
             /** Duplicate Rows */
             duplicate_rows: number;
             /** Error Message */
             error_message: string | null;
+            /**
+             * Existing Rows
+             * @default 0
+             */
+            existing_rows: number;
+            /**
+             * Explicit Rows
+             * @default 0
+             */
+            explicit_rows: number;
+            /**
+             * File Duplicate Rows
+             * @default 0
+             */
+            file_duplicate_rows: number;
             /** File Type */
             file_type: string;
             /** Filename */
@@ -2343,6 +2678,20 @@ export interface components {
             options: {
                 [key: string]: unknown;
             };
+            /**
+             * Progress Percent
+             * @default 0
+             */
+            progress_percent: number;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Scanned Rows
+             * @default 0
+             */
+            scanned_rows: number;
             /** Skipped Rows */
             skipped_rows: number;
             /** Status */
@@ -2353,6 +2702,39 @@ export interface components {
             updated_rows: number;
             /** Valid Rows */
             valid_rows: number;
+        };
+        /** ImportPlanOut */
+        ImportPlanOut: {
+            /** Can Confirm */
+            can_confirm: boolean;
+            /** Employees */
+            employees: components["schemas"]["PlanEmployee"][];
+            /** Explicit */
+            explicit: number;
+            /** Import Id */
+            import_id: number;
+            /** Inactive After Days */
+            inactive_after_days: number;
+            /** Leave Unassigned */
+            leave_unassigned: boolean;
+            /** Left Out */
+            left_out: number;
+            /**
+             * Order
+             * @enum {string}
+             */
+            order: "interleave" | "blocks";
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "equal" | "balance_total";
+            /** To Distribute */
+            to_distribute: number;
+            /** Warnings */
+            warnings: string[];
+            /** Working */
+            working: number;
         };
         /** ImportRowOut */
         ImportRowOut: {
@@ -2660,6 +3042,17 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[RebalanceRunOut] */
+        Page_RebalanceRunOut_: {
+            /** Items */
+            items: components["schemas"]["RebalanceRunOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
         /** PasswordReset */
         PasswordReset: {
             /** New Password */
@@ -2705,6 +3098,41 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+        };
+        /** PlanEmployee */
+        PlanEmployee: {
+            /** Assigned */
+            assigned: number;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /**
+             * Explicit
+             * @default 0
+             */
+            explicit: number;
+            /** Full Name */
+            full_name: string;
+            /** Last Active At */
+            last_active_at: string | null;
+            /** Pending */
+            pending?: number | null;
+            /** Planned */
+            planned: number;
+            /** Reason */
+            reason: string;
+            /** Receives */
+            receives: boolean;
+            /** Selected */
+            selected: boolean;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "new" | "inactive" | "deactivated";
+            /** Team Name */
+            team_name: string | null;
         };
         /** PlaybackUrlOut */
         PlaybackUrlOut: {
@@ -2779,6 +3207,120 @@ export interface components {
             server_time: string;
             /** Total */
             total: number;
+        };
+        /** RebalanceIn */
+        RebalanceIn: {
+            /** From Employee Ids */
+            from_employee_ids?: number[] | null;
+            /**
+             * Order
+             * @default interleave
+             * @enum {string}
+             */
+            order: "interleave" | "blocks";
+            /**
+             * Strategy
+             * @default equal
+             * @enum {string}
+             */
+            strategy: "equal" | "balance_total";
+            /** To Employee Ids */
+            to_employee_ids?: number[] | null;
+        };
+        /** RebalancePlanOut */
+        RebalancePlanOut: {
+            /** Can Run */
+            can_run: boolean;
+            /**
+             * Order
+             * @enum {string}
+             */
+            order: "interleave" | "blocks";
+            /** Sources */
+            sources: components["schemas"]["RebalanceSource"][];
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "equal" | "balance_total";
+            /** Targets */
+            targets: components["schemas"]["RebalanceTarget"][];
+            /** Total Movable */
+            total_movable: number;
+            /** Warnings */
+            warnings: string[];
+            /** Working */
+            working: number;
+        };
+        /** RebalanceRunOut */
+        RebalanceRunOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: number | null;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            } | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Moved */
+            moved: number;
+            /** Planned */
+            planned: number;
+            /** Status */
+            status: string;
+            /** Trigger */
+            trigger: string;
+        };
+        /** RebalanceSource */
+        RebalanceSource: {
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Full Name */
+            full_name: string;
+            /** Kept */
+            kept: number;
+            /** Movable */
+            movable: number;
+            /** Reason */
+            reason: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "new" | "inactive" | "deactivated";
+        };
+        /** RebalanceTarget */
+        RebalanceTarget: {
+            /** Assigned */
+            assigned: number;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Full Name */
+            full_name: string;
+            /** Pending */
+            pending?: number | null;
+            /** Receives */
+            receives: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "new" | "inactive" | "deactivated";
         };
         /** RecentCall */
         RecentCall: {
@@ -2916,6 +3458,8 @@ export interface components {
         };
         /** SettingsOut */
         SettingsOut: {
+            /** Auto Rebalance */
+            auto_rebalance: boolean;
             /** Default Daily Target */
             default_daily_target: number;
             /**
@@ -2923,6 +3467,8 @@ export interface components {
              * @enum {string}
              */
             duplicate_policy: "skip" | "update";
+            /** Inactive After Days */
+            inactive_after_days: number;
             /** Items */
             items: components["schemas"]["SettingOut"][];
             /** Recording */
@@ -4442,6 +4988,74 @@ export interface operations {
             };
         };
     };
+    plan_import_api_v1_contacts_import__import_id__plan_get: {
+        parameters: {
+            query?: {
+                /** @description comma separated employee ids (default: everybody who is working) */
+                employee_ids?: string;
+                strategy?: string;
+                order?: string;
+                leave_unassigned?: boolean;
+            };
+            header?: never;
+            path: {
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_import_api_v1_contacts_import__import_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_rows_api_v1_contacts_import__import_id__rows_get: {
         parameters: {
             query?: {
@@ -4741,6 +5355,155 @@ export interface operations {
             };
         };
     };
+    overview_api_v1_distribution_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOverviewOut"];
+                };
+            };
+        };
+    };
+    rebalance_api_v1_distribution_rebalance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebalanceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebalanceRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_v1_distribution_rebalance_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebalanceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebalancePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_v1_distribution_runs_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_RebalanceRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_detail_api_v1_distribution_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebalanceRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_employees_api_v1_employees_get: {
         parameters: {
             query?: {
@@ -4843,6 +5606,38 @@ export interface operations {
             };
         };
     };
+    credentials_sheet_api_v1_employees_credentials_xlsx_get: {
+        parameters: {
+            query?: {
+                /** @description comma separated employee ids; empty = everybody whose first password can still be seen */
+                ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_employee_api_v1_employees__employee_id__get: {
         parameters: {
             query?: never;
@@ -4927,6 +5722,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmployeeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_credentials_api_v1_employees__employee_id__credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialOut"];
                 };
             };
             /** @description Validation Error */

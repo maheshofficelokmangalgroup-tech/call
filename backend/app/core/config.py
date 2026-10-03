@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_minutes: int = 15
     jwt_refresh_ttl_days: int = 30
+    credential_keep_days: int = 30  # how long a first password an administrator handed out can still be looked at (see credential_vault)
     bcrypt_rounds: int = 12
     password_min_length: int = 8
     refresh_reuse_grace_seconds: int = 60
@@ -108,8 +109,23 @@ class Settings(BaseSettings):
 
     # --- imports ---------------------------------------------------------------
     import_storage_path: str = str(BACKEND_DIR / "var" / "imports")
-    max_import_mb: int = 25
-    max_import_rows: int = 100_000
+    # A file that is being received is kept in a temporary file until the request ends. In the containers /tmp is memory: a sheet of
+    # 200 MB would take 200 MB of it. Set this to a folder on the data volume and the temporary files go to disk.
+    upload_tmp_path: str | None = None
+    max_import_mb: int = 200  # a sheet of a million contacts is about 100 MB as CSV
+    max_import_rows: int = 1_100_000  # (a worksheet has at most 1,048,576 rows)
+    max_import_columns: int = 100
+    max_import_xlsx_unpacked_mb: int = 2000  # what a .xlsx may unpack to (a "zip bomb" is a small file that unpacks to gigabytes)
+    import_chunk_rows: int = 2000  # rows written to the database in one transaction
+    import_chunk_pause_ms: int = 20  # a pause after every chunk (more when a chunk was slow): the database is shared with other work
+    import_issue_sample: int = 5000  # problem rows kept in the database for the preview (all of them are in the downloadable report)
+    import_lease_seconds: int = 90  # a running import that has not reported for this long is taken over (a restart, a crash)
+    import_validation_minutes: int = 120
+    import_keep_days: int = 7  # an unconfirmed upload and its files are removed after this
+    assign_max_contacts: int = 100_000  # contacts one "assign by filter" may hand out (a bigger sheet is shared by the import)
+    # background work (an import, the automatic rebalancing) runs in a thread of the API; tests run it inline, and switch the scheduler off
+    jobs_inline: bool = False
+    background_jobs: bool = True
 
     # --- web -------------------------------------------------------------------
     admin_web_origin: str = "http://localhost:3000"

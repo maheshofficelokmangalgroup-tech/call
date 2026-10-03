@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.types import BigIntPK, UTCDateTime
@@ -45,6 +45,20 @@ class Import(Base, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text)
     confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # --- big sheets: the work is done in small steps that can be resumed after a restart ---------------------------------------
+    scanned_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # rows read so far by the check
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # of the check, when the file size tells
+    file_duplicate_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # same number twice in the sheet
+    existing_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # number already in the contacts
+    explicit_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # valid rows that name their employee themselves
+    applied_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # valid rows already written (the resume point)
+    applied_existing: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # existing contacts already updated
+    distributed_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # contacts given out by the plan so far
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    lease_owner: Mapped[str | None] = mapped_column(String(64))
+    result: Mapped[dict | None] = mapped_column(JSONType)  # how many went to whom
 
 
 class ImportRow(Base):

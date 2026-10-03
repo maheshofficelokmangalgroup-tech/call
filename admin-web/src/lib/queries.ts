@@ -2,8 +2,9 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, api, goToLogin, mediaUrl, parseError } from "@/lib/api";
+import { ApiError, api, downloadUrl, goToLogin, mediaUrl, parseError, upload } from "@/lib/api";
 import type {
+  ActivityOverview,
   AssignRequest,
   AssignResult,
   AuditLog,
@@ -16,6 +17,7 @@ import type {
   ContactCreate,
   ContactDetail,
   ContactUpdate,
+  Credential,
   DateRange,
   Device,
   Employee,
@@ -24,12 +26,16 @@ import type {
   EmployeeStats,
   EmployeeUpdate,
   ImportJob,
+  ImportPlan,
   ImportRow,
   Live,
   MeResponse,
   Note,
   Overview,
   Page,
+  RebalancePlan,
+  RebalanceRequest,
+  RebalanceRun,
   Session,
   Settings,
   Team,
@@ -377,7 +383,8 @@ export const useCampaignProgress = (id: number | null) =>
 
 export const useCampaigns = () => useQuery({ queryKey: ["campaigns"], queryFn: ({ signal }) => api<Campaign[]>("campaigns", { signal }), staleTime: 30_000 });
 
-export const useImports = () => useQuery({ queryKey: ["imports"], queryFn: ({ signal }) => api<Page<ImportJob>>("contacts/import", { params: { page_size: 20 }, signal }), refetchInterval: 15_000 });
+export const useImports = (enabled = true) =>
+  useQuery({ queryKey: ["imports"], queryFn: ({ signal }) => api<Page<ImportJob>>("contacts/import", { params: { page_size: 20 }, signal }), refetchInterval: 8_000, enabled });
 
 /** One import. While the server is still checking or applying the sheet it is asked again every second and a half. */
 export const useImport = (id: number | null) =>
@@ -400,15 +407,23 @@ export interface UploadImportOptions {
   file: File;
   mode: "skip" | "update";
   campaignId: number | null;
-  employeeIds: number[];
-  strategy: "round_robin" | "balanced";
   priority: number;
+  /** bytes of the file sent so far, and the total */
+  onProgress?: (sent: number, total: number) => void;
+}
+
+/** What the administrator chose for sharing a sheet: who, how many each, in which order. */
+export interface PlanParams {
+  employeeIds: number[];
+  strategy: "equal" | "balance_total";
+  order: "interleave" | "blocks";
+  leaveUnassigned: boolean;
 }
 
 export function useImportMutations() {
   const qc = useQueryClient();
   const refresh = () => {
-    for (const key of ["imports", "import", "import-rows", "contacts", "campaigns"]) void qc.invalidateQueries({ queryKey: [key] });
+    for (const key of ["imports", "import", "import-rows", "import-plan", "contacts", "campaigns", "activity", "employee-stats"]) void qc.invalidateQueries({ queryKey: [key] });
   };
   return {
     upload: useMutation({
@@ -417,14 +432,94 @@ export function useImportMutations() {
         form.append("file", o.file);
         form.append("mode", o.mode);
         if (o.campaignId !== null) form.append("campaign_id", String(o.campaignId));
-        form.append("assign_employee_ids", o.employeeIds.join(","));
-        form.append("assign_strategy", o.strategy);
         form.append("default_priority", String(o.priority));
-        return api<ImportJob>("contacts/import", { method: "POST", form });
+        return upload<ImportJob>("contacts/import", { form, onProgress: o.onProgress });
       },
       onSuccess: refresh,
     }),
-    confirm: useMutation({ mutationFn: ({ id, mode }: { id: number; mode: "skip" | "update" }) => api<ImportJob>(`contacts/import/${id}/confirm`, { method: "POST", body: { mode } }), onSuccess: refresh }),
+    confirm: useMutation({
+      mutationFn: ({ id, mode, plan }: { id: number; mode: "skip" | "update"; plan: PlanParams }) =>
+        api<ImportJob>(`contacts/import/${id}/confirm`, {
+          method: "POST",
+          body: { mode, distribution: { strategy: plan.strategy, order: plan.order, employee_ids: plan.employeeIds.length ? plan.employeeIds : null, leave_unassigned: plan.leaveUnassigned } },
+        }),
+      onSuccess: refresh,
+    }),
+    retry: useMutation({ mutationFn: (id: number) => api<ImportJob>(`contacts/import/${id}/retry`, { method: "POST" }), onSuccess: refresh }),
     cancel: useMutation({ mutationFn: (id: number) => api<ImportJob>(`contacts/import/${id}/cancel`, { method: "POST" }), onSuccess: refresh }),
   };
 }
+
+/** Who is working and how many of the sheet each would get. Asked again whenever the choice changes; nothing is written. */
+export const useImportPlan = (id: number | null, p: PlanParams) =>
+  useQuery({
+    queryKey: ["import-plan", id, p],
+    queryFn: ({ signal }) =>
+      api<ImportPlan>(`contacts/import/${id}/plan`, {
+        params: { employee_ids: p.employeeIds.join(","), strategy: p.strategy, order: p.order, leave_unassigned: p.leaveUnassigned ? "true" : "false" },
+        signal,
+      }),
+    enabled: id !== null,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
+// ------------------------------------------------------------------------------------------------- who is working, rebalancing
+export const useActivity = () => useQuery({ queryKey: ["activity"], queryFn: ({ signal }) => api<ActivityOverview>("distribution/overview", { signal }), refetchInterval: 30_000 });
+
+export const useRebalancePreview = (request: RebalanceRequest, enabled: boolean) =>
+  useQuery({
+    queryKey: ["rebalance-preview", request],
+    queryFn: ({ signal }) => api<RebalancePlan>("distribution/rebalance/preview", { method: "POST", body: request, signal }),
+    enabled,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
+export function useRebalance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (request: RebalanceRequest) => api<RebalanceRun>("distribution/rebalance", { method: "POST", body: request }),
+    onSuccess: () => {
+      for (const key of ["activity", "rebalance-runs", "rebalance-run", "rebalance-preview", "contacts", "employee-stats"]) void qc.invalidateQueries({ queryKey: [key] });
+    },
+  });
+}
+
+/** One rebalancing; asked again every second and a half while it is moving contacts. */
+export const useRebalanceRun = (id: number | null) =>
+  useQuery({
+    queryKey: ["rebalance-run", id],
+    queryFn: ({ signal }) => api<RebalanceRun>(`distribution/runs/${id}`, { signal }),
+    enabled: id !== null,
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 1500 : false),
+  });
+
+export const useRebalanceRuns = (page: number) =>
+  useQuery({
+    queryKey: ["rebalance-runs", page],
+    queryFn: ({ signal }) => api<Page<RebalanceRun>>("distribution/runs", { params: { page, page_size: 10 }, signal }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+  });
+
+// ------------------------------------------------------------------------------------------------- the passwords an administrator handed out
+/**
+ * The first password of one employee, for an administrator. Every look is written to the audit log, so it is asked for when
+ * the dialog opens and never again by itself (no refetch on focus, nothing kept once the dialog is closed).
+ */
+export const useCredential = (id: number, enabled: boolean) =>
+  useQuery({
+    queryKey: ["credential", id],
+    queryFn: ({ signal }) => api<Credential>(`employees/${id}/credentials`, { signal }),
+    enabled,
+    gcTime: 0,
+    staleTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+/** The Excel sheet with the login details of these employees (employee id, e-mail, password), opened by the browser. */
+export const credentialSheetUrl = (ids: number[]) => downloadUrl("employees/credentials.xlsx", { ids: ids.join(",") });

@@ -51,9 +51,16 @@ describe("the login details card", () => {
     expect(screen.getByTestId("cred-password")).not.toHaveTextContent("Abcd1234Efgh");
   });
 
-  it("warns that the password is shown only once", () => {
+  it("tells the administrator where the password can be looked at again, and that it goes when the employee chooses their own", () => {
     render(<CredentialsCard credentials={base} />);
-    expect(screen.getByText(/shown only now/i)).toBeInTheDocument();
+    expect(screen.getByText(/look at it again from the employee's menu/i)).toBeInTheDocument();
+    expect(screen.getByText(/nobody can see it any more/i)).toBeInTheDocument();
+  });
+
+  it("leaves the reminder out when the card is the look at a password that was handed out earlier", () => {
+    render(<CredentialsCard credentials={base} showOnceWarning={false} />);
+    expect(screen.queryByText(/look at it again/i)).toBeNull();
+    expect(screen.getByTestId("cred-password")).toBeInTheDocument();
   });
 
   it("shows no password row when the administrator typed it themselves", () => {

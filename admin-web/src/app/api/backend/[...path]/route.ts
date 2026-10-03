@@ -35,25 +35,29 @@ async function forward(request: NextRequest, ctx: Ctx): Promise<NextResponse> {
   }
   if (!access && !signedLink) return json(401, "unauthenticated", "Please sign in.");
 
-  // the body is read once so the call can be repeated after a token refresh
-  const body = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
+  // A sheet of contacts can be a hundred megabytes: it is passed on while it arrives and never held in memory (the container that
+  // runs the panel has far less than that). Everything else is small and is read once, so the call can be repeated after a token
+  // refresh - the sheet cannot be repeated, which is why the session is renewed above, before it is sent.
+  const streaming = method === "POST" && path.length === 2 && path[0] === "contacts" && path[1] === "import";
+  const body = method === "GET" || method === "HEAD" || streaming ? undefined : await request.arrayBuffer();
 
   const attempt = (token: string | undefined) => {
     const headers = new Headers();
-    for (const name of ["accept", "content-type", "range", "if-range"]) {
+    for (const name of streaming ? ["accept", "content-type", "content-length"] : ["accept", "content-type", "range", "if-range"]) {
       const value = request.headers.get(name);
       if (value) headers.set(name, value);
     }
     if (token) headers.set("authorization", `Bearer ${token}`);
     const ip = clientIp(request);
     if (ip) headers.set("x-forwarded-for", ip);
+    if (streaming) return backendFetch(target, { method, headers, body: request.body, duplex: "half", signal: request.signal } as RequestInit & { duplex: "half" });
     return backendFetch(target, { method, headers, body: body && body.byteLength ? body : undefined, signal: request.signal });
   };
 
   let upstream: Response;
   try {
     upstream = await attempt(access);
-    if (upstream.status === 401 && tokens.refresh && !renewed && !signedLink) {
+    if (upstream.status === 401 && tokens.refresh && !renewed && !signedLink && !streaming) {
       renewed = await refreshTokens(tokens.refresh);
       if (!renewed) return clearTokens(json(401, "unauthenticated", "Please sign in."));
       upstream = await attempt(renewed.access_token);

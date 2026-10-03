@@ -347,7 +347,8 @@ test.describe("an employee's profile", () => {
     await page.getByRole("tab", { name: /Recordings/ }).click();
     const rows = page.getByTestId("recording-row");
     await expect(rows.first()).toBeVisible();
-    await rows.first().getByTestId("recording-play").click();
+    // (the newest recording of a person can be one that is still uploading: its button is switched off - open the first that can be played)
+    await rows.locator('[data-testid="recording-play"]:enabled').first().click();
     await expect(page.getByTestId("audio-player")).toBeVisible();
     // phones
     await page.getByRole("tab", { name: /Phones/ }).click();

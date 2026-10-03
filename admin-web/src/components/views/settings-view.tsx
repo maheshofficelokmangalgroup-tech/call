@@ -1,6 +1,6 @@
 "use client";
 
-import { Headphones, Repeat2, ShieldAlert, Target, Copy as CopyIcon } from "lucide-react";
+import { ArrowRightLeft, Headphones, Repeat2, ShieldAlert, Target, Copy as CopyIcon } from "lucide-react";
 import { motion } from "motion/react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -220,6 +220,48 @@ function DuplicateSection({ settings, index }: { settings: Settings; index: numb
   );
 }
 
+function ActivitySection({ settings, index }: { settings: Settings; index: number }) {
+  const s = useSection(settings.inactive_after_days, "inactive_after_days");
+  const update = useUpdateSetting();
+  const valid = Number.isInteger(s.value) && s.value >= 1 && s.value <= 90;
+  const updated = settings.items.find((i) => i.key === "inactive_after_days")?.updated_at;
+  const [switchError, setSwitchError] = React.useState<string | null>(null);
+
+  // the switch is saved the moment it is flipped (it is a yes / no, not something to type); the number is saved with the button
+  async function setAuto(auto: boolean) {
+    setSwitchError(null);
+    try {
+      await update.mutateAsync({ key: "auto_rebalance", value: auto });
+      toast.success(auto ? "Automatic sharing is on" : "Automatic sharing is off");
+    } catch (e) {
+      setSwitchError(errorMessage(e));
+    }
+  }
+
+  return (
+    <Section
+      index={index}
+      icon={ArrowRightLeft}
+      title="Who counts as working"
+      description="An employee who has not been seen for this many days gets no new contacts from a sheet, and the contacts they did not get to are given to the people who are working."
+      testId="setting-activity"
+      footer={<SaveBar dirty={s.dirty && valid} busy={s.busy} onSave={() => void s.save(s.value, "Saved")} onReset={s.reset} updatedAt={updated} />}
+    >
+      <Field label="Not seen for (days)" htmlFor="st-inactive" error={valid ? undefined : "Enter a whole number from 1 to 90."} hint="Seen means: signed in, the app was open, or the phone reported in. 2 is a good start; use more if people have days off.">
+        <Input id="st-inactive" inputMode="numeric" className="max-w-40" value={Number.isNaN(s.value) ? "" : String(s.value)} onChange={(e) => s.setValue(e.target.value === "" ? NaN : Number(e.target.value.replace(/\D/g, "")))} aria-invalid={!valid} data-testid="inactive-days" />
+      </Field>
+      <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line p-4">
+        <span>
+          <span className="block text-sm font-bold text-ink">Share their contacts automatically</span>
+          <span className="block text-xs text-muted">Every ten minutes the server looks for employees who stopped working and gives the contacts nobody has called yet - not the ones with a promised callback - to the people who are working. Every move is in the history of the Work sharing page.</span>
+        </span>
+        <Switch checked={settings.auto_rebalance} onCheckedChange={(auto) => void setAuto(auto)} disabled={update.isPending} data-testid="auto-rebalance-switch" aria-label="Share their contacts automatically" />
+      </label>
+      <ErrorLine message={s.error ?? switchError} />
+    </Section>
+  );
+}
+
 export function SettingsView() {
   const me = useMe();
   const settings = useSettings();
@@ -251,6 +293,7 @@ export function SettingsView() {
           <RetrySection settings={settings.data} index={1} />
           <TargetSection settings={settings.data} index={2} />
           <DuplicateSection settings={settings.data} index={3} />
+          <ActivitySection settings={settings.data} index={4} />
         </div>
       )}
     </div>
