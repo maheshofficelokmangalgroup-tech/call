@@ -31,6 +31,10 @@ STAFF_ONLY = {
     ("GET", "/api/v1/analytics/employees"),
     ("GET", "/api/v1/analytics/employees.csv"),
     ("GET", "/api/v1/analytics/employees/{employee_id}"),
+    ("GET", "/api/v1/analytics/followups"),
+    ("GET", "/api/v1/analytics/followups/list"),
+    ("GET", "/api/v1/analytics/conversations"),
+    ("GET", "/api/v1/analytics/conversations/timeline"),
     ("GET", "/api/v1/analytics/live"),
     ("GET", "/api/v1/calls/export.csv"),
     ("GET", "/api/v1/employees"),  # a manager lists their own team (checked below)

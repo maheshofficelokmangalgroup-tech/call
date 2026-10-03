@@ -11,14 +11,16 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.api.deps import DbSession, StaffUser
+from app.api.deps import DbSession, Paging, StaffUser
 from app.core import cache
 from app.core.config import get_settings
 from app.core.errors import NotFound
 from app.models.cache_events import ROSTER
 from app.models.employee import ROLE_ADMIN
 from app.schemas.analytics import EmployeeDetailOut, EmployeeStatsOut, LiveOut, OverviewOut
-from app.services import analytics_service, audit_service
+from app.schemas.common import Page
+from app.schemas.followups import ConversationOut, FollowupItemOut, FollowupSummaryOut, TimelineOut
+from app.services import analytics_service, audit_service, followup_service
 from app.services.settings_service import EPOCH as SETTINGS_EPOCH
 
 router = APIRouter()
@@ -111,6 +113,97 @@ def employee_detail(employee_id: int, db: DbSession, user: StaffUser, date_from:
     if detail is None:
         raise NotFound("Employee not found.")
     return detail
+
+
+# ------------------------------------------------------------------------------------------------- follow-ups and responses
+@router.get("/followups", response_model=FollowupSummaryOut)
+def followups_summary(
+    db: DbSession,
+    user: StaffUser,
+    date_from: DateFrom = None,
+    date_to: DateTo = None,
+    employee_id: int | None = None,
+    team_id: int | None = None,
+):
+    """The follow-up dashboard: how many people were spoken to and what came of it (by each person's latest response), the follow-ups
+    that are due, and the same for every employee."""
+    rng = analytics_service.resolve_range(date_from, date_to)
+    return _cached(
+        user,
+        "followups",
+        {"from": rng.first, "to": rng.last, "e": employee_id, "t": team_id},
+        lambda: followup_service.summary(db, user, rng, employee_id=employee_id, team_id=team_id),
+    )
+
+
+@router.get("/followups/list", response_model=Page[FollowupItemOut])
+def followups_list(
+    db: DbSession,
+    user: StaffUser,
+    paging: Paging,
+    state: Annotated[str, Query(pattern="^(overdue|today|upcoming|pending|closed)$", description="pending = overdue + today + upcoming; closed = done or cancelled in the period")] = "pending",
+    date_from: DateFrom = None,
+    date_to: DateTo = None,
+    employee_id: int | None = None,
+    team_id: int | None = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+):
+    """Scheduled callbacks, the longest-waiting first, each with the person, the employee, and what was said before."""
+    rng = analytics_service.resolve_range(date_from, date_to, default_days=30)
+
+    def compute() -> Page[FollowupItemOut]:
+        items, total = followup_service.followup_items(
+            db, user, rng, state=state, employee_id=employee_id, team_id=team_id, q=q, page=paging.page, page_size=paging.page_size
+        )
+        return Page[FollowupItemOut](items=items, total=total, page=paging.page, page_size=paging.page_size)
+
+    return _cached(user, "followups-list", {"s": state, "from": rng.first, "to": rng.last, "e": employee_id, "t": team_id, "q": q, "p": paging.page, "n": paging.page_size}, compute)
+
+
+@router.get("/conversations", response_model=Page[ConversationOut])
+def conversations(
+    db: DbSession,
+    user: StaffUser,
+    paging: Paging,
+    date_from: DateFrom = None,
+    date_to: DateTo = None,
+    employee_id: int | None = None,
+    team_id: int | None = None,
+    response: Annotated[str | None, Query(pattern="^[A-Z_]+(,[A-Z_]+)*$", max_length=200, description="Outcome codes, comma separated; NONE = no outcome chosen yet")] = None,
+    followup: Annotated[str | None, Query(pattern="^(pending|overdue)$", description="Only people with a pending (or late) follow-up")] = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+):
+    """Who each employee spoke to in the period - one row per employee and phone number, newest first - with the latest response, the
+    last note, the next follow-up, and the latest calls."""
+    rng = analytics_service.resolve_range(date_from, date_to)
+    codes = [c for c in (response or "").split(",") if c]
+
+    def compute() -> Page[ConversationOut]:
+        items, total = followup_service.conversations(
+            db, user, rng, employee_id=employee_id, team_id=team_id, responses=codes or None, q=q, followup=followup, page=paging.page, page_size=paging.page_size
+        )
+        return Page[ConversationOut](items=items, total=total, page=paging.page, page_size=paging.page_size)
+
+    return _cached(
+        user,
+        "conversations",
+        {"from": rng.first, "to": rng.last, "e": employee_id, "t": team_id, "r": ",".join(codes), "f": followup, "q": q, "p": paging.page, "n": paging.page_size},
+        compute,
+    )
+
+
+@router.get("/conversations/timeline", response_model=TimelineOut)
+def conversation_timeline(
+    db: DbSession,
+    user: StaffUser,
+    employee_id: int,
+    phone: Annotated[str, Query(min_length=3, max_length=32)],
+):
+    """Everything between one employee and one phone number: every call with its outcome and notes, the follow-ups, the recordings."""
+    timeline = followup_service.timeline(db, user, employee_id, phone)
+    if timeline is None:
+        raise NotFound("No calls from this employee to this number.")
+    return timeline
 
 
 @router.get("/live", response_model=LiveOut)

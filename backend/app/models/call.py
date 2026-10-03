@@ -129,6 +129,7 @@ class Callback(Base, TimestampMixin):
         UniqueConstraint("employee_id", "client_ref", name="uq_callbacks_employee_client_ref"),
         Index("ix_callbacks_employee_scheduled_status", "employee_id", "scheduled_at", "status"),
         Index("ix_callbacks_contact", "contact_id"),
+        Index("ix_callbacks_status_scheduled", "status", "scheduled_at"),  # the follow-up dashboard: what is pending, and when it is due
         TABLE_OPTS,
     )
 

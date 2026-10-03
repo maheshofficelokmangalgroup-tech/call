@@ -60,6 +60,24 @@ throws away an empty recording and tells the server why. The panel shows the rea
 | Saved on the phone, upload pending | The phone has the file and will send it when it is online. |
 | No report | An older app version, or the call was made outside the app. |
 
+## Follow-ups (who they spoke to, what came of it, who to call back)
+
+**Overview > Follow-ups** answers three questions for the period at the top (and for one employee if you pick one):
+
+* **Who did the employees speak to, and what did each person answer?** Every person is counted once, by their *latest response* -
+  the outcome the employee chose after the latest call that has one (Interested, Not interested, Callback / Follow-up, Connected,
+  Not reached, Wrong number / do not call, or "No outcome chosen" while the employee has not chosen yet). Press a response to
+  list exactly those people.
+* **What did the employee write?** The list *Who they spoke to* has one row per employee and person: calls (and how many were
+  answered), the latest calls as coloured dots, the response, the latest note, and the next follow-up. Open a row for **every call**
+  between that employee and that person - with its outcome, notes, recording and the follow-ups.
+* **Who has to be called back?** *To call back* lists the scheduled callbacks, the longest-waiting first: **Overdue**, **Today**,
+  **Later**, and the ones **Done** in the period - with the reason the employee gave and what was said before. The cards at the top
+  count them (overdue = the time has passed; the counts of follow-ups to do are as of now, from any day).
+
+The same list is on every employee's page (*Responses & follow-ups*). A manager sees only the employees of their own team. A number
+dialled by hand (not a contact) is a person too - it has calls and notes, but no follow-ups.
+
 ## Recordings
 
 All recorded calls of the period, ready to play in the list (only one plays at a time). Recordings that are still arriving or failed to upload

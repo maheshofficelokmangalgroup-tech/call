@@ -17,6 +17,8 @@ import type {
   ContactCreate,
   ContactDetail,
   ContactUpdate,
+  Conversation,
+  ConversationTimeline,
   Credential,
   DateRange,
   Device,
@@ -25,6 +27,8 @@ import type {
   EmployeeDetail,
   EmployeeStats,
   EmployeeUpdate,
+  FollowupItem,
+  FollowupSummary,
   ImportJob,
   ImportPlan,
   ImportRow,
@@ -121,6 +125,75 @@ export const useLive = () =>
     queryFn: ({ signal }) => api<Live>("analytics/live", { signal }),
     refetchInterval: 8_000,
     refetchIntervalInBackground: false,
+  });
+
+// ------------------------------------------------------------------------------------------------- follow-ups and responses
+export interface FollowupScope {
+  teamId?: number | null;
+  employeeId?: number | null;
+}
+
+/** The follow-up dashboard: people spoken to and what came of it, follow-ups due, and the same for every employee. */
+export function useFollowupSummary(range: DateRange, scope: FollowupScope = {}) {
+  return useQuery({
+    queryKey: ["followup-summary", range.from, range.to, scope.teamId ?? null, scope.employeeId ?? null],
+    queryFn: ({ signal }) => api<FollowupSummary>("analytics/followups", { params: { date_from: range.from, date_to: range.to, team_id: scope.teamId, employee_id: scope.employeeId }, signal }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  });
+}
+
+export interface ConversationFilters extends FollowupScope {
+  /** outcome codes, comma separated; NONE = no outcome chosen yet */
+  response?: string;
+  followup?: "pending" | "overdue";
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Who each employee spoke to in the period, with the latest response, the last note and the next follow-up. */
+export function useConversations(range: DateRange, f: ConversationFilters, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["conversations", range.from, range.to, f],
+    queryFn: ({ signal }) =>
+      api<Page<Conversation>>("analytics/conversations", {
+        params: { date_from: range.from, date_to: range.to, employee_id: f.employeeId, team_id: f.teamId, response: f.response, followup: f.followup, q: f.q, page: f.page ?? 1, page_size: f.pageSize ?? 25 },
+        signal,
+      }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  });
+}
+
+export interface FollowupListFilters extends FollowupScope {
+  state: "overdue" | "today" | "upcoming" | "pending" | "closed";
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Scheduled callbacks - the ones still to do (longest waiting first) or the ones closed in the period. */
+export function useFollowupList(range: DateRange, f: FollowupListFilters) {
+  return useQuery({
+    queryKey: ["followup-list", range.from, range.to, f],
+    queryFn: ({ signal }) =>
+      api<Page<FollowupItem>>("analytics/followups/list", {
+        params: { state: f.state, date_from: range.from, date_to: range.to, employee_id: f.employeeId, team_id: f.teamId, q: f.q, page: f.page ?? 1, page_size: f.pageSize ?? 25 },
+        signal,
+      }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  });
+}
+
+/** Every call between one employee and one number, with the notes, the follow-ups and the recordings. */
+export const useConversationTimeline = (employeeId: number | null, phone: string | null) =>
+  useQuery({
+    queryKey: ["conversation-timeline", employeeId, phone],
+    queryFn: ({ signal }) => api<ConversationTimeline>("analytics/conversations/timeline", { params: { employee_id: employeeId, phone }, signal }),
+    enabled: employeeId !== null && !!phone,
   });
 
 // ------------------------------------------------------------------------------------------------- calls

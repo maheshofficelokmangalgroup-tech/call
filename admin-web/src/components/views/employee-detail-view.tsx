@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BadgeCheck, BookUser, CalendarDays, Clock, Headphones, Mail, PhoneCall, PhoneIncoming, Smartphone, UserRoundX } from "lucide-react";
+import { ArrowLeft, BadgeCheck, BookUser, CalendarDays, Clock, Headphones, Mail, MessagesSquare, PhoneCall, PhoneIncoming, Smartphone, UserRoundX } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import * as React from "react";
@@ -12,6 +12,8 @@ import { CallDrawer } from "@/components/domain/call-drawer";
 import { CallFiltersBar, useCallFilterState } from "@/components/domain/call-filters";
 import { CallsTable, NoCalls } from "@/components/domain/calls-table";
 import { ChartCard } from "@/components/domain/chart-card";
+import { ConversationDrawer } from "@/components/domain/conversation-drawer";
+import { ConversationsTable, NoConversations, parseTalkKey, talkKey } from "@/components/domain/conversations-table";
 import { DeviceHealth } from "@/components/domain/device-health";
 import { DevicesPanel } from "@/components/domain/devices-panel";
 import { EmployeeActions } from "@/components/domain/employee-actions";
@@ -31,11 +33,12 @@ import { Table, TableWrap, TD, TH, THead, TR } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api";
 import { useKeyedState, usePageReset } from "@/lib/hooks";
-import { useCalls, useEmployeeDetail, useMe } from "@/lib/queries";
+import { useCalls, useConversations, useEmployeeDetail, useMe } from "@/lib/queries";
 import { useRange } from "@/lib/range";
 import { outcomeTone } from "@/lib/status";
 import type { ContactStat } from "@/lib/types";
 import { useCallParam } from "@/lib/use-call-param";
+import { useUrlParam } from "@/lib/use-url-param";
 import { cn, formatDateTime, formatDuration, formatNumber, formatPercent, formatPhone, timeAgo } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -108,6 +111,9 @@ export function EmployeeDetailView({ id }: { id: number }) {
   const [page, setPage] = usePageReset([filters, range.from, range.to, tab]);
   const [expanded, setExpanded] = useKeyedState<number | null>(null, JSON.stringify([page, filters, tab]));
 
+  const [talkRaw, setTalkRaw] = useUrlParam("talk");
+  const talk = parseTalkKey(talkRaw);
+  const talksQuery = useConversations(range, { employeeId: id, page, pageSize: PAGE_SIZE }, tab === "responses");
   const callsQuery = useCalls(range, { ...filters, employeeId: id, hasRecording: tab === "recordings" ? true : filters.hasRecording, page, pageSize: PAGE_SIZE });
   const items = callsQuery.data?.items ?? [];
   const total = callsQuery.data?.total ?? 0;
@@ -253,6 +259,9 @@ export function EmployeeDetailView({ id }: { id: number }) {
           <TabsTrigger value="calls" active={tab === "calls"} group="emp" count={m?.calls}>
             <PhoneCall className="size-4" /> Calls
           </TabsTrigger>
+          <TabsTrigger value="responses" active={tab === "responses"} group="emp" count={tab === "responses" ? talksQuery.data?.total : undefined}>
+            <MessagesSquare className="size-4" /> Responses &amp; follow-ups
+          </TabsTrigger>
           <TabsTrigger value="people" active={tab === "people"} group="emp" count={data?.top_contacts.length}>
             <BookUser className="size-4" /> People called
           </TabsTrigger>
@@ -274,6 +283,21 @@ export function EmployeeDetailView({ id }: { id: number }) {
           ) : null}
           <div className="mt-4">
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="responses">
+          <p className="mb-3 text-sm text-muted">
+            Everybody {m?.full_name.split(" ")[0] ?? "this person"} called {label.toLowerCase()}: what each person answered last, what was written about them, and when the next call is due.
+          </p>
+          <ConversationsTable rows={talksQuery.data?.items ?? []} loading={talksQuery.isPending} showEmployee={false} onOpen={(r) => setTalkRaw(talkKey(r.employee_id, r.phone))} dimmed={talksQuery.isFetching && !talksQuery.isPending} />
+          {!talksQuery.isPending && (talksQuery.data?.items.length ?? 0) === 0 ? (
+            <div className="mt-4 rounded-2xl border border-line bg-surface shadow-card">
+              <NoConversations filtered={false} />
+            </div>
+          ) : null}
+          <div className="mt-4">
+            <Pagination page={page} pageSize={PAGE_SIZE} total={talksQuery.data?.total ?? 0} onPage={setPage} />
           </div>
         </TabsContent>
 
@@ -332,6 +356,7 @@ export function EmployeeDetailView({ id }: { id: number }) {
         ) : null}
       </p>
 
+      <ConversationDrawer target={talk} onClose={() => setTalkRaw(null)} onOpenCall={setOpenCall} />
       <CallDrawer callId={openCall} onClose={() => setOpenCall(null)} />
     </div>
   );
