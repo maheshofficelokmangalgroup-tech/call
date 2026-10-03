@@ -1,0 +1,85 @@
+# The web server of the employee web app (Caddy). It
+#   - serves the built files and sends every other address to index.html - the pages have addresses such as /contact/12, so a
+#     reload or a bookmark must still open the app,
+#   - forwards /api/v1/* to the API, so the browser only ever talks to ONE address (no CORS to set up, and the sign-in tokens
+#     never go to a third-party address),
+#   - sends the security headers.
+#
+# Settings (environment variables - the Docker image sets sensible defaults):
+#   SITE_ADDRESS   ":80"            plain http: an office network, or behind the project's front door
+#                  "app.example.com" a domain that points at this server: Caddy gets and renews the HTTPS certificate by itself
+#   API_UPSTREAM   where the API is, as seen from this container, without a trailing slash:
+#                  "http://api:8000" (same Docker network)  or  "https://calling.example.com"
+#   WEB_ROOT       the folder with the built files (/srv in the image)
+#   ACME_EMAIL     only used with a domain
+{
+	email {$ACME_EMAIL:admin@example.invalid}
+	servers {
+		# A front door in front of this container (the project's Caddy) tells us who the visitor really is. Believing it - it can
+		# only be a machine on the private network - lets the API see the employee's own address: its sign-in limit counts per
+		# address, so 300 employees behind one front door must not look like one person.
+		trusted_proxies static private_ranges
+		timeouts {
+			read_header 30s
+			idle 2m
+		}
+	}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	@api path /api/v1/*
+	handle @api {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy {$API_UPSTREAM} {
+			# an API behind its own front door answers only to its own name
+			header_up Host {upstream_hostport}
+			transport http {
+				dial_timeout 10s
+				response_header_timeout 60s
+			}
+		}
+	}
+
+	# Files with a hash in their name never change: keep them for a year. A missing one is a 404, never the app's start page
+	# (a browser that still has an old page open asks for files of the old version).
+	handle /assets/* {
+		root * {$WEB_ROOT}
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Everything else: a file that exists, or else a page of the app.
+	handle {
+		root * {$WEB_ROOT}
+		header {
+			Cache-Control "no-cache"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Frame-Options "DENY"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		}
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# For the container's health check only (it listens on the container's own loopback address: nothing outside can reach it).
+:8081 {
+	bind 127.0.0.1
+	respond /healthz "ok" 200
+}

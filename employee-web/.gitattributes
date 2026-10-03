@@ -1,0 +1,6 @@
+# These files are read by Linux tools on the server (Docker, Caddy): keep their line endings as LF even when checked out on Windows.
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf
+*.webmanifest text eol=lf
+*.png binary

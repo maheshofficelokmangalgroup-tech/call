@@ -1,0 +1,28 @@
+# The employee web app next to the project's own production stack (docker-compose.prod.yml), on the same server.
+#
+# It joins the stack's Docker network and publishes NO port: the stack's front door (Caddy) hands the web app's domain to it.
+# See DEPLOY.md, option B, for the 4-line block to add to deploy/Caddyfile.
+#
+#   cd employee-web
+#   docker compose -f docker-compose.on-stack.yml up -d --build
+#
+# (Written to the documented behaviour of Docker Compose; it was not run on the machine this was written on - it has no Docker.)
+name: calling-web
+
+services:
+  employee-web:
+    build:
+      context: .
+      args:
+        VITE_APP_VERSION: ${APP_VERSION:-1.0.0}
+    image: ${WEB_IMAGE:-calling-employee-web:local}
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ":80" # plain http inside the Docker network; the front door does the HTTPS
+      API_UPSTREAM: http://api:8000 # the stack's API container
+    networks: [stack]
+
+networks:
+  stack:
+    name: calling_default # <project name of docker-compose.prod.yml> + "_default"
+    external: true
