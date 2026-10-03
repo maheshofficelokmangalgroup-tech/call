@@ -40,7 +40,8 @@ class Statements:
         self.sql.append(statement.lower())
 
     def counts(self) -> int:
-        return sum(1 for s in self.sql if "count(" in s)
+        """How many times the total of a list was counted (the call statistics of the numbers on a page also use count(), but are not it)."""
+        return sum(1 for s in self.sql if "count(" in s and " from calls " not in " ".join(s.split()))
 
 
 # ------------------------------------------------------------------------------------------------------ the list

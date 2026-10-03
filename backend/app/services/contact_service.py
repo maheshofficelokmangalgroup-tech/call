@@ -19,6 +19,7 @@ from app.models.contact import (
     CampaignContact,
     Contact,
     ContactAssignment,
+    ContactPhone,
 )
 from app.models.cache_events import EVERYONE
 from app.models.employee import Employee
@@ -31,7 +32,8 @@ from app.schemas.contact import (
     NoteOut,
     PersonRef,
 )
-from app.services import audit_service
+from app.services import audit_service, contact_numbers
+from app.services.import_rows import person_key
 from app.services.phone import digits_only, normalize_phone
 from app.services.scope import is_admin, visible_employee_ids
 
@@ -49,15 +51,36 @@ def build_search_text(
     category: str | None,
     tags: list[str],
     custom_fields: dict[str, Any],
+    numbers: list[str] | None = None,
+    relative_name: str | None = None,
+    epic_no: str | None = None,
+    pincode: str | None = None,
+    address: str | None = None,
 ) -> str:
-    parts: list[str] = [name, phone_raw, normalized_phone, digits_only(normalized_phone)]
-    parts += [p for p in (email, location, category) if p]
+    """The words a search looks in: every number of the person (first, so a long address can never push one out), the name, the
+    relative, the voter card number, the pincode, the address, and the rest."""
+    parts: list[str] = [phone_raw, normalized_phone, digits_only(normalized_phone)]
+    for extra in numbers or []:
+        if extra != normalized_phone:
+            parts += [extra, digits_only(extra)]
+    parts += [name]
+    parts += [p for p in (relative_name, epic_no, pincode, (address or "")[:600], email, location, category) if p]
     parts += tags
     parts += [str(v) for v in custom_fields.values() if v not in (None, "")]
     return " ".join(parts).lower()[:4000]
 
 
-def refresh_search_text(contact: Contact) -> None:
+def refresh_person_key(contact: Contact) -> None:
+    """Who this contact is, so a later sheet with another number of the same person finds them."""
+    contact.person_key = person_key(
+        {
+            "name": contact.name, "relative_name": contact.relative_name, "age": contact.age, "gender": contact.gender,
+            "pincode": contact.pincode, "address": contact.address, "epic_no": contact.epic_no,
+        }
+    )
+
+
+def refresh_search_text(contact: Contact, numbers: list[str] | None = None) -> None:
     contact.search_text = build_search_text(
         name=contact.name,
         phone_raw=contact.phone_raw,
@@ -67,6 +90,11 @@ def refresh_search_text(contact: Contact) -> None:
         category=contact.category,
         tags=list(contact.tags or []),
         custom_fields=dict(contact.custom_fields or {}),
+        numbers=numbers,
+        relative_name=contact.relative_name,
+        epic_no=contact.epic_no,
+        pincode=contact.pincode,
+        address=contact.address,
     )
 
 
@@ -158,8 +186,8 @@ def list_contacts(
         # A number written in full is found through the unique index on the phone number: one row however many contacts there are
         # (the words of a search are matched inside every contact's text, which reads them all).
         exact = normalize_phone(q) if page == 1 and len(digits_only(q)) >= 10 else None
-        if exact is not None:
-            found = list(db.scalars(stmt.where(Contact.normalized_phone == exact).limit(page_size)).all())
+        if exact is not None:  # (any of the person's numbers: the unique index of contact_phones)
+            found = list(db.scalars(stmt.where(Contact.id.in_(select(ContactPhone.contact_id).where(ContactPhone.normalized_phone == exact))).limit(page_size)).all())
             if found:
                 return found, len(found)
         for token in q.strip().lower().split()[:5]:
@@ -202,6 +230,8 @@ def _count(db: Session, user: Employee, stmt: Select, *, key: tuple) -> int:
 # ------------------------------------------------------------------- detail
 def build_contact_out(db: Session, contact: Contact) -> ContactOut:
     out = ContactOut.model_validate(contact)
+    numbered = contact_numbers.brief_many(db, [contact])[0]
+    out.phones, out.phone_count, out.call_phone = numbered.phones, numbered.phone_count, numbered.call_phone
     assignment = active_assignment(db, contact.id)
     if assignment:
         owner = db.get(Employee, assignment.employee_id)
@@ -222,6 +252,7 @@ def create_contact(db: Session, *, data: ContactCreate, actor: Employee, request
     normalized = normalize_phone(data.phone)
     if normalized is None:
         raise ValidationFailed("Enter a valid mobile number.", code="invalid_phone", details=[{"field": "phone", "message": "Invalid phone number"}])
+    numbers = contact_numbers.clean_numbers([data.phone, *data.more_phones])
 
     existing = db.scalars(select(Contact).where(Contact.normalized_phone == normalized)).first()
     if existing is not None and existing.deleted_at is None:
@@ -230,6 +261,7 @@ def create_contact(db: Session, *, data: ContactCreate, actor: Employee, request
             code="duplicate_phone",
             details={"contact_id": existing.id, "name": existing.name},
         )
+    contact_numbers.refuse_numbers_of_others(db, existing.id if existing is not None else None, numbers)  # (any of the numbers may be somebody's)
 
     if data.campaign_id is not None and db.get(Campaign, data.campaign_id) is None:
         raise ValidationFailed("Campaign does not exist.", code="unknown_campaign")
@@ -237,6 +269,12 @@ def create_contact(db: Session, *, data: ContactCreate, actor: Employee, request
     contact = existing or Contact(normalized_phone=normalized)
     contact.name = data.name
     contact.phone_raw = data.phone.strip()
+    contact.relative_name = data.relative_name or None
+    contact.age = data.age
+    contact.gender = data.gender
+    contact.epic_no = data.epic_no.strip().upper() if data.epic_no and data.epic_no.strip() else None
+    contact.pincode = data.pincode.strip() if data.pincode and data.pincode.strip() else None
+    contact.address = data.address.strip() if data.address and data.address.strip() else None
     contact.email = data.email
     contact.location = data.location
     contact.category = data.category
@@ -250,9 +288,14 @@ def create_contact(db: Session, *, data: ContactCreate, actor: Employee, request
         contact.status = CONTACT_NEW
         contact.failed_attempts = 0
         contact.next_eligible_at = None
-    refresh_search_text(contact)
+    refresh_search_text(contact, [n for n, _ in numbers])
+    refresh_person_key(contact)
     db.add(contact)
-    db.flush()
+    db.flush()  # (a new contact gets its first number here)
+    if existing is not None:
+        contact_numbers.set_numbers(db, contact, [raw for _, raw in numbers])
+    else:
+        contact_numbers.add_numbers(db, contact, [raw for _, raw in numbers[1:]])
 
     if data.campaign_id is not None:
         db.add(CampaignContact(campaign_id=data.campaign_id, contact_id=contact.id))
@@ -275,26 +318,32 @@ def update_contact(db: Session, *, contact: Contact, data: ContactUpdate, actor:
     changes: dict[str, Any] = {}
     fields = data.model_fields_set
 
-    if "phone" in fields and data.phone is not None:
+    if "phones" in fields and data.phones is not None:  # every number of the person, the main one first
+        changes["phones"] = contact_numbers.set_numbers(db, contact, data.phones)
+    elif "phone" in fields and data.phone is not None:  # only the main number changes; the others stay
         normalized = normalize_phone(data.phone)
         if normalized is None:
             raise ValidationFailed("Enter a valid mobile number.", code="invalid_phone", details=[{"field": "phone", "message": "Invalid phone number"}])
         if normalized != contact.normalized_phone:
-            clash = db.scalars(select(Contact.id).where(Contact.normalized_phone == normalized, Contact.id != contact.id)).first()
-            if clash:
-                raise Conflict("Another contact already uses this phone number.", code="duplicate_phone", details={"contact_id": clash})
-            contact.normalized_phone = normalized
+            others = [n for n in contact_numbers.all_numbers(db, contact.id)[1:] if n != normalized]
+            contact_numbers.set_numbers(db, contact, [data.phone, *others])
             changes["phone"] = normalized
-        contact.phone_raw = data.phone.strip()
-    for field in ("name", "email", "location", "category", "priority", "tags", "custom_fields"):
+        else:
+            contact.phone_raw = data.phone.strip()
+            db.execute(update(ContactPhone).where(ContactPhone.contact_id == contact.id, ContactPhone.position == 0).values(phone_raw=data.phone.strip()[:64]))
+    for field in ("name", "email", "location", "category", "priority", "tags", "custom_fields", "relative_name", "age", "gender", "epic_no", "pincode", "address"):
         if field in fields:
             value = getattr(data, field)
             if field == "name" and value is None:
                 continue
             if field in ("tags", "custom_fields") and value is None:
                 value = [] if field == "tags" else {}
+            if field in ("relative_name", "epic_no", "pincode", "address") and isinstance(value, str):
+                value = value.strip() or None
+                if field == "epic_no" and value:
+                    value = value.upper()
             setattr(contact, field, value)
-            changes[field] = value if field not in ("custom_fields",) else "updated"
+            changes[field] = value if field not in ("custom_fields", "address") else "updated"
     if "status" in fields and data.status is not None and data.status != contact.status:
         contact.status = data.status
         if data.status in ("new", "in_progress"):
@@ -302,7 +351,9 @@ def update_contact(db: Session, *, contact: Contact, data: ContactUpdate, actor:
             contact.next_eligible_at = None
         changes["status"] = data.status
 
-    refresh_search_text(contact)
+    db.flush()
+    refresh_search_text(contact, contact_numbers.all_numbers(db, contact.id))
+    refresh_person_key(contact)
     audit_service.record(db, action="contact.update", actor=actor, entity_type="contact", entity_id=contact.id, request=request, details=changes)
     db.commit()
     return contact

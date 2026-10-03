@@ -140,6 +140,15 @@ export function formatPhone(phone: string | null | undefined): string {
   return phone;
 }
 
+/** The numbers typed into one box: one on each line (commas and semicolons work too); at most 19 besides the main number. */
+export function parseNumberList(text: string): string[] {
+  return text
+    .split(/[,;\n]/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 19);
+}
+
 export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 /** First and last hour worth drawing: the hours that have calls, widened to at least `min`-`max` so charts keep a familiar shape. */

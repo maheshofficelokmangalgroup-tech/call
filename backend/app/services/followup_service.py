@@ -34,7 +34,6 @@ from app.models.contact import Contact
 from app.models.employee import Employee, Team
 from app.models.recording import REC_AVAILABLE, Recording
 from app.schemas.call import DispositionRef
-from app.schemas.contact import ContactBrief
 from app.schemas.followups import (
     NO_RESPONSE,
     ConversationOut,
@@ -49,6 +48,7 @@ from app.schemas.followups import (
     TimelineOut,
 )
 from app.services.analytics_service import DateRange, period_out, resolve_scope
+from app.services import contact_numbers
 from app.services.contact_service import escape_like
 from app.services.scope import can_view_employee
 
@@ -565,7 +565,7 @@ def timeline(db: Session, user: Employee, employee_id: int, phone: str) -> Timel
         employee_name=employee[0],
         employee_code=employee[1],
         phone=phone,
-        contact=ContactBrief.model_validate(contact) if contact is not None and contact.deleted_at is None else None,
+        contact=contact_numbers.brief_many(db, [contact])[0] if contact is not None and contact.deleted_at is None else None,
         total_calls=int(total),
         calls=[
             TimelineCallOut(

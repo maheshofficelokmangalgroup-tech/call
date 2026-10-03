@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import type { QueueItem } from '../services/api/types';
 import { colors, radius, shadow } from '../theme';
 import { formatPhone } from '../utils/format';
+import { dialNumber, otherNumbersLabel, personLine } from '../utils/people';
 import { describeCallbackTime, parseIso, timeAgo } from '../utils/time';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -43,6 +44,8 @@ export function QueueCard({ item, onOpen, onCall, highlight = false, showTags = 
   const { contact } = item;
   const priority = PRIORITY_LABEL[contact.priority];
   const last = parseIso(item.last_called_at);
+  const more = otherNumbersLabel(contact);
+  const person = personLine(contact);
   return (
     <PressableScale onPress={onOpen} haptic={false} style={styles.card}>
       <Avatar name={contact.name} size={50} />
@@ -51,9 +54,15 @@ export function QueueCard({ item, onOpen, onCall, highlight = false, showTags = 
           {contact.name}
         </Text>
         <Text variant="small" color="muted" numberOfLines={1}>
-          {formatPhone(contact.phone)}
+          {formatPhone(dialNumber(contact))}
+          {more ? `  •  ${more}` : ''}
           {contact.location ? `  •  ${contact.location}` : ''}
         </Text>
+        {person ? (
+          <Text variant="caption" color="faint" numberOfLines={1}>
+            {person}
+          </Text>
+        ) : null}
         {showTags ? (
           <View style={styles.tags}>
             {reasonTag(item)}

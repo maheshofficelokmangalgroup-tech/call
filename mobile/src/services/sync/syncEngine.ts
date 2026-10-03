@@ -76,7 +76,7 @@ export async function executeOp(op: SyncOp): Promise<void> {
         const created = await api.createCall({
           ...base,
           contact_id: call.contactId,
-          phone_number: call.contactId ? undefined : call.phone,
+          phone_number: call.phone, // (a person with several numbers: the server records the one that was dialled, when it is one of theirs)
         });
         await updateCall(call.uuid, { serverId: created.id });
       } catch (error) {

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core import cache
 from app.models.call import Call, Callback
-from app.models.contact import Campaign, CampaignAssignee, CampaignContact, Contact, ContactAssignment
+from app.models.contact import Campaign, CampaignAssignee, CampaignContact, Contact, ContactAssignment, ContactPhone
 from app.models.employee import Employee, Team
 from app.models.system import Setting
 
@@ -34,7 +34,7 @@ def employee_epoch(employee_id: int | str) -> str:
 
 # tables whose rows decide who sees which contact, and in what order
 _PERSONAL = (Call, Callback, ContactAssignment)  # the row says whose queue it changes
-_SHARED = (Contact, Campaign, CampaignContact, CampaignAssignee)  # it changes many queues
+_SHARED = (Contact, ContactPhone, Campaign, CampaignContact, CampaignAssignee)  # it changes many queues
 _BULK_TABLES = {m.__tablename__ for m in (*_PERSONAL, *_SHARED)}
 _ROSTER_TABLES = {m.__tablename__ for m in (Employee, Team, Setting)}
 

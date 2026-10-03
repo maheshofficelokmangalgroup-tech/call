@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, MapPin, Megaphone, Pencil, Phone, Send, StickyNote, Tag, Trash2, UserRound } from "lucide-react";
+import { Hash, Mail, MapPin, Megaphone, Pencil, Phone, Send, StickyNote, Tag, Trash2, UserRound, UsersRound } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -142,9 +142,16 @@ function Details({ contact, canEdit, onEdit, onDelete, onOpenCall }: { contact: 
       <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-6 py-6">
         <Section title="Details">
           <div className="space-y-2.5">
-            <Fact icon={Phone}>{formatPhone(contact.phone)}</Fact>
+            {contact.relative_name ? <Fact icon={UsersRound}>Relative: {contact.relative_name}</Fact> : null}
+            {contact.age || contact.gender ? <Fact icon={UserRound}>{[contact.age ? `${contact.age} years` : "", contact.gender === "M" ? "Male" : contact.gender === "F" ? "Female" : contact.gender === "O" ? "Other" : ""].filter(Boolean).join(" · ")}</Fact> : null}
+            {contact.epic_no ? <Fact icon={Hash}>Voter card (EPIC) {contact.epic_no}</Fact> : null}
             {contact.email ? <Fact icon={Mail}>{contact.email}</Fact> : null}
             {contact.location ? <Fact icon={MapPin}>{contact.location}</Fact> : null}
+            {contact.address || contact.pincode ? (
+              <Fact icon={MapPin}>
+                <span className="whitespace-normal">{[contact.address, contact.pincode].filter(Boolean).join(" - ")}</span>
+              </Fact>
+            ) : null}
             {contact.category ? <Fact icon={Tag}>{contact.category}</Fact> : null}
             <Fact icon={UserRound}>{contact.assigned_to ? `Assigned to ${contact.assigned_to.name}` : "Not assigned to anyone"}</Fact>
             {contact.campaigns.length > 0 ? <Fact icon={Megaphone}>{contact.campaigns.map((c) => c.name).join(", ")}</Fact> : null}
@@ -169,6 +176,28 @@ function Details({ contact, canEdit, onEdit, onDelete, onOpenCall }: { contact: 
               ))}
             </dl>
           ) : null}
+        </Section>
+
+        <Section title="Numbers" aside={<span className="text-xs text-muted">{contact.phones.length} in total</span>}>
+          <ul className="space-y-2" data-testid="contact-numbers">
+            {contact.phones.map((p) => (
+              <li key={p.phone} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3" data-testid="contact-number">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-muted">
+                  <Phone className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1 leading-tight">
+                  <p className="text-sm font-semibold text-ink tnum">
+                    {formatPhone(p.phone)}
+                    {p.primary ? <span className="ml-2 rounded-full bg-surface-3 px-1.5 py-0.5 text-[11px] font-bold text-ink-soft">Main</span> : null}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {p.calls > 0 ? `${p.calls} call${p.calls === 1 ? "" : "s"}, ${p.answered} answered${p.last_called_at ? ` · last ${timeAgo(p.last_called_at)}` : ""}` : "not called yet"}
+                  </p>
+                </div>
+                {p.invalid ? <Badge tone="danger">Wrong number</Badge> : p.phone === contact.call_phone && contact.phones.length > 1 ? <Badge tone="brand">Next to call</Badge> : null}
+              </li>
+            ))}
+          </ul>
         </Section>
 
         <Section title="Calls to this person" aside={<span className="text-xs text-muted">{contact.call_count} in total</span>}>

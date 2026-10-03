@@ -152,7 +152,7 @@ export function ContactsView() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-faint" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, number, city, tag" className="pl-10 pr-9" aria-label="Search contacts" data-testid="contact-search" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, any number, address, pincode, tag" className="pl-10 pr-9" aria-label="Search contacts" data-testid="contact-search" />
           {search ? (
             <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted hover:bg-surface-3" aria-label="Clear search">
               <X className="size-4" />
@@ -312,7 +312,11 @@ export function ContactsView() {
                           ) : null}
                           <TD>
                             <p className="font-semibold text-ink">{c.name}</p>
-                            <p className="text-xs text-muted tnum">{formatPhone(c.phone)}</p>
+                            {c.relative_name ? <p className="text-xs text-muted">{c.relative_name}</p> : null}
+                            <p className="text-xs text-muted tnum" data-testid="contact-numbers-cell">
+                              {formatPhone(c.phone)}
+                              {c.phone_count > 1 ? <span className="ml-1.5 rounded-full bg-surface-3 px-1.5 py-0.5 text-[11px] font-bold text-ink-soft">+{c.phone_count - 1} more</span> : null}
+                            </p>
                           </TD>
                           <TD>
                             <Badge tone={st.tone}>{st.label}</Badge>
@@ -320,7 +324,10 @@ export function ContactsView() {
                           <TD>
                             <span className={cn("text-sm font-semibold", c.priority === 1 ? "text-danger" : c.priority === 3 ? "text-muted" : "text-ink-soft")}>{PRIORITY_LABEL[c.priority]}</span>
                           </TD>
-                          <TD className="text-ink-soft">{c.location ?? <span className="text-faint">-</span>}</TD>
+                          <TD className="text-ink-soft">
+                            {c.location ?? c.pincode ?? <span className="text-faint">-</span>}
+                            {c.age || c.gender ? <p className="text-xs text-muted">{[c.age ? `${c.age} yrs` : "", c.gender ?? ""].filter(Boolean).join(" · ")}</p> : null}
+                          </TD>
                           <TD className="text-right font-semibold text-ink tnum">{c.call_count}</TD>
                           <TD className="whitespace-nowrap text-ink-soft">{c.last_called_at ? timeAgo(c.last_called_at) : <span className="text-faint">never</span>}</TD>
                         </motion.tr>

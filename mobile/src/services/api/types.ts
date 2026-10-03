@@ -81,10 +81,37 @@ export interface Me {
   config: ClientConfig;
 }
 
+/** One number of a person and what happened on it (the server sends every number of a person with the contact). */
+export interface ContactPhone {
+  /** +91... */
+  phone: string;
+  phone_raw: string;
+  position: number;
+  primary: boolean;
+  calls: number;
+  answered: number;
+  /** an employee reported it as not a valid number */
+  invalid: boolean;
+  last_called_at: string | null;
+  last_answered_at: string | null;
+}
+
 export interface Contact {
   id: number;
   name: string;
+  /** the first number of the person; all of them are in `phones` */
   phone: string;
+  /** all numbers of this person (older copies kept on the phone before the update do not have them) */
+  phones?: ContactPhone[];
+  phone_count?: number;
+  /** the number to dial now: the one that was answered, else the one tried least */
+  call_phone?: string | null;
+  relative_name?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  epic_no?: string | null;
+  pincode?: string | null;
+  address?: string | null;
   email: string | null;
   location: string | null;
   category: string | null;

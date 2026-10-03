@@ -17,7 +17,7 @@ from app.schemas.contact import (
     UnassignRequest,
 )
 from app.schemas.common import Message
-from app.services import assignment_service, call_service, contact_service
+from app.services import assignment_service, call_service, contact_numbers, contact_service
 
 router = APIRouter()
 
@@ -53,7 +53,7 @@ def list_contacts(
         page=paging.page,
         page_size=paging.page_size,
     )
-    return Page[ContactBrief](items=[ContactBrief.model_validate(c) for c in rows], total=total, page=paging.page, page_size=paging.page_size)
+    return Page[ContactBrief](items=contact_numbers.brief_many(db, rows), total=total, page=paging.page, page_size=paging.page_size)
 
 
 @router.post("", response_model=ContactOut, status_code=status.HTTP_201_CREATED)

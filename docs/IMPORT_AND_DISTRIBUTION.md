@@ -3,6 +3,10 @@
 A sheet of 10 contacts or of a million: it is checked, no number gets in twice, and what is new is shared **equally between the
 employees who are working** - somebody who stopped working gets nothing, and what was waiting with them is shared out again.
 
+A sheet may have **one row per number** (a voter list: the same person on many rows, one number on each). Those rows become **one
+contact with all the numbers** - the name is shown once in the calling app and every number is on the person (see
+[One person, many numbers](#one-person-many-numbers-a-voter-list)).
+
 ## In the admin panel
 
 **Contacts → Import sheet**
@@ -42,11 +46,23 @@ stays *previewed* and can be confirmed from the panel. `Ctrl+C` asks it to stop 
 | --- | --- |
 | Name | required, at most 255 characters; invisible and control characters are removed, accents are normalised |
 | Mobile | required; spreadsheet damage is repaired (`9.8765E+9`, `'9876543210`, `9876543210.0`); must be a valid mobile number (India by default); stored as `+919876543210` |
+| Relative Name | optional; the father's / husband's name (up to 255 characters) |
+| Age | optional; 1-150 (`35`, `35.0`, `'35`); anything else is left out - the row is still good |
+| Gender | optional; `M`/`Male`, `F`/`Female`/`Woman`, `O`/`Other`; anything else is left out |
+| EPIC No | optional; the voter card number (upper case, spaces removed) |
+| Voter Pincode | optional; 6 digits |
+| Voter Address | optional; up to 2,000 characters (a column called *Address* is this one; *City / Area / Place* are the short *Location*) |
 | Email | optional; must look like an email |
 | Priority | optional; `1-3` or High / Medium / Low; the upload's default when empty |
 | Tags | optional; separated by `, ; |` (at most 20) |
 | Assigned to | optional; an employee code or email of an active employee - that row goes to that person (see below) |
 | any other column | kept as an extra field of the contact (at most 30, 500 characters each) |
+
+**The column names** are matched in any spelling - capitals, spaces, `_`, `-`, `.` and apostrophes do not matter (`Voter Name`,
+`voter_name`, `VOTER-NAME` and `VoterName` are the same). When none of the headers is a known name for the person's name (or number),
+the **one** header that says *name* (or *mobile* / *phone*) is taken - never a relative's, an agent's or a booth's name, and never a
+guess between two candidates. If the sheet still has no name or no mobile column, the check stops and **lists the columns it found**,
+so it is clear what to rename.
 
 ### No duplicate gets in - three levels
 
@@ -57,6 +73,42 @@ stays *previewed* and can be confirmed from the panel. `Ctrl+C` asks it to stop 
    brought back.
 3. **At the moment of writing** - the database has a unique index on the number, and contacts are inserted with "leave out the rows
    whose number is there". So even a number that was added by somebody else *after* the check cannot become a second contact.
+
+### One person, many numbers (a voter list)
+
+A voter list has **one row per number**: *Mobile Number, Voter Name, Relative Name, Age, Gender, EPIC No, Voter Pincode, Voter
+Address*. The same person is on many rows (one number each), and the same number can be on many rows (a family that shares a
+phone, a row typed twice). The import turns that into **people**:
+
+* **Rows with the same name, relative, age, gender, pincode and address are one person** (capitals and spaces do not matter). The
+  person is **one contact** with **all** their numbers (the first number is the main one). The calling app shows the name once.
+* **Only when the row says enough about the person**: it needs an address, a relative's name or a voter card number, and at least two
+  of relative / age / gender / pincode / address / EPIC. A plain list of names and numbers is never merged - two customers called
+  *Rahul* stay two contacts.
+* **Two different EPIC numbers are two people**, even if everything else is equal (twins at one address). A row without an EPIC
+  number joins the first person it fits.
+* **A number is in one contact only.** A number that is on rows of different people (a shared phone) belongs to the first row of the
+  sheet; the later rows are listed as repeats of that number, and those people are still added with their other numbers. The
+  database has a unique index on every number, so whatever the sheet says, no number is ever in two contacts.
+* **At most 20 numbers per person** - more are not added, and the check says how many.
+* **Every row is accounted for.** The check shows *people*, *numbers*, *rows that joined another row of the same person*, repeats and
+  bad rows - and `bad + repeats + numbers = all rows`.
+* **People you have already** (found by any of their numbers, or by who they are) are not made again. *Skip* mode **adds their new
+  numbers** to the contact and touches nothing else; *update* mode also gives the contact the data of the sheet. A person who was
+  deleted before is brought back.
+* **The sharing is by person**: 53,304 people between 10 employees is 5,330 or 5,331 each - not by row.
+
+In the calling app a person with several numbers shows **+N more numbers**; the contact screen has the **Numbers** list with a Call
+button on every number, how often it was called and answered, *Wrong number* where an employee reported it, and *Next to call*. The
+number the phone dials: **the one that was answered last time**, else **the one tried the fewest times** (so the numbers take turns,
+the first of the person before the others); a number reported as not valid is left out unless nothing else is left. The server
+records the number that was really dialled on the call. *Invalid number* as an outcome marks **that number** only: while the person
+has another number, they stay in the queue.
+
+In the admin panel: the contact list shows the first number and *+N*, the contact drawer has every number (with calls and
+answered), the voter details (relative, age, gender, voter ID, pincode, address) and an editor for the numbers; the list can be
+searched by **any** of the numbers, by name, relative, voter ID, pincode and address. The import check says *people / numbers / rows
+that joined*.
 
 ### How the new contacts are shared
 
@@ -110,6 +162,25 @@ On a laptop with MySQL 8.4 (384 MB buffer pool), one process:
 | a number twice in the database | none (checked) |
 
 The same numbers are checked automatically on every push (`import-scale` job in CI: 300,000 rows on MySQL, plus an Excel file).
+
+A **voter list** at the size of the real one (`python -m scripts.voter_check`; laptop, MySQL 8.4, 2,000 people were contacts before):
+
+| 209,395 rows, 23.5 MB, 8 columns | |
+| --- | --- |
+| check (read, validate, group the rows of one person, compare with the contacts) | **25.8 s** (8,112 rows/s) |
+| add + share to 10 employees (people and numbers, in steps of 2,000 people) | **14.8 s** |
+| result | **53,304 people** with **161,244 numbers**; 123 bad rows, 48,528 repeats of a number, 107,440 rows joined another row of the same person - `123 + 48,528 + 160,744 = 209,395`; 2,000 people found again (not made twice), 1,351 of them got new numbers; **5,130 or 5,131 people each** |
+| every person is one contact with all their numbers | 3,000 people looked up one by one by their numbers: 0 wrong |
+| the same list again | adds nobody |
+| memory of the process | **206 MB** peak |
+| pages with 53,304 people | contacts first page 17 ms, find a person by their *last* number 6 ms, search by name 122 ms, by pincode 156 ms, the calling queue (100 people with all their numbers) 7 ms (medians) |
+
+The rows of one person are brought together **on disk** (64 buckets, one at a time), never in memory.
+
+**Why adding is that fast:** every step sends its rows to MySQL in a few statements (`app/core/dbutil.py`, `KeepExistingRow`). Written the
+obvious way (SQLAlchemy's `on_duplicate_key_update`), the driver (pymysql) did not recognise the statement - it spent 6-7 seconds on
+a pattern that failed, and then sent every row as a statement of its own: 386 s instead of 15 s for this list, and a round trip per row
+on a database that is not on the same machine. `tests/test_dbutil.py` keeps it that way.
 
 Why it holds: the sheet is read **one row at a time** (never loaded); valid rows go to a file, only the *numbers* are kept in memory
 (about 70 MB per million); the database is touched in **steps of 2,000 rows**, each its own transaction that also moves the resume
@@ -173,8 +244,10 @@ holds the file in memory).
 
 ## Files
 
-`backend/app/services/`: `import_files.py` (safe readers), `import_rows.py` (what a line must be), `import_service.py` (the
-pipeline), `distribution.py` (the arithmetic - pure, tested against brute force), `activity.py` (who is working),
+`backend/app/services/`: `import_files.py` (safe readers), `import_rows.py` (what a line must be, who a person is),
+`import_service.py` (the pipeline), `contact_numbers.py` (the numbers of a person: which to dial, what happened on each),
+`distribution.py` (the arithmetic - pure, tested against brute force), `activity.py` (who is working),
 `rebalance_service.py`, `workload.py`, `credential_vault.py`; `app/jobs.py` (background threads + scheduler); `scripts/import_contacts.py`,
-`scripts/scale_check.py`, `scripts/make_big_sheet.py`. Tests: `tests/test_import*.py`, `test_distribution.py`, `test_rebalance.py`,
-`test_activity.py`, `test_credentials.py`, `test_scale_paths.py`.
+`scripts/scale_check.py`, `scripts/make_big_sheet.py`, `scripts/voter_check.py`, `scripts/make_voter_sheet.py`. Tests:
+`tests/test_import*.py`, `test_people_numbers.py`, `test_distribution.py`, `test_rebalance.py`, `test_activity.py`,
+`test_credentials.py`, `test_scale_paths.py`. Table `contact_phones` (migration `0007`) holds every number of every contact.

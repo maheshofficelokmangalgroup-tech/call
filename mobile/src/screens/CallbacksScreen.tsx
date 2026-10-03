@@ -24,6 +24,7 @@ import { toast } from '../store/toastStore';
 import { colors, radius, shadow } from '../theme';
 import { formatPhone } from '../utils/format';
 import { haptics } from '../utils/haptics';
+import { dialNumber } from '../utils/people';
 import { describeCallbackTime, formatDateTime, isSameDay, parseIso, startOfDay } from '../utils/time';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -96,7 +97,7 @@ export function CallbacksScreen() {
                     {contact?.name ?? `Contact #${item.contact_id}`}
                   </Text>
                   <Text variant="small" color="muted" numberOfLines={1}>
-                    {contact ? formatPhone(contact.phone) : ''}
+                    {contact ? formatPhone(dialNumber(contact)) : ''}
                   </Text>
                   <View style={styles.tags}>
                     <Tag label={describeCallbackTime(at)} icon="calendar-clock" color={overdue ? colors.red : '#B45309'} background={overdue ? colors.redSoft : colors.orangeSoft} />
@@ -117,7 +118,7 @@ export function CallbacksScreen() {
                   icon="phone"
                   size="sm"
                   disabled={!contact}
-                  onPress={() => contact && void call({ contactId: contact.id, contactName: contact.name, phone: contact.phone })}
+                  onPress={() => contact && void call({ contactId: contact.id, contactName: contact.name, phone: dialNumber(contact) })}
                   style={styles.flex}
                 />
                 <Button

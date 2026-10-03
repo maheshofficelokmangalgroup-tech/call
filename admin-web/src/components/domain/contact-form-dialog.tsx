@@ -9,16 +9,24 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { errorMessage } from "@/lib/api";
 import { useCampaigns, useContactMutations, useEmployeeList } from "@/lib/queries";
 import { CONTACT_STATUS, PRIORITY_LABEL } from "@/lib/status";
 import type { ContactDetail } from "@/lib/types";
+import { parseNumberList } from "@/lib/utils";
 
 const schema = z.object({
   name: z.string().trim().min(1, "Enter a name.").max(255),
   phone: z.string().trim().min(3, "Enter the phone number.").max(32, "That number is too long."),
+  more: z.string().max(1000),
+  relative_name: z.string().trim().max(255),
+  age: z.string().trim().refine((v) => v === "" || (/^\d{1,3}$/.test(v) && Number(v) <= 150), "Enter an age between 1 and 150."),
+  gender: z.string(),
+  epic_no: z.string().trim().max(32),
+  pincode: z.string().trim().max(10),
+  address: z.string().trim().max(2000),
   email: z.string().trim().max(255).refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "Enter a valid email address."),
   location: z.string().trim().max(255),
   category: z.string().trim().max(100),
@@ -30,7 +38,7 @@ const schema = z.object({
 });
 type Values = z.infer<typeof schema>;
 
-const blank: Values = { name: "", phone: "", email: "", location: "", category: "", priority: "2", status: "new", tags: "", employee: "none", campaign: "none" };
+const blank: Values = { name: "", phone: "", more: "", relative_name: "", age: "", gender: "none", epic_no: "", pincode: "", address: "", email: "", location: "", category: "", priority: "2", status: "new", tags: "", employee: "none", campaign: "none" };
 
 const parseTags = (text: string) => text.split(/[,;\n]/).map((t) => t.trim()).filter(Boolean).slice(0, 20);
 
@@ -56,7 +64,14 @@ function ContactFormBody({ contact, onOpenChange }: { contact?: ContactDetail | 
     defaultValues: contact
       ? {
           name: contact.name,
-          phone: contact.phone_raw || contact.phone,
+          phone: contact.phones[0]?.phone_raw || contact.phone_raw || contact.phone,
+          more: contact.phones.slice(1).map((p) => p.phone_raw || p.phone).join("\n"),
+          relative_name: contact.relative_name ?? "",
+          age: contact.age ? String(contact.age) : "",
+          gender: contact.gender ?? "none",
+          epic_no: contact.epic_no ?? "",
+          pincode: contact.pincode ?? "",
+          address: contact.address ?? "",
           email: contact.email ?? "",
           location: contact.location ?? "",
           category: contact.category ?? "",
@@ -77,7 +92,13 @@ function ContactFormBody({ contact, onOpenChange }: { contact?: ContactDetail | 
         await update.mutateAsync({
           id: contact.id,
           name: v.name,
-          phone: v.phone,
+          phones: [v.phone, ...parseNumberList(v.more)],  // every number of the person, the main one first
+          relative_name: v.relative_name || null,
+          age: v.age ? Number(v.age) : null,
+          gender: v.gender === "none" ? null : (v.gender as "M" | "F" | "O"),
+          epic_no: v.epic_no || null,
+          pincode: v.pincode || null,
+          address: v.address || null,
           email: v.email || null,
           location: v.location || null,
           category: v.category || null,
@@ -90,6 +111,13 @@ function ContactFormBody({ contact, onOpenChange }: { contact?: ContactDetail | 
         await create.mutateAsync({
           name: v.name,
           phone: v.phone,
+          more_phones: parseNumberList(v.more),
+          relative_name: v.relative_name || null,
+          age: v.age ? Number(v.age) : null,
+          gender: v.gender === "none" ? null : (v.gender as "M" | "F" | "O"),
+          epic_no: v.epic_no || null,
+          pincode: v.pincode || null,
+          address: v.address || null,
           email: v.email || null,
           location: v.location || null,
           category: v.category || null,
@@ -122,6 +150,45 @@ function ContactFormBody({ contact, onOpenChange }: { contact?: ContactDetail | 
               </Field>
               <Field label="Phone number" htmlFor="cf-phone" required error={errors.phone?.message} hint="With or without +91; spaces are fine.">
                 <Input id="cf-phone" type="tel" aria-invalid={!!errors.phone} {...form.register("phone")} data-testid="contact-phone" />
+              </Field>
+              <Field label="Other numbers of this person" htmlFor="cf-more" error={errors.more?.message} hint="One on each line. A number can belong to one person only." className="sm:col-span-2">
+                <Textarea id="cf-more" rows={3} placeholder={"98 7654 3211\n98 7654 3212"} {...form.register("more")} data-testid="contact-more-phones" />
+              </Field>
+              <Field label="Relative's name" htmlFor="cf-relative" hint="Father, husband or guardian.">
+                <Input id="cf-relative" {...form.register("relative_name")} />
+              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Age" htmlFor="cf-age" error={errors.age?.message}>
+                  <Input id="cf-age" inputMode="numeric" aria-invalid={!!errors.age} {...form.register("age")} />
+                </Field>
+                <Field label="Gender" htmlFor="cf-gender">
+                  <Controller
+                    control={form.control}
+                    name="gender"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="cf-gender">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not said</SelectItem>
+                          <SelectItem value="M">Male</SelectItem>
+                          <SelectItem value="F">Female</SelectItem>
+                          <SelectItem value="O">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+              </div>
+              <Field label="Voter card number (EPIC)" htmlFor="cf-epic">
+                <Input id="cf-epic" {...form.register("epic_no")} />
+              </Field>
+              <Field label="Pincode" htmlFor="cf-pincode">
+                <Input id="cf-pincode" inputMode="numeric" {...form.register("pincode")} />
+              </Field>
+              <Field label="Address" htmlFor="cf-address" className="sm:col-span-2">
+                <Textarea id="cf-address" rows={2} {...form.register("address")} />
               </Field>
               <Field label="Email" htmlFor="cf-email" error={errors.email?.message}>
                 <Input id="cf-email" type="email" aria-invalid={!!errors.email} {...form.register("email")} />

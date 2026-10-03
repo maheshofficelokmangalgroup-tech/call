@@ -71,6 +71,15 @@ const MIGRATIONS: string[][] = [
      )`,
     `CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_ops(status, next_attempt_at)`,
   ],
+  // v2: a person can have several numbers - each one finds the person (the dialer, an incoming call)
+  [
+    `CREATE TABLE IF NOT EXISTS contact_phones (
+       phone TEXT NOT NULL,
+       contact_id INTEGER NOT NULL,
+       PRIMARY KEY (phone, contact_id)
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_contact_phones_contact ON contact_phones(contact_id)`,
+  ],
 ];
 
 export function getDb(): DB {
@@ -123,5 +132,6 @@ export async function clearServerCache(): Promise<void> {
   await database.transaction(async (tx) => {
     await tx.execute('DELETE FROM cache');
     await tx.execute('DELETE FROM contacts');
+    await tx.execute('DELETE FROM contact_phones');
   });
 }
