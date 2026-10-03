@@ -473,7 +473,8 @@ jobs:
       - name: The panel and the app - a package with a known vulnerability (what ships to users)
         run: |
           (cd admin-web && npm audit --package-lock-only --omit=dev --audit-level=high)
-          (cd mobile && npm audit --package-lock-only --omit=dev --audit-level=high)
+          # (the app: same check, with the short written list of advisories accepted on purpose - see .github/scripts/audit_allowlist.py)
+          (cd mobile && npm audit --package-lock-only --omit=dev --json | python3 ../.github/scripts/audit_allowlist.py --level high)
 
   load-test:
     name: Load test (many phones calling at once, on MySQL and Redis, with the production pool and two workers)
