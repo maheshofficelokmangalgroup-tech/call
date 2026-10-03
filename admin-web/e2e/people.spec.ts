@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { login, panelGet, searchFor, unique } from "./helpers";
+import { ADMIN, BACKEND, backendLogin, login, panelGet, searchFor, unique } from "./helpers";
 
 /** Valid Indian mobile numbers nobody has used yet - all different. */
 function numbers(count: number): string[] {
@@ -76,7 +76,7 @@ test.describe("people with many numbers", () => {
     await expect(page.getByTestId("contact-row")).toHaveCount(0);
   });
 
-  test("a voter sheet with one row per number becomes one contact per person, with every number and the voter details", async ({ page }) => {
+  test("a voter sheet with one row per number becomes one contact per person, with every number and the voter details", async ({ page, request }) => {
     await login(page);
     await page.goto("/contacts");
     await page.getByTestId("import-open").click();
@@ -146,11 +146,12 @@ test.describe("people with many numbers", () => {
     await expect(again.getByText("ready to add").locator("..")).toContainText("0");
     await again.getByRole("button", { name: "Cancel import" }).click();
 
-    // clean up (the server removes what the test made)
+    // clean up: what the test made is removed through the API (as an administrator)
+    const { access_token: token } = await (await backendLogin(request, ADMIN.email, ADMIN.password)).json();
     for (const who of [asha, bhau]) {
       const list = await (await panelGet(page, `contacts?q=${encodeURIComponent(who)}`)).json();
       for (const item of list.items) {
-        const res = await page.request.delete(`/api/backend/contacts/${item.id}`);
+        const res = await request.delete(`${BACKEND}/api/v1/contacts/${item.id}`, { headers: { authorization: `Bearer ${token}` } });
         expect(res.ok()).toBeTruthy();
       }
     }
