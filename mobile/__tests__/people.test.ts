@@ -3,7 +3,7 @@
  * about the person (voter list: relative, age, gender).
  */
 import type { ContactPhone } from '../src/services/api/types';
-import { dialNumber, genderWord, numberStats, numbersOf, otherNumberCount, otherNumbersLabel, personLine } from '../src/utils/people';
+import { dialNumber, genderWord, moreNumbersLabel, numberStats, numbersOf, otherNumberCount, otherNumbersLabel, personLine } from '../src/utils/people';
 
 function phone(partial: Partial<ContactPhone> = {}): ContactPhone {
   return { phone: '+919876543210', phone_raw: '9876543210', position: 0, primary: true, calls: 0, answered: 0, invalid: false, last_called_at: null, last_answered_at: null, ...partial };
@@ -33,6 +33,11 @@ describe('otherNumbers', () => {
     expect(otherNumbersLabel({ phone: '+919876543210', phone_count: 5 })).toBe('+4 more numbers');
     expect(otherNumbersLabel({ phone: '+919876543210', phone_count: 1 })).toBeNull();
   });
+  it('has a short form for the lists', () => {
+    expect(moreNumbersLabel({ phone: '+919876543210', phone_count: 8 })).toBe('+7 more');
+    expect(moreNumbersLabel({ phone: '+919876543210', phone_count: 1 })).toBeNull();
+    expect(moreNumbersLabel({ phone: '+919876543210' })).toBeNull();
+  });
 });
 
 describe('numbersOf', () => {
@@ -49,8 +54,8 @@ describe('numbersOf', () => {
 
 describe('personLine', () => {
   it('puts the relative, the age and the gender on one line', () => {
-    expect(personLine({ relative_name: 'Dattatray Patil', age: 45, gender: 'M' })).toBe('Dattatray Patil  •  45 yrs  •  Male');
-    expect(personLine({ relative_name: null, age: 31, gender: 'F' })).toBe('31 yrs  •  Female');
+    expect(personLine({ relative_name: 'Dattatray Patil', age: 45, gender: 'M' })).toBe('Dattatray Patil • 45 yrs • Male');
+    expect(personLine({ relative_name: null, age: 31, gender: 'F' })).toBe('31 yrs • Female');
   });
   it('is empty when nothing is known (an ordinary contact)', () => {
     expect(personLine({})).toBeNull();
@@ -74,7 +79,7 @@ describe('numberStats', () => {
     expect(numberStats(phone(), now)).toBe('Not called yet');
   });
   it('says how often it was called, how often answered, and when', () => {
-    expect(numberStats(phone({ calls: 3, answered: 1, last_called_at: new Date(now - 25 * 60_000).toISOString() }), now)).toBe('3 calls  •  1 answered  •  25 min ago');
-    expect(numberStats(phone({ calls: 1, answered: 0, last_called_at: new Date(now - 60_000).toISOString() }), now)).toBe('1 call  •  1 min ago');
+    expect(numberStats(phone({ calls: 3, answered: 1, last_called_at: new Date(now - 25 * 60_000).toISOString() }), now)).toBe('3 calls • 1 answered • 25 min ago');
+    expect(numberStats(phone({ calls: 1, answered: 0, last_called_at: new Date(now - 60_000).toISOString() }), now)).toBe('1 call • 1 min ago');
   });
 });

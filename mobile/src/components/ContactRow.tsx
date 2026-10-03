@@ -3,12 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import type { Contact } from '../services/api/types';
 import { colors, radius, shadow } from '../theme';
-import { formatPhone } from '../utils/format';
-import { dialNumber, otherNumbersLabel, personLine } from '../utils/people';
 import { contactStatusLook } from '../utils/status';
 import { Avatar } from './Avatar';
 import { Tag } from './Chip';
 import { Icon } from './Icon';
+import { PhoneLine } from './PhoneLine';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
 
@@ -21,8 +20,6 @@ interface Props {
 export function ContactRow({ contact, onOpen, onCall }: Props) {
   const status = contactStatusLook(contact.status);
   const blocked = contact.status === 'do_not_contact';
-  const more = otherNumbersLabel(contact);
-  const person = personLine(contact);
   return (
     <PressableScale onPress={onOpen} haptic={false} style={styles.card}>
       <Avatar name={contact.name} size={46} />
@@ -30,16 +27,7 @@ export function ContactRow({ contact, onOpen, onCall }: Props) {
         <Text variant="h3" numberOfLines={1}>
           {contact.name}
         </Text>
-        <Text variant="small" color="muted" numberOfLines={1}>
-          {formatPhone(dialNumber(contact))}
-          {more ? `  •  ${more}` : ''}
-          {contact.location ? `  •  ${contact.location}` : ''}
-        </Text>
-        {person ? (
-          <Text variant="caption" color="faint" numberOfLines={1}>
-            {person}
-          </Text>
-        ) : null}
+        <PhoneLine contact={contact} />
         <View style={styles.tags}>
           <Tag label={status.label} color={status.color} background={status.bg} />
           {contact.category ? <Tag label={contact.category} color={colors.inkSoft} background="#EEF0F3" /> : null}

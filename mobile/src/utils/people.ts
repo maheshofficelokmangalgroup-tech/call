@@ -23,6 +23,12 @@ export function otherNumbersLabel(contact: WithNumbers): string | null {
   return count > 0 ? `+${count} more ${count === 1 ? 'number' : 'numbers'}` : null;
 }
 
+/** The short form for a list: "+2 more", or null when the person has one number only. */
+export function moreNumbersLabel(contact: WithNumbers): string | null {
+  const count = otherNumberCount(contact);
+  return count > 0 ? `+${count} more` : null;
+}
+
 export function genderWord(gender: string | null | undefined): string | null {
   switch ((gender ?? '').toUpperCase()) {
     case 'M':
@@ -39,7 +45,7 @@ export function genderWord(gender: string | null | undefined): string | null {
 /** What tells one voter from another with the same name: "Dattatray Patil • 45 yrs • Male" (the relative's name, the age, the gender). */
 export function personLine(contact: WithDetails): string | null {
   const parts = [contact.relative_name?.trim() || null, contact.age ? `${contact.age} yrs` : null, genderWord(contact.gender)].filter(Boolean);
-  return parts.length ? parts.join('  •  ') : null;
+  return parts.length ? parts.join(' • ') : null;
 }
 
 /** "Not called yet", or "3 calls • 1 answered • 2 h ago" - what happened on one number. */
@@ -49,7 +55,7 @@ export function numberStats(phone: ContactPhone, now = Date.now()): string {
   if (phone.answered) parts.push(`${phone.answered} answered`);
   const last = parseIso(phone.last_called_at);
   if (last) parts.push(timeAgo(last, now));
-  return parts.join('  •  ');
+  return parts.join(' • ');
 }
 
 /** The numbers of a person for the list on the contact screen: the ones the server sent, else the one number the copy on this phone knows. */
