@@ -138,6 +138,8 @@ def send(port: int, method: str, path: str, size: int = 0) -> tuple[str, dict]:
                 conn.request("GET", path, headers=host)
         except (OSError, http.client.HTTPException):
             pass  # Caddy answered (413) and closed while we were still sending: the answer may still be waiting for us
+        if conn.sock is None:
+            return "cut", {}  # not even connected (Caddy is not listening yet)
         try:
             response = conn.getresponse()
             raw = response.read()
