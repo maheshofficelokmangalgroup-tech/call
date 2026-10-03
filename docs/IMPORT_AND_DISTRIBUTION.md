@@ -93,7 +93,9 @@ When an employee is created (or a password is reset) the password is kept **encr
 secret) so an administrator can **look at it again** - *Employees → ⋯ → Show password*, or download a *Login sheet* (Excel) of a list of
 employees. It exists only until the employee chooses their own password (then it is wiped - nobody can ever see a password the
 employee chose), until the account is deactivated, or for 30 days (`CREDENTIAL_KEEP_DAYS`). Every look and every download is written to the audit log
-and rate limited; the login sheet is built so that no cell can be a spreadsheet formula.
+and rate limited; the login sheet is built so that no cell can be a spreadsheet formula. The key is derived from `JWT_SECRET`: if that
+secret is ever changed, the saved passwords can no longer be shown (the employees can still sign in; use *Reset password*). Employees
+created before this feature have no saved password either - *Reset password* gives them one that can be looked at.
 
 ## How it behaves at scale (measured)
 
