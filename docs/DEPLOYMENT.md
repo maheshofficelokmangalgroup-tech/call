@@ -3,7 +3,7 @@
 This puts everything on **one Linux server** with one command: the admin panel, the API the phones talk to, the database, the
 cache and the HTTPS front door. It is made for a small company (up to a few hundred employees on one 2 GB server).
 
-> **सोप्या शब्दांत (short, in Marathi/Hinglish)**
+> **सोप्या शब्दांत **
 > 1. Ek Ubuntu server ghya (2 GB RAM, 20 GB disk) ani ek domain (jase `calling.tumchi-company.com`) tya server chya IP kade point kara (DNS "A record").
 > 2. Server var login karun: `git clone https://github.com/<owner>/call.git && cd call && sudo bash deploy/install.sh`
 > 3. Domain ani admin email vicharel. 5-10 minute madhe sagla ready. Shevti admin panel cha address ani password disel.

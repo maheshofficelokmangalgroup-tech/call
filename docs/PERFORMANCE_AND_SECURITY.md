@@ -1,3 +1,47 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Speed, capacity and security
 
 What was built so that hundreds of phones can call at the same time, how it was measured, and how to keep it that way.

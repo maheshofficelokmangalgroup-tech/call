@@ -1,4 +1,4 @@
-# CI/CD - APK GitHub वर build होतो (PC चा RAM लागत नाही)
+# CI/CD - APK वर build 
 
 Four workflows live in [.github/workflows/](../.github/workflows):
 
@@ -18,13 +18,13 @@ a deployment.
 (e.g. `https://13-205-79-72.sslip.io:8445`; the workflow checks it answers after the update). Switch the automatic deployment off with
 the variable `AUTO_DEPLOY=false`. The SSH key is a dedicated deploy key restricted on the server to two commands. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## APK कुठे मिळतो
+## how to download apk
 
 * **Release (official):** repository -> **Releases** -> latest -> `EmployeeCalling-<version>.apk`.
   Fixed link that always points to the newest APK: `https://github.com/maheshofficelokmangalgroup-tech/call/releases/latest/download/EmployeeCalling.apk`
 * **Every build:** repository -> **Actions** -> *Android APK* -> a run -> *Artifacts* (kept 30 days). Handy to test before releasing.
 
-## नवीन Release कसा बनवायचा
+## How to build new release
 
 ```powershell
 git tag v1.0.1
@@ -41,7 +41,7 @@ GitHub builds the APK and publishes the Release `v1.0.1` by itself (about 8-25 m
 * A Release is created only from an APK signed with the release key. If the signing secrets are missing the run stops at the first
   step with a clear message (a push to `main` without secrets still builds a *TEST* APK, signed with the public debug key).
 
-## Secrets आणि variable (Settings -> Secrets and variables -> Actions)
+## Secrets and  variable (Settings -> Secrets and variables -> Actions)
 
 | Name | Kind | What |
 |---|---|---|
