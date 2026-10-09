@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Closed.** The project was cancelled by its owner on 2026-10-05. The containers on the server were stopped and removed and the deployment pipeline was switched off; **this repository on GitHub is the project that is kept** (what still exists elsewhere is listed in section 15). |
+| **Status** | **Running again since 2026-10-09.** The project was cancelled on 2026-10-05 and its containers were stopped; on 2026-10-09 the owner asked for it to be put back on the same server "as it was", and it was (section 15). |
 | **Final version** | `v1.3.0` (APK Release) = commit `6335c3e` on `main` (merge of pull request #9) |
 | **Repository** | <https://github.com/maheshofficelokmangalgroup-tech/call> |
 | **Built** | 2026-10-01 to 2026-10-03 (first commit and first APK Release `v1.0.0` on 2026-10-01; last Release `v1.3.0` on 2026-10-03; 62 commits, 9 pull requests) |
@@ -198,7 +198,9 @@ Also in the repository: scripts that prove things on a real database - `scripts/
 * containers `calling-api`, `calling-admin`, `calling-redis`, `calling-caddy` (Compose project `calling`) under `~/calling`; one HTTPS port of its own (**8445**);
 * a database `Calling_db` and a dedicated user `calling_app` that could reach only that database (connection limit 12);
 * images built by GitHub Actions (GHCR) and only pulled by the server; a restricted SSH deploy key (`command="…/ci-entry.sh",restrict`) that could run two things;
-* a Let's Encrypt certificate for `13-205-79-72.sslip.io` (the IP with dashes - a free name), renewed weekly.
+* a Let's Encrypt certificate for `13-205-79-72.sslip.io` (the IP with dashes - a free name). At first it was obtained and renewed by this project (certbot, through the
+  server's nginx, renewed weekly). Since the restart (2026-10-09) the **Caddy of another project** on the server owns ports 80 and 443 and keeps a certificate for the same
+  host name; this project uses **that** certificate through a read-only mount of the one folder (`deploy/shared/link-external-cert.sh`, see [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 The full description is [DEPLOYMENT.md](DEPLOYMENT.md); the pipeline is [CICD.md](CICD.md).
 
@@ -216,15 +218,16 @@ cd mobile ; npm install ; npx react-native start ; npx react-native run-android
 ([DEPLOYMENT.md](DEPLOYMENT.md), first sections).
 
 **C. A shared server with RDS**: `deploy/shared/` - create the database user (`create-database-user.sh`), write the settings (`setup.sh`), issue the
-certificate (`issue-cert.sh`), then `deploy.sh`; add the four `DEPLOY_*` secrets to GitHub and put the restricted key line into `~/.ssh/authorized_keys`.
+certificate (`issue-cert.sh` - or, when another project owns ports 80 / 443 and keeps a certificate for the same host name, `link-external-cert.sh`), then `deploy.sh`;
+add the four `DEPLOY_*` secrets to GitHub and put the restricted key line into `~/.ssh/authorized_keys`.
 
 **D. The APK.** Pushing a `v*` tag, or *Actions -> Android APK -> Run workflow*, builds a signed APK on GitHub. It needs the four signing secrets
 (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) and the variable `API_URL`. **The keystore is the one thing that cannot be rebuilt:**
 an APK signed with another key cannot be installed over the old app. A secret on GitHub cannot be read back; the original is `mobile/android/app/release.keystore`
 on the owner's PC (git-ignored). It is listed in the shutdown record (section 15).
 
-**E. The data.** The production database `Calling_db` was not deleted at the shutdown (section 15). If it is dropped, a restart begins with an empty database
-(`python -m scripts.bootstrap` creates the schema and the first administrator).
+**E. The data.** The production database `Calling_db` was not deleted at the shutdown, and the restart on 2026-10-09 used it as it was (section 15). If it is dropped, a restart
+begins with an empty database (`python -m scripts.bootstrap` creates the schema and the first administrator).
 
 ## 12. Release history
 
@@ -279,7 +282,11 @@ Pull requests merged into `main`: #1 (with #2), #4, #6, #5, #7, #3, #8, #9, in t
    worktree follows it and deletes the target's files.
 9. **Time zones:** the dashboards use the business timezone (`APP_TIMEZONE`, Asia/Kolkata); tests that use "now + 1 hour" fail in the last hour of the day.
 
-## 15. Shutdown record
+10. **A shared server changes under you.** Between the shutdown and the restart the web server on ports 80 / 443 was replaced by another project's Caddy and a working copy (`~/calling`, with the settings and the certificate) was deleted by hand. Nothing of this project had been touched, but the way it got its certificate was gone. Keep the settings that cannot be recreated (the database password) where they can be read again, and prefer a certificate that does not depend on a port that somebody else may take over.
+
+## 15. Shutdown and restart record
+
+### Shutdown (2026-10-05)
 
 The owner cancelled the project on 2026-10-05 and asked for it to be stopped on the server, with the code and the documents kept on GitHub only. The owner chose
 **not** to sign in to AWS for this, so only what could be done from the server and from GitHub was done.
@@ -309,6 +316,38 @@ The owner cancelled the project on 2026-10-05 and asked for it to be stopped on 
 **To start it again** (all that was removed are the containers): on the server `cd ~/calling/deploy/shared && bash deploy.sh` brings the stack back with the
 same database, volumes and certificate (the certificate has 90 days: run `bash renew-cert.sh` if it is older); enable the **Deploy** and **Certificate** workflows in
 GitHub (*Actions*) to have it update itself again.
+
+### Restart (2026-10-09)
+
+On 2026-10-09 the owner asked for the project to be deployed again on the same server, "as it was", and gave the RDS master password for the one step that needs it.
+
+**What was found:** nothing of this project had been deleted at the RDS or in Docker (database, volumes, images were as left), **but `~/calling` on the server was gone** - the
+shell history of the server's `ubuntu` account shows `rm -rf calling/` and `sudo rm -rf calling/` on 2026-10-05 / 06, not done by the shutdown - and with it the settings file
+(`.env`: the database password, `JWT_SECRET`, the Redis password) and the Let's Encrypt certificate. The server had also been restarted (2026-10-07), and **ports 80 / 443 now
+belonged to the Caddy of another project** (`lmf-caddy`, project lokmangal-foundation) instead of the nginx the webroot certificate way goes through. The old database password
+was not recoverable.
+
+**What was done:**
+
+1. `~/calling` was cloned again from GitHub and `deploy/shared/setup.sh` wrote a new `.env` with fresh secrets (so sign-ins made before are invalid: phones and the panel sign in
+   again; the vault of first passwords held no entries).
+2. The password of the database user `calling_app` was **reset** with the RDS master password (`create-database-user.sh`, the password given on standard input, used once, stored
+   nowhere); the database `Calling_db` was untouched: Alembic `0007`, 26 tables, 3 employees, 2 contacts, 7 calls, the audit log - all there.
+3. **The certificate:** a new one from Let's Encrypt was impossible without touching the other project (ports 80 / 443), but its Caddy already holds a valid certificate for
+   the same host name `13-205-79-72.sslip.io` (valid to 2027-01-04). A small change was made for this (pull request #11): `deploy/shared/link-external-cert.sh` mounts **only that
+   one folder, read-only**, `deploy.sh` and `renew-cert.sh` understand it, and CI tries it with the real Caddy. Nothing of the other project was changed or restarted.
+4. `deploy.sh` started the four containers (images `sha-6335c3e`, then `sha-8ffcf7d` through the pipeline); the GitHub workflows **Deploy** and **Certificate** were enabled again and
+   each was run once: the Deploy workflow built both images, updated the server through the restricted key and checked the public address; the Certificate workflow made Caddy
+   load the certificate files again.
+
+**Proven afterwards:** `https://13-205-79-72.sslip.io:8445` answers with a certificate that verifies; the production self-test (temporary administrator, ten temporary employees, sheets
+and a voter list; it removes everything it made) passed every check and left the database exactly as it was; a browser check through the public address (sign-in, follow-ups, contacts, two
+voter lists checked and cancelled) passed except one test script timing slip (the drawer was counted before it had loaded - the screenshot shows its numbers); the other projects on the
+server kept running and were not restarted.
+
+**What the owner accepts with this:** the certificate belongs to the other project - it must keep running and renewing it (about 30 days before the end, around 2026-12-05); if that
+project stops using the host name, the certificate expires and this one has to be replaced (a real domain, or the other project's help to serve the Let's Encrypt challenge).
+The RDS master password was written in a chat during the restart: it is worth changing. The APK `v1.3.0` needs nothing: it starts with the same address.
 
 ## 16. Map of the other documents
 
