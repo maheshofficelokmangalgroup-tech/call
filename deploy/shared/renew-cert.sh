@@ -6,6 +6,14 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 [ -f .env ] || { echo "No .env here." >&2; exit 1; }
 env_get() { grep -E "^$1=" .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 
+# A certificate that another project keeps renewed (link-external-cert.sh): nothing to renew here. Caddy reads the files when it loads its
+# settings, so a renewed certificate is only picked up by a reload - which has to be FORCED: an unchanged Caddyfile is otherwise "no change".
+if [ -n "$(env_get EXTERNAL_CERT_VOLUME)" ]; then
+  docker compose --env-file .env -f docker-compose.yml -f docker-compose.external-cert.yml exec -T caddy caddy reload --force --config /etc/caddy/Caddyfile
+  echo "Caddy has loaded the certificate files again (the project that owns the certificate renews it)."
+  exit 0
+fi
+
 VOLUME="$(env_get CERTBOT_WEBROOT_VOLUME)"
 rm -f letsencrypt/.renewed
 

@@ -1,0 +1,25 @@
+# Used TOGETHER with docker-compose.yml (deploy.sh adds it by itself when EXTERNAL_CERT_VOLUME is set in .env) when the HTTPS certificate
+# for PUBLIC_HOST is NOT obtained by this project but is kept renewed by another project on the same server - its Caddy already holds a
+# certificate for the very same host name, and ports 80 / 443 (which a new certificate would need) belong to that project.
+#
+# Only the ONE folder of that certificate is mounted, read-only: Caddy's files <host>.crt / <host>.key, nothing else of the other project
+# (not its account key, not the certificates of its other host names). link-external-cert.sh points letsencrypt/live/<host>/ at those two
+# files and writes the three settings below into .env.
+#
+#   EXTERNAL_CERT_VOLUME  the Docker volume of the other project's Caddy data   (lmf_caddy_data)
+#   EXTERNAL_CERT_PATH    the folder of the certificate inside that volume      (caddy/certificates/acme-v02.api.letsencrypt.org-directory/<host>)
+#   COMPOSE_FILE          docker-compose.yml:docker-compose.external-cert.yml   (so that a plain `docker compose` sees this file too)
+services:
+  caddy:
+    volumes:
+      - type: volume
+        source: external_certs
+        target: /external-certs
+        read_only: true
+        volume:
+          subpath: ${EXTERNAL_CERT_PATH:?set EXTERNAL_CERT_PATH in .env (link-external-cert.sh does it)}
+
+volumes:
+  external_certs:
+    external: true
+    name: ${EXTERNAL_CERT_VOLUME:?set EXTERNAL_CERT_VOLUME in .env (link-external-cert.sh does it)}

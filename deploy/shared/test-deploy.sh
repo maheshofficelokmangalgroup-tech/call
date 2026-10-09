@@ -11,6 +11,9 @@
 #   * the front door: after a healthy deploy the Caddyfile is tried in a throw-away container and Caddy's container is created again
 #     (a changed Caddyfile does nothing otherwise); a Caddyfile that does not load, or that Caddy does not start with, fails the run and
 #     the earlier version is put back
+#   * a certificate that another project keeps renewed (EXTERNAL_CERT_VOLUME in .env): the extra compose file is used, the certbot
+#     folder is not asked for, the files only have to be readable - and when they are not, nothing is started; the weekly renewal
+#     job forces Caddy to load the files again and never runs certbot
 #
 #   bash deploy/shared/test-deploy.sh
 set -euo pipefail
@@ -33,6 +36,7 @@ cat > "$WORK/bin/docker" <<'EOS'
 echo "docker $*" >> "$FAKE_LOG"
 case "$*" in
   *"certbot/certbot certificates"*) echo "Certificate Name: $FAKE_HOST" ;;
+  *"--entrypoint sh caddy"*) [ "${FAKE_EXTERNAL_CERT:-ok}" = ok ] || exit 1 ;;
   *"exec -T api curl"*"/ready"*)
     tag="$(grep -E '^IMAGE_TAG=' .env | cut -d= -f2-)"
     [ "$FAKE_HEALTHY_TAG" = "*" ] || [ "$tag" = "$FAKE_HEALTHY_TAG" ] || exit 1 ;;
@@ -54,7 +58,8 @@ cd "$WORK/clone"
 git config user.email test@example.com
 git config user.name test
 mkdir -p deploy/shared
-tr -d '\r' < "$SRC/deploy.sh" > deploy/shared/deploy.sh   # (a checkout on Windows has CRLF line endings)
+tr -d '\r' < "$SRC/deploy.sh" > deploy/shared/deploy.sh
+tr -d '\r' < "$SRC/renew-cert.sh" > deploy/shared/renew-cert.sh   # (a checkout on Windows has CRLF line endings)
 echo "old front door" > deploy/shared/Caddyfile
 echo one > version.txt; git add -A; git commit -q -m one; OLD="$(git rev-parse HEAD)"
 echo two > version.txt; echo "new front door" > deploy/shared/Caddyfile;      git commit -qam two;   NEW="$(git rev-parse HEAD)"
@@ -75,7 +80,7 @@ tag_now() { grep -E '^IMAGE_TAG=' deploy/shared/.env | cut -d= -f2-; }
 ups() { grep -c 'compose .*up -d --remove-orphans' "$FAKE_LOG" || true; }
 recreates() { grep -c 'up -d --force-recreate --no-deps caddy' "$FAKE_LOG" || true; }
 validations() { grep -c 'caddy validate' "$FAKE_LOG" || true; }
-line_of() { grep -n "$1" "$FAKE_LOG" | head -1 | cut -d: -f1; }
+line_of() { grep -n -e "$1" "$FAKE_LOG" | head -1 | cut -d: -f1; }
 
 # 1. a healthy new version is put into service; .env keeps its lines and gets a password on a line of its own
 fresh_server "$OLD_TAG"; export FAKE_HEALTHY_TAG="$NEW_TAG"
@@ -143,6 +148,7 @@ cat > "$WORK/bin/docker" <<'EOS'
 echo "docker $*" >> "$FAKE_LOG"
 case "$*" in
   *"certbot/certbot certificates"*) echo "Certificate Name: $FAKE_HOST" ;;
+  *"--entrypoint sh caddy"*) [ "${FAKE_EXTERNAL_CERT:-ok}" = ok ] || exit 1 ;;
   *"exec -T api curl"*"/ready"*)
     tag="$(grep -E '^IMAGE_TAG=' .env | cut -d= -f2-)"
     [ "$FAKE_HEALTHY_TAG" = "*" ] || [ "$tag" = "$FAKE_HEALTHY_TAG" ] || exit 1 ;;
@@ -178,4 +184,34 @@ grep -q "did not accept the Caddyfile of this version, or did not start with it"
 [ -f "$WORK/caddy_up" ] || fail "Caddy must be running again, with the Caddyfile of the earlier version"
 grep -q "earlier version is running again" "$WORK/out.txt" || fail "the output should say the earlier version is running again"
 echo "ok 8: Caddy does not start with the new Caddyfile: the earlier version AND its Caddyfile are put back"
+
+# 9. a certificate that another project keeps renewed: the extra compose file is used everywhere, certbot is never asked, the files are only
+#    checked to be readable, and the deploy goes through
+fresh_server "$OLD_TAG"; export FAKE_HEALTHY_TAG="*"
+printf '\nEXTERNAL_CERT_VOLUME=other_caddy_data\nEXTERNAL_CERT_PATH=caddy/certificates/x/%s\n' "$FAKE_HOST" >> deploy/shared/.env
+deploy "$NEW_TAG" "$NEW" || fail "a deploy with an external certificate must go through (exit $?)"
+[ "$(tag_now)" = "$NEW_TAG" ] || fail "IMAGE_TAG should be $NEW_TAG, is $(tag_now)"
+! grep -q 'certbot/certbot certificates' "$FAKE_LOG" || fail "certbot must not be asked for a certificate that is not ours"
+grep -q -- '--entrypoint sh caddy' "$FAKE_LOG" || fail "the certificate files must be checked to be readable"
+[ "$(grep -c 'docker compose --env-file .env -f docker-compose.yml -f docker-compose.external-cert.yml' "$FAKE_LOG")" = "$(grep -c 'docker compose' "$FAKE_LOG")" ] || fail "every compose call must include the external certificate file"
+[ "$(line_of '--entrypoint sh caddy')" -lt "$(line_of 'up -d --remove-orphans')" ] || fail "the certificate files are checked BEFORE anything is started"
+echo "ok 9: an external certificate: the extra compose file everywhere, no certbot, the files checked, the deploy goes through"
+
+# 10. the external certificate cannot be read: nothing is started
+fresh_server "$OLD_TAG"; export FAKE_HEALTHY_TAG="*" FAKE_EXTERNAL_CERT=missing
+printf '\nEXTERNAL_CERT_VOLUME=other_caddy_data\nEXTERNAL_CERT_PATH=caddy/certificates/x/%s\n' "$FAKE_HOST" >> deploy/shared/.env
+if deploy "$NEW_TAG" "$NEW"; then fail "an unreadable certificate must stop the deploy"; fi
+[ "$(ups)" = 0 ] || fail "nothing may be started without a readable certificate"
+grep -q "link-external-cert.sh" "$WORK/out.txt" || fail "the output should say what to do"
+unset FAKE_EXTERNAL_CERT
+echo "ok 10: an unreadable external certificate stops the deploy before anything is started"
+
+# 11. the weekly renewal with an external certificate: Caddy is told to load the files again (forced: an unchanged Caddyfile is 'no change'),
+#     and certbot never runs
+fresh_server "$OLD_TAG"
+printf '\nEXTERNAL_CERT_VOLUME=other_caddy_data\nEXTERNAL_CERT_PATH=caddy/certificates/x/%s\n' "$FAKE_HOST" >> deploy/shared/.env
+( cd deploy/shared && bash renew-cert.sh < /dev/null ) > "$WORK/out.txt" 2>&1 || fail "the renewal with an external certificate must succeed"
+grep -q 'exec -T caddy caddy reload --force' "$FAKE_LOG" || fail "Caddy must be told to load the certificate files again, with --force"
+! grep -q 'certbot' "$FAKE_LOG" || fail "certbot must not run for a certificate that is not ours"
+echo "ok 11: the weekly renewal reloads Caddy (forced) and never runs certbot"
 echo "all deploy script checks passed"

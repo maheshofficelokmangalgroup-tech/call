@@ -68,13 +68,22 @@ if [ -n "$TAG" ]; then
   if grep -q '^IMAGE_TAG=' .env; then sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=$TAG|" .env; else env_add "IMAGE_TAG=$TAG"; fi
 fi
 COMPOSE=(docker compose --env-file .env)
+# A certificate that another project on this server keeps renewed (link-external-cert.sh): its folder is mounted read-only into Caddy by
+# one more compose file, which is added here (and by COMPOSE_FILE in .env, for a plain `docker compose`).
+EXTERNAL_CERT_VOLUME="$(env_get EXTERNAL_CERT_VOLUME)"
+[ -z "$EXTERNAL_CERT_VOLUME" ] || COMPOSE+=(-f docker-compose.yml -f docker-compose.external-cert.yml)
 
 say "Checking the files"
 "${COMPOSE[@]}" config -q
-# the certificate folder belongs to root (it holds the private key), so ask certbot instead of looking into it
-certificates="$(docker run --rm -v "$PWD/letsencrypt:/etc/letsencrypt" certbot/certbot certificates 2>/dev/null || true)"
-# (a here-string, not a pipe: "grep -q" ends at the first match, and with pipefail the writer's broken pipe would count as a failure)
-grep -q "Certificate Name: $(env_get PUBLIC_HOST)" <<<"$certificates" || { echo "No certificate yet: run issue-cert.sh first." >&2; exit 1; }
+if [ -n "$EXTERNAL_CERT_VOLUME" ]; then
+  # not ours to issue or renew: it only has to be readable where Caddy will look for it (Caddy is started with it further down)
+  "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint sh caddy -c 'test -s "/certs/live/$PUBLIC_HOST/fullchain.pem" && test -s "/certs/live/$PUBLIC_HOST/privkey.pem"'     || { echo "The certificate of $(env_get PUBLIC_HOST) (kept by another project, volume $EXTERNAL_CERT_VOLUME) cannot be read: run link-external-cert.sh." >&2; exit 1; }
+else
+  # the certificate folder belongs to root (it holds the private key), so ask certbot instead of looking into it
+  certificates="$(docker run --rm -v "$PWD/letsencrypt:/etc/letsencrypt" certbot/certbot certificates 2>/dev/null || true)"
+  # (a here-string, not a pipe: "grep -q" ends at the first match, and with pipefail the writer's broken pipe would count as a failure)
+  grep -q "Certificate Name: $(env_get PUBLIC_HOST)" <<<"$certificates" || { echo "No certificate yet: run issue-cert.sh first." >&2; exit 1; }
+fi
 
 say "Downloading the images (tag $(env_get IMAGE_TAG))"
 "${COMPOSE[@]}" pull --quiet
