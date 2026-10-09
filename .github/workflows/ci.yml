@@ -401,6 +401,28 @@ jobs:
           docker run --rm -e PUBLIC_HOST=localhost -e HTTPS_PORT=8445 \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$PWD/letsencrypt:/certs:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile
 
+      - name: A certificate that another project keeps (link-external-cert.sh) - Caddy loads it through a read-only mount of just that one folder
+        working-directory: deploy/shared
+        run: |
+          # the other project's Caddy data volume: our certificate under its host name, and a secret of that project that must stay out of reach
+          docker volume create other_caddy_data >/dev/null
+          docker run --rm -v other_caddy_data:/d -v "$PWD/letsencrypt/live/localhost:/src:ro" alpine sh -c '
+            ours=/d/caddy/certificates/acme-v02.api.letsencrypt.org-directory/localhost
+            theirs=/d/caddy/certificates/acme-v02.api.letsencrypt.org-directory/other.example
+            mkdir -p "$ours" "$theirs"
+            cp /src/fullchain.pem "$ours/localhost.crt"; cp /src/privkey.pem "$ours/localhost.key"
+            echo secret > "$theirs/other.example.key"'
+          mv letsencrypt letsencrypt.own; cp .env .env.own
+          EXTERNAL_CERT_VOLUME=other_caddy_data bash link-external-cert.sh
+          # Caddy loads the certificate through the links (the files are read where Caddy looks for them, as in production)
+          docker compose --env-file .env run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile
+          # only that one folder is visible, and it cannot be written to
+          docker compose --env-file .env run --rm --no-deps -T --entrypoint sh caddy -c 'test "$(ls /external-certs | wc -l)" = 2'
+          if docker compose --env-file .env run --rm --no-deps -T --entrypoint sh caddy -c 'touch /external-certs/x' 2>/dev/null; then echo "the mount must be read-only" >&2; exit 1; fi
+          # a certificate that is not there is refused with a clear message
+          if EXTERNAL_CERT_VOLUME=other_caddy_data EXTERNAL_CERT_PATH=caddy/certificates/acme-v02.api.letsencrypt.org-directory/missing bash link-external-cert.sh 2>/dev/null; then echo "a missing certificate must be refused" >&2; exit 1; fi
+          rm -rf letsencrypt; mv letsencrypt.own letsencrypt; mv .env.own .env; docker volume rm other_caddy_data >/dev/null
+
       - name: The front door lets a sheet and a recording through and refuses every other large body (both Caddyfiles, tried with the real Caddy)
         run: |
           # (a Caddyfile can be valid and still refuse what it must let through: a limit for the whole site overrules the larger limits of
