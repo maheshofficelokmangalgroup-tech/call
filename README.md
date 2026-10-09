@@ -1,8 +1,8 @@
 # Employee Calling & CRM Platform
 
-> **Project closed (2026-10-05).** The project was cancelled; the containers on the server were stopped and the deployment workflows were disabled.
-> The code, the documents and the APK Releases stay here. **Start with [docs/PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md)** - what it was, how it
-> works, what was proven and what was not, what still exists outside GitHub, and how to start it again.
+> **Closed on 2026-10-05, running again since 2026-10-09** on the same server (`https://13-205-79-72.sslip.io:8445`). **Start with
+> [docs/PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md)** - what it is, how it works, what was proven and what was not, how it was shut down and
+> restarted (section 15), and how to start it from scratch.
 
 Android app for employees to call assigned contacts, record outcomes, schedule callbacks and (where the device and the
 law allow) attach call recordings, plus the FastAPI backend behind it.
