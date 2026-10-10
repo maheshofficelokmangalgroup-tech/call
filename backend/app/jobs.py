@@ -83,7 +83,8 @@ def tick() -> None:
             log.exception("Automatic rebalancing failed")
     if cache.once_per("job:auto-level", 60):  # every minute, in one worker: somebody working with nothing gets a fair share
         try:
-            level_service.auto_level()
+            # (every few minutes it also looks for somebody who has far less than the others: a few contacts, or only what was called)
+            level_service.auto_level(check_balance=cache.once_per("job:auto-balance", level_service.BALANCE_CHECK_SECONDS))
         except Exception:  # noqa: BLE001
             log.exception("Automatic sharing with new employees failed")
     if cache.once_per("job:housekeeping", 3600):

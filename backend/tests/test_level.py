@@ -284,13 +284,71 @@ def test_somebody_who_was_away_and_is_back_gets_a_share_too(client, make, db):
     assert run is not None and owned(db, [a, b]) == {a.id: 15, b.id: 15}
 
 
-def test_the_automatic_sharing_only_looks_after_somebody_who_has_nothing_at_all(client, make, as_admin, db):
+def test_somebody_who_was_given_only_a_few_gets_a_fair_share_by_itself_too(client, make, as_admin, db):
+    """'He has a few, so it does not happen' was the gap: a new employee who was handed 10 contacts by hand is far behind the others."""
+    a, b, new = team_of(make, 3)
+    give(db, a, 300)
+    give(db, b, 300)
+    give(db, new, 10)  # (not nothing at all: the zero-contact rule would never have noticed)
+    run = level_service.auto_level()
+    assert run is not None
+    db.expire_all()
+    assert (db.get(DistributionRun, run.id).trigger, db.get(DistributionRun, run.id).status) == ("auto", "completed")
+    assert sorted(owned(db, [a, b, new]).values()) == [203, 203, 204]  # 610 between three
+    assert level_service.auto_level() is None  # and the next look finds nothing to do
+
+
+def test_a_difference_that_is_not_big_is_left_alone(client, make, as_admin, db):
     a, b = team_of(make, 2)
     give(db, a, 100)
-    give(db, b, 10)  # (an uneven pair: that is for the administrator to even out, not a reason to take contacts away from somebody by itself)
+    give(db, b, 60)  # fair share 80: 60 is three quarters of it - ordinary differences between people are not touched
     assert level_service.auto_level() is None
-    assert owned(db, [a, b]) == {a.id: 100, b.id: 10}
-    assert preview(client, as_admin)["total_move"] == 45  # by hand it can be done
+    assert owned(db, [a, b]) == {a.id: 100, b.id: 60}
+    assert preview(client, as_admin)["total_move"] == 20  # by hand it can still be done
+
+
+def test_a_handful_of_contacts_is_not_shuffled_around_by_itself(client, make, as_admin, db):
+    a, b = team_of(make, 2)
+    give(db, a, 12)
+    give(db, b, 1)  # b has far less than half of the fair share (6.5) - but only 5 contacts would change hands: not worth a notification
+    assert level_service.auto_level() is None
+    assert owned(db, [a, b]) == {a.id: 12, b.id: 1}
+    assert preview(client, as_admin)["total_move"] == 5  # (by hand it can be done)
+
+
+def test_a_returning_employee_who_kept_only_what_was_called_gets_a_share(client, make, db):
+    """Away for days, the not-yet-called contacts went to the others; back, they own a few contacts that were called - not 'nothing at all'."""
+    a, b = team_of(make, 2)
+    give(db, a, 200)
+    give(db, b, 5, status="interested")  # (called, with an answer: stays with b) - nothing is waiting with b
+    run = level_service.auto_level()
+    assert run is not None
+    assert (waiting(db, a), waiting(db, b)) == (100, 100) and owned(db, [a, b]) == {a.id: 100, b.id: 105}
+
+
+def test_the_look_for_somebody_who_is_far_behind_can_be_left_out(client, make, db):
+    """The scheduler looks for 'nothing at all' every minute and for 'far behind' every few minutes."""
+    a, b = team_of(make, 2)
+    give(db, a, 200)
+    give(db, b, 5)
+    assert level_service.auto_level(check_balance=False) is None  # (b has something: only the five-minute look would find it)
+    assert owned(db, [a, b]) == {a.id: 200, b.id: 5}
+    assert level_service.auto_level(check_balance=True) is not None
+    assert owned(db, [a, b]) == {a.id: 103, b.id: 102}
+
+
+def test_a_contact_that_has_a_call_without_an_outcome_is_not_taken_from_under_the_caller(client, make, as_admin, db):
+    a, b = team_of(make, 2)
+    called = give(db, a, 4)
+    for contact in called:
+        contact.call_count = 1  # (the call was started: the contact is still "new", the outcome has not come yet)
+    give(db, a, 20, start=100)
+    db.commit()
+    assert preview(client, as_admin)["total_waiting"] == 20  # only the 20 nobody has dialled are shared
+    level(client, as_admin)
+    assert all(c.call_count == 1 for c in db.query(Contact).filter(Contact.id.in_([c.id for c in called])))
+    assert {r.employee_id for r in db.query(ContactAssignment).filter(ContactAssignment.contact_id.in_([c.id for c in called]), ContactAssignment.status == "active")} == {a.id}
+    assert (waiting(db, a), waiting(db, b)) == (14, 10)  # (a keeps 10 of the 20 and the 4 that were dialled: "new" still, but called)
 
 
 def test_staff_who_are_not_employees_and_accounts_that_are_off_do_not_count(client, make, db):

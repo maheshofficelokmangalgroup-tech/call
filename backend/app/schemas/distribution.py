@@ -86,7 +86,7 @@ class RebalanceRunOut(ORMModel):
 class ActivityOverviewOut(BaseModel):
     inactive_after_days: int
     auto_rebalance: bool
-    auto_level: bool  # somebody new (or back from a long absence) is given a fair share by itself
+    auto_level: bool  # somebody who has none, or far less than the others (a new employee, one who is back), is given a fair share by itself
     working: int
     not_working: int
     movable: int  # contacts waiting with people who are not working, that a rebalancing would move

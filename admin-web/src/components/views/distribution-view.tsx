@@ -96,10 +96,10 @@ export function DistributionView() {
             <Tile label="contacts waiting with them" value={formatNumber(data.movable)} tone={data.movable > 0 ? "warn" : "neutral"} hint="not called yet, no callback promised" testId="tile-movable" />
             <Tile label="automatic sharing" value={data.auto_rebalance ? "On" : "Off"} tone={data.auto_rebalance ? "info" : "neutral"} hint={data.auto_rebalance ? "checked every 10 minutes" : "you share them by hand"} testId="tile-auto" />
             <Tile
-              label="new employees get a share"
+              label="same for everybody, by itself"
               value={data.auto_level ? "On" : "Off"}
               tone={data.auto_level ? "info" : "neutral"}
-              hint={data.auto_level ? "within a minute or two" : "you share by hand"}
+              hint={data.auto_level ? "a new employee within a minute or two" : "you share by hand"}
               testId="tile-auto-level"
               className="col-span-2 lg:col-span-1"
             />

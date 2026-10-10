@@ -67,8 +67,8 @@ DEFAULT_SETTINGS: dict[str, tuple[object, str]] = {
     ),
     "auto_level": (
         True,
-        "Automatically give an employee who is working and has no contacts at all (a new one, or one back from a long absence) an equal share of "
-        "the not-yet-called contacts of the others, within a minute or two.",
+        "Automatically keep everybody who is working at about the same number of not-yet-called contacts: an employee who has none at all (a new "
+        "one, or one back from a long absence) is given an equal share within a minute or two, one who has far less than the others within a few minutes.",
     ),
 }
 
