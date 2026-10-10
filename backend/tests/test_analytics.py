@@ -371,6 +371,17 @@ def test_calls_export_is_a_safe_spreadsheet_scoped_to_the_caller(client, db, as_
 
 
 # ------------------------------------------------------------------------------------------- settings
+def test_every_default_setting_text_fits_its_column():
+    """SQLite takes any length and MySQL refuses a text that is too long ("Data too long for column 'description'") - and the defaults
+    are written when the server starts, so one sentence that is a little too long stops the server from starting at all."""
+    from app.models.system import Setting
+    from app.services.reference_data import DEFAULT_SETTINGS
+
+    limit = Setting.__table__.c.description.type.length
+    assert limit == 255
+    assert {key: len(text) for key, (_value, text) in DEFAULT_SETTINGS.items() if len(text) > limit} == {}
+
+
 def test_settings_can_be_read_and_changed_by_administrators_only(client, as_admin, as_a, emp_a):
     data = client.get("/api/v1/settings", headers=as_admin).json()
     assert data["recording"]["enabled"] is False and data["default_daily_target"] == 50 and data["duplicate_policy"] == "skip"
