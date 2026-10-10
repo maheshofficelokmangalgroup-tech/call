@@ -59,6 +59,8 @@ ADMIN_ONLY = {
     ("GET", "/api/v1/distribution/overview"),
     ("POST", "/api/v1/distribution/rebalance/preview"),
     ("POST", "/api/v1/distribution/rebalance"),
+    ("POST", "/api/v1/distribution/level/preview"),
+    ("POST", "/api/v1/distribution/level"),
     ("GET", "/api/v1/distribution/runs"),
     ("GET", "/api/v1/distribution/runs/{run_id}"),
     ("POST", "/api/v1/teams"),

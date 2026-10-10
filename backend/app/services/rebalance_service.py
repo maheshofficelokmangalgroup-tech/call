@@ -137,6 +137,7 @@ def overview(db: Session) -> ActivityOverviewOut:
     return ActivityOverviewOut(
         inactive_after_days=activity.inactive_after_days(db),
         auto_rebalance=bool(get_setting(db, "auto_rebalance")),
+        auto_level=bool(get_setting(db, "auto_level")),
         working=sum(1 for s in states if s.working),
         not_working=sum(1 for s in states if not s.working),
         movable=sum(movable.values()),

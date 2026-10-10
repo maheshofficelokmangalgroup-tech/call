@@ -850,6 +850,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/distribution/level": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Level
+         * @description Share the contacts nobody has called yet equally between the people who are working (a new employee gets his share).
+         *     Poll GET /distribution/runs/{id}.
+         */
+        post: operations["level_api_v1_distribution_level_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/distribution/level/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Level Preview
+         * @description What sharing the not-yet-called contacts equally between the people who are working would do right now. Nothing is changed.
+         */
+        post: operations["level_preview_api_v1_distribution_level_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/distribution/overview": {
         parameters: {
             query?: never;
@@ -1459,6 +1500,8 @@ export interface components {
         };
         /** ActivityOverviewOut */
         ActivityOverviewOut: {
+            /** Auto Level */
+            auto_level: boolean;
             /** Auto Rebalance */
             auto_rebalance: boolean;
             /** Employees */
@@ -1580,6 +1623,12 @@ export interface components {
              * @description CSV or XLSX file with a header row
              */
             file: string;
+            /**
+             * Group People
+             * @description false (default): every different number is a contact of its own, the same number twice is added once - the name decides nothing. true: rows that are the same person (name, relative, age, gender, pincode, address) become one contact with all their numbers
+             * @default false
+             */
+            group_people: boolean;
             /**
              * Mode
              * @description skip | update - what to do with duplicate phone numbers
@@ -3154,6 +3203,53 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** LevelEmployee */
+        LevelEmployee: {
+            /** After */
+            after: number;
+            /** Assigned */
+            assigned: number;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Id */
+            employee_id: number;
+            /** Full Name */
+            full_name: string;
+            /** Gives */
+            gives: number;
+            /** Receives */
+            receives: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "new" | "inactive" | "deactivated";
+            /** Waiting */
+            waiting: number;
+        };
+        /**
+         * LevelIn
+         * @description Share the contacts that nobody has started on equally between the people who are working.
+         */
+        LevelIn: {
+            /** Employee Ids */
+            employee_ids?: number[] | null;
+        };
+        /** LevelPlanOut */
+        LevelPlanOut: {
+            /** Can Run */
+            can_run: boolean;
+            /** Employees */
+            employees: components["schemas"]["LevelEmployee"][];
+            /** Total Move */
+            total_move: number;
+            /** Total Waiting */
+            total_waiting: number;
+            /** Warnings */
+            warnings: string[];
+            /** Working */
+            working: number;
+        };
         /** LiveCall */
         LiveCall: {
             /** Answered At */
@@ -3939,6 +4035,8 @@ export interface components {
         };
         /** SettingsOut */
         SettingsOut: {
+            /** Auto Level */
+            auto_level: boolean;
             /** Auto Rebalance */
             auto_rebalance: boolean;
             /** Default Daily Target */
@@ -6025,6 +6123,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    level_api_v1_distribution_level_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LevelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebalanceRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    level_preview_api_v1_distribution_level_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LevelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LevelPlanOut"];
                 };
             };
             /** @description Validation Error */

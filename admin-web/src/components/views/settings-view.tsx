@@ -238,6 +238,16 @@ function ActivitySection({ settings, index }: { settings: Settings; index: numbe
     }
   }
 
+  async function setAutoLevel(auto: boolean) {
+    setSwitchError(null);
+    try {
+      await update.mutateAsync({ key: "auto_level", value: auto });
+      toast.success(auto ? "New employees get their share by themselves" : "New employees get nothing until you share by hand");
+    } catch (e) {
+      setSwitchError(errorMessage(e));
+    }
+  }
+
   return (
     <Section
       index={index}
@@ -256,6 +266,16 @@ function ActivitySection({ settings, index }: { settings: Settings; index: numbe
           <span className="block text-xs text-muted">Every ten minutes the server looks for employees who stopped working and gives the contacts nobody has called yet - not the ones with a promised callback - to the people who are working. Every move is in the history of the Work sharing page.</span>
         </span>
         <Switch checked={settings.auto_rebalance} onCheckedChange={(auto) => void setAuto(auto)} disabled={update.isPending} data-testid="auto-rebalance-switch" aria-label="Share their contacts automatically" />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line p-4">
+        <span>
+          <span className="block text-sm font-bold text-ink">Give a new employee a fair share by itself</span>
+          <span className="block text-xs text-muted">
+            When somebody who is working has no contact at all - a new employee, or one who comes back - the server takes the contacts nobody has called yet from the others, so that everybody has the same number. A minute or two
+            after the account is made. The ones with a promised callback, and every contact somebody started on, stay where they are. You can also do it by hand on the Work sharing page.
+          </span>
+        </span>
+        <Switch checked={settings.auto_level} onCheckedChange={(auto) => void setAutoLevel(auto)} disabled={update.isPending} data-testid="auto-level-switch" aria-label="Give a new employee a fair share by itself" />
       </label>
       <ErrorLine message={s.error ?? switchError} />
     </Section>

@@ -66,6 +66,9 @@ export type ActivityOverview = S["ActivityOverviewOut"];
 export type RebalanceRequest = S["RebalanceIn"];
 export type RebalancePlan = S["RebalancePlanOut"];
 export type RebalanceRun = S["RebalanceRunOut"];
+export type LevelRequest = S["LevelIn"];
+export type LevelPlan = S["LevelPlanOut"];
+export type LevelEmployee = S["LevelEmployee"];
 export type Credential = S["CredentialOut"];
 
 export type Page<T> = { items: T[]; total: number; page: number; page_size: number };

@@ -68,6 +68,7 @@ function ImportBody({ onOpenChange, resumeId }: { onOpenChange: (open: boolean) 
   const [modeChoice, setModeChoice] = React.useState<"skip" | "update" | null>(null);
   const [campaign, setCampaign] = React.useState("none");
   const [priority, setPriority] = React.useState("2");
+  const [groupPeople, setGroupPeople] = React.useState(false);
   const [importId, setImportId] = React.useState<number | null>(resumeId);
   const [shareChoice, setShareChoice] = React.useState<ShareMode | null>(null);
   const [picked, setPicked] = React.useState<number[]>([]);
@@ -132,7 +133,7 @@ function ImportBody({ onOpenChange, resumeId }: { onOpenChange: (open: boolean) 
     setError(null);
     setSent({ sent: 0, total: file.size });
     try {
-      const created = await upload.mutateAsync({ file, mode, campaignId: campaign === "none" ? null : Number(campaign), priority: Number(priority), onProgress: (done, total) => setSent({ sent: done, total }) });
+      const created = await upload.mutateAsync({ file, mode, campaignId: campaign === "none" ? null : Number(campaign), priority: Number(priority), groupPeople, onProgress: (done, total) => setSent({ sent: done, total }) });
       setImportId(created.id);
     } catch (e) {
       setError(errorMessage(e));
@@ -305,15 +306,25 @@ function ImportBody({ onOpenChange, resumeId }: { onOpenChange: (open: boolean) 
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line p-4 text-sm">
                 <p className="text-muted">
-                  The sheet needs a <b className="text-ink">name</b> and a <b className="text-ink">phone</b> column; email, city, category, tags, priority and any other column are optional. A list of
-                  people (<i>Mobile Number, Voter Name, Relative Name, Age, Gender, EPIC No, Voter Pincode, Voter Address</i>) is kept as it is: the lines of the same person become{" "}
-                  <b className="text-ink">one contact with all their numbers</b>, and a number is never in two contacts. After the check you choose who gets the contacts - by default{" "}
-                  <b className="text-ink">everybody who is working, the same number each</b>.
+                  The sheet needs a <b className="text-ink">name</b> and a <b className="text-ink">phone</b> column; email, city, category, tags, priority and any other column are optional.{" "}
+                  <b className="text-ink">Every different phone number becomes a contact of its own</b>: only a number that is in the sheet twice, or that is a contact already, is added once - the name decides nothing, so two
+                  people with the same name and different numbers are two contacts. After the check you choose who gets the contacts - by default <b className="text-ink">everybody who is working, the same number each</b>.
                 </p>
                 <Button variant="secondary" size="sm" onClick={() => downloadText("contacts-sample.csv", SAMPLE)}>
                   <Download className="size-4" /> Sample file
                 </Button>
               </div>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-line p-4 text-sm" data-testid="import-group-people-row">
+                <Checkbox checked={groupPeople} onCheckedChange={(on) => setGroupPeople(on === true)} className="mt-0.5" aria-label="Put the numbers of one person together" data-testid="import-group-people" />
+                <span>
+                  <span className="block font-bold text-ink">Put the numbers of one person together</span>
+                  <span className="block text-xs text-muted">
+                    Only for a list of people (<i>Mobile Number, Voter Name, Relative Name, Age, Gender, Voter Pincode, Voter Address</i>): the lines of the same person become one contact that lists all their numbers. Leave it off
+                    for every other sheet. No number is lost either way.
+                  </span>
+                </span>
+              </label>
             </motion.div>
           ) : step === "uploading" ? (
             <motion.div key="uploading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3 py-10 text-center">

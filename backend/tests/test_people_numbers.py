@@ -1,6 +1,7 @@
-"""A contact is a person with many numbers: a voter list (one row per number, the same voter on several rows) becomes one contact per
-person with all the numbers, every column of the sheet is kept, a number can never be in two contacts, and the calls know which number
-was dialled.
+"""A contact is a person with many numbers. With the import option "put the numbers of one person together" (OFF by default - see
+test_import_by_number.py for what happens without it) a voter list (one row per number, the same voter on several rows) becomes one
+contact per person with all the numbers, every column of the sheet is kept, a number can never be in two contacts, no number is ever
+thrown away, and the calls know which number was dialled.
 
 The sheet below is worked out by hand (the header names are those of the voter list):
 
@@ -23,8 +24,15 @@ from app.models.contact import Contact, ContactPhone
 from app.services import contact_numbers
 from app.core.timeutils import utcnow
 from tests.conftest import auth_headers
-from tests.test_import import confirm, get_import, upload
+from tests.test_import import confirm, get_import
+from tests.test_import import upload as _upload
 from tests.test_import_distribution import team_of
+
+
+def upload(client, headers, content, **form):
+    """An upload with the option these tests are about: the numbers of one person are put together."""
+    form.setdefault("group_people", "true")
+    return _upload(client, headers, content, **form)
 
 HEADER = ("Mobile Number", "Voter Name", "Relative Name", "Age", "Gender", "EPIC No", "Voter Pincode", "Voter Address")
 
@@ -350,3 +358,43 @@ def test_the_database_itself_refuses_a_number_in_two_contacts(make, db):
         db.commit()
     db.rollback()
     assert one.id != two.id
+
+
+# ------------------------------------------------------------------------- a number is never thrown away
+def _many(prefix: str, count: int, name: str = "Many Numbers"):
+    return [[f"{prefix}{n:08d}", name, "Dad", "50", "M", "", "416001", "Ward 1"] for n in range(count)]
+
+
+def test_a_person_with_more_numbers_than_a_contact_can_list_gets_a_second_contact_and_no_number_is_lost(client, make, as_admin, db):
+    team_of(make, 2)
+    imp = upload(client, as_admin, csv_bytes(_many("95", 45)))
+    checked = get_import(client, as_admin, imp["id"])
+    assert (checked["total_rows"], checked["valid_rows"]) == (45, 3)  # 20 + 20 + 5
+    assert checked["result"]["sheet_numbers"] == 45 and checked["result"]["numbers"] == 45 and "dropped_numbers" not in checked["result"]
+    done = confirm(client, as_admin, imp["id"])
+    assert done["inserted_rows"] == 3
+    sizes = sorted(db.query(ContactPhone).filter_by(contact_id=c.id).count() for c in db.query(Contact))
+    assert sizes == [5, 20, 20] and db.query(ContactPhone).count() == 45  # every number of the sheet, once
+
+
+def test_numbers_that_do_not_fit_on_a_person_who_is_there_already_become_a_contact_and_are_not_lost(client, make, as_admin, db):
+    team_of(make, 2)
+    confirm(client, as_admin, upload(client, as_admin, csv_bytes(_many("95", 20)))["id"])  # a person with 20 numbers: a full contact
+    assert db.query(Contact).count() == 1
+    more = _many("95", 1) + _many("96", 3)  # the same person: one number that is there, three that are new
+    imp = upload(client, as_admin, csv_bytes(more))
+    checked = get_import(client, as_admin, imp["id"])
+    assert (checked["existing_rows"], checked["valid_rows"]) == (1, 1)  # the person is there; the three new numbers are one more contact
+    confirm(client, as_admin, imp["id"])
+    sizes = sorted(db.query(ContactPhone).filter_by(contact_id=c.id).count() for c in db.query(Contact))
+    assert sizes == [3, 20] and db.query(ContactPhone).count() == 23
+    # and the same again: nothing new
+    third = get_import(client, as_admin, upload(client, as_admin, csv_bytes(more))["id"])
+    assert (third["valid_rows"], third["existing_rows"]) == (0, 1)  # (the four rows are one person again, who is there)
+
+
+def test_the_option_is_off_unless_it_is_asked_for(client, make, as_admin, db):
+    team_of(make, 2)
+    imp = _upload(client, as_admin, csv_bytes(VOTERS))  # (without the option)
+    assert get_import(client, as_admin, imp["id"])["options"]["group_people"] is False
+    assert get_import(client, as_admin, upload(client, as_admin, csv_bytes(VOTERS))["id"])["options"]["group_people"] is True

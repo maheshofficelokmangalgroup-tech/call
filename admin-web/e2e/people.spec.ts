@@ -76,7 +76,7 @@ test.describe("people with many numbers", () => {
     await expect(page.getByTestId("contact-row")).toHaveCount(0);
   });
 
-  test("a voter sheet with one row per number becomes one contact per person, with every number and the voter details", async ({ page, request }) => {
+  test("a voter sheet with one row per number becomes one contact per person when asked to - with every number and the voter details", async ({ page, request }) => {
     await login(page);
     await page.goto("/contacts");
     await page.getByTestId("import-open").click();
@@ -95,6 +95,10 @@ test.describe("people with many numbers", () => {
       "12,Bad Row,Nobody,30,M,,416003,Nowhere",
     ].join("\r\n");
     await dialog.getByTestId("import-file").setInputFiles({ name: "voters.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    // the option is off until it is asked for: tick "Put the numbers of one person together"
+    await expect(dialog.getByTestId("import-group-people")).not.toBeChecked();
+    await dialog.getByTestId("import-group-people").click();
+    await expect(dialog.getByTestId("import-group-people")).toBeChecked();
     await dialog.getByTestId("import-start").click();
 
     // 6 lines: 1 bad, 1 number typed twice, 4 numbers of 2 people - 2 lines joined a person who is on an earlier line
@@ -141,6 +145,7 @@ test.describe("people with many numbers", () => {
     await page.getByTestId("import-open").click();
     const again = page.getByTestId("import-dialog");
     await again.getByTestId("import-file").setInputFiles({ name: "voters.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await again.getByTestId("import-group-people").click();
     await again.getByTestId("import-start").click();
     await expect(again.getByText("Check the sheet")).toBeVisible({ timeout: 60_000 });
     await expect(again.getByText("ready to add").locator("..")).toContainText("0");
@@ -149,6 +154,59 @@ test.describe("people with many numbers", () => {
     // clean up: what the test made is removed through the API (as an administrator)
     const { access_token: token } = await (await backendLogin(request, ADMIN.email, ADMIN.password)).json();
     for (const who of [asha, bhau]) {
+      const list = await (await panelGet(page, `contacts?q=${encodeURIComponent(who)}`)).json();
+      for (const item of list.items) {
+        const res = await request.delete(`${BACKEND}/api/v1/contacts/${item.id}`, { headers: { authorization: `Bearer ${token}` } });
+        expect(res.ok()).toBeTruthy();
+      }
+    }
+  });
+
+  test("by default every different number is a contact of its own, whatever the name - only the same number is added once", async ({ page, request }) => {
+    await login(page);
+    await page.goto("/contacts");
+    await page.getByTestId("import-open").click();
+    const dialog = page.getByTestId("import-dialog");
+    const id = unique();
+    const [n1, n2, n3, n4] = numbers(4);
+    const same = `Same Name ${id}`;
+    const fourth = `Fourth Name ${id}`;
+    const csv = [
+      "name,phone",
+      `${same},${n1}`,
+      `${same},${n2}`, // the same name, another number: another contact
+      `${same},${n3}`,
+      `Other Name ${id},${n1}`, // the same number again, under another name: it is there already, not added again
+      `${fourth},${n4}`,
+      `Bad Row ${id},12`,
+    ].join("\r\n");
+    await dialog.getByTestId("import-file").setInputFiles({ name: "numbers.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    await expect(dialog.getByTestId("import-group-people")).not.toBeChecked();
+    await dialog.getByTestId("import-start").click();
+
+    await expect(dialog.getByText("Check the sheet")).toBeVisible({ timeout: 60_000 });
+    await expect(dialog.getByText("lines in the sheet").locator("..")).toContainText("6");
+    await expect(dialog.getByText("ready to add").locator("..")).toContainText("4");
+    await expect(dialog.getByText("have a problem").locator("..")).toContainText("1");
+    await expect(dialog.getByTestId("import-duplicates-note")).toContainText("1 line repeats a number");
+    await expect(dialog.getByTestId("import-people-note")).toHaveCount(0);
+
+    await dialog.getByTestId("import-apply").click();
+    await expect(dialog.getByTestId("import-result")).toContainText("4 contacts added", { timeout: 60_000 });
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    // three contacts with the same name, each with its own number - nobody was merged because of the name
+    await searchFor(page, page.getByTestId("contact-search"), same, "contacts");
+    await expect(page.getByTestId("contact-row")).toHaveCount(3);
+    for (const cell of await page.getByTestId("contact-numbers-cell").all()) await expect(cell).not.toContainText("more");
+    // the number that came twice is one contact, with the name of the first line
+    await searchFor(page, page.getByTestId("contact-search"), n1, "contacts");
+    await expect(page.getByTestId("contact-row")).toHaveCount(1);
+    await expect(page.getByTestId("contact-row")).toContainText(same);
+
+    // clean up through the API
+    const { access_token: token } = await (await backendLogin(request, ADMIN.email, ADMIN.password)).json();
+    for (const who of [same, fourth]) {
       const list = await (await panelGet(page, `contacts?q=${encodeURIComponent(who)}`)).json();
       for (const item of list.items) {
         const res = await request.delete(`${BACKEND}/api/v1/contacts/${item.id}`, { headers: { authorization: `Bearer ${token}` } });

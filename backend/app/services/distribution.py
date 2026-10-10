@@ -70,6 +70,19 @@ def balanced_quotas(n: int, recipients: Sequence[Recipient]) -> dict[int, int]:
     return quotas
 
 
+def level_targets(recipients: Sequence[Recipient]) -> dict[int, int]:
+    """Everybody the same: what each person should have when `load` (what they have to call now) is shared out again between all of them.
+    The remainder (fewer than the number of people) stays with the ones who have the most now, so as few contacts as possible move; the
+    difference between two people is never more than one."""
+    if not recipients:
+        raise ValueError("There is nobody to share the contacts with.")
+    if len({r.employee_id for r in recipients}) != len(recipients):
+        raise ValueError("An employee is listed twice.")
+    base, extra = divmod(sum(r.load for r in recipients), len(recipients))
+    heaviest_first = sorted(recipients, key=lambda r: (-r.load, r.employee_id))
+    return {r.employee_id: base + (1 if index < extra else 0) for index, r in enumerate(heaviest_first)}
+
+
 def quotas(strategy: str, n: int, recipients: Sequence[Recipient]) -> dict[int, int]:
     if strategy == "equal":
         return equal_quotas(n, recipients)

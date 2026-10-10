@@ -86,9 +86,14 @@ def list_employees(
     return list(rows), total
 
 
-def _next_code(db: Session) -> str:
-    max_id = db.scalar(select(func.max(Employee.id))) or 0
-    return f"EMP{max_id + 1:04d}"
+def _next_code(db: Session, jump: int = 0) -> str:
+    """EMP + the first number after the newest account that no employee has as a code yet. A code can be ahead of the ids (two
+    administrators adding somebody at the same moment, or a code typed by hand), and then "newest id + 1" is taken already: every
+    new employee after that would be refused for good."""
+    number = (db.scalar(select(func.max(Employee.id))) or 0) + 1 + jump
+    while db.scalar(select(Employee.id).where(Employee.employee_code == f"EMP{number:04d}")) is not None:
+        number += 1
+    return f"EMP{number:04d}"
 
 
 def create_employee(db: Session, *, data: EmployeeCreate, actor: Employee, request: Request) -> tuple[Employee, str | None]:
@@ -104,10 +109,13 @@ def create_employee(db: Session, *, data: EmployeeCreate, actor: Employee, reque
     else:
         password = temporary = generate_temporary_password()
 
-    code = (data.employee_code or "").upper() or _next_code(db)
+    typed = (data.employee_code or "").upper()
+    code = typed or _next_code(db)
     if db.scalars(select(Employee.id).where(Employee.email == data.email)).first():
         raise Conflict("An employee with this email already exists.", code="email_taken")
-    if db.scalars(select(Employee.id).where(Employee.employee_code == code)).first():
+    # (a code that was made here is free - or taken a moment later by somebody adding an employee at the same time, which the unique
+    # index below catches and the next code is tried; only a code that was typed can be refused)
+    if typed and db.scalars(select(Employee.id).where(Employee.employee_code == code)).first():
         raise Conflict("An employee with this employee ID already exists.", code="employee_code_taken")
 
     target = data.daily_target if data.daily_target is not None else int(get_setting(db, "default_daily_target") or 50)
@@ -136,7 +144,7 @@ def create_employee(db: Session, *, data: EmployeeCreate, actor: Employee, reque
             if data.employee_code or attempt == 5 or db.scalars(select(Employee.id).where(Employee.email == data.email)).first():
                 raise Conflict("Employee email or ID already exists.", code="employee_exists") from exc
             employee = Employee(
-                employee_code=f"EMP{(db.scalar(select(func.max(Employee.id))) or 0) + 1 + secrets.randbelow(5 * attempt):04d}",
+                employee_code=_next_code(db, secrets.randbelow(5 * attempt)),
                 email=data.email, full_name=data.full_name, phone=data.phone, password_hash=employee.password_hash, role_id=role.id,
                 team_id=data.team_id, is_active=True, daily_target=target, must_change_password=data.must_change_password,
                 device_binding_enabled=data.device_binding_enabled, password_changed_at=employee.password_changed_at,

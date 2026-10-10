@@ -1,11 +1,15 @@
 # Importing contacts and sharing them between employees
 
-A sheet of 10 contacts or of a million: it is checked, no number gets in twice, and what is new is shared **equally between the
-employees who are working** - somebody who stopped working gets nothing, and what was waiting with them is shared out again.
+A sheet of 10 contacts or of a million: it is checked, **every different phone number becomes a contact of its own** (the same
+number never twice - and the name decides nothing), and what is new is shared **equally between the employees who are working**.
+Somebody who stopped working gets nothing and what was waiting with them is shared out again; **an employee who comes later (a new
+account) gets a fair share of what nobody has called yet** - by itself within a minute or two, or by hand (see
+[Everybody gets the same](#everybody-gets-the-same---also-somebody-who-comes-later)).
 
-A sheet may have **one row per number** (a voter list: the same person on many rows, one number on each). Those rows become **one
-contact with all the numbers** - the name is shown once in the calling app and every number is on the person (see
-[One person, many numbers](#one-person-many-numbers-a-voter-list)).
+A list of people with **one row per number** (a voter list) can be put together by person if you tick *Put the numbers of one person
+together*: then the rows of one person become **one contact with all the numbers** (see
+[One person, many numbers](#one-person-many-numbers-a-voter-list---only-when-asked-for)). Left off - the default - nothing is merged: two rows with
+different numbers are two contacts, also when the name is the same.
 
 ## In the admin panel
 
@@ -13,6 +17,7 @@ contact with all the numbers** - the name is shown once in the calling app and e
 
 1. **Upload** the `.csv` or `.xlsx` (up to 200 MB - about a million contacts). The header row needs a *name* and a *phone* column;
    email, city, category, tags, priority, `Assigned to` and any other column are optional (other columns are kept on the contact).
+   Tick *Put the numbers of one person together* only for a list of people (a voter list) where you want one contact per person.
 2. **Check** - the server reads it line by line (a big sheet takes a few minutes; you can close the window). You see how many lines
    are ready, already contacts, repeated inside the sheet, or have a problem - and download the list of problem lines with the reason
    for each, to fix and upload again.
@@ -33,10 +38,23 @@ docker compose exec api python -m scripts.import_contacts /app/var/contacts.csv 
 docker compose exec api python -m scripts.import_contacts /app/var/contacts.csv --yes      # check, then add and share
 python -m scripts.import_contacts sheet.xlsx --employees 12,15,18 --strategy balance_total --yes
 python -m scripts.import_contacts sheet.csv --unassigned --yes                              # no owner
+python -m scripts.import_contacts voters.xlsx --group-people --yes                          # a voter list: one contact per person
 ```
 
 It is the same pipeline as the panel (same checks, same rules), without the web server's upload limit. Without `--yes` the import
 stays *previewed* and can be confirmed from the panel. `Ctrl+C` asks it to stop after the step it is in.
+
+### A sheet that was added the wrong way
+
+```bash
+python -m scripts.remove_import 30          # only LOOK: how many contacts import 30 made, how many nobody has touched, who owns them
+python -m scripts.remove_import 30 --yes    # remove the ones nobody has touched
+```
+
+The number of the import is the **#** of its row in the import history. Only contacts that nobody has done anything with are removed
+(no call, no note, no callback, still `new`); whatever an employee has started on stays. The numbers of the removed contacts are free
+again, so the corrected sheet can be added the ordinary way. It works in steps of 2,000, refuses an import that is still running, can be
+repeated without harm, and is written to the audit log (`import.contacts_removed`).
 
 ## The rules
 
@@ -66,6 +84,9 @@ so it is clear what to rename.
 
 ### No duplicate gets in - three levels
 
+The **phone number alone** decides - never the name. A different number with the same name is a different contact; the same number
+under another name is the same contact.
+
 1. **Inside the sheet** - the same number written in different ways (`9876543210`, `+91 98765 43210`, `09876543210`,
    `98765-43210`) is one number; the first line wins, the others are listed as repeats.
 2. **Against the contacts you have** - looked up in batches through the unique index on the phone number. In *skip* mode the
@@ -74,11 +95,14 @@ so it is clear what to rename.
 3. **At the moment of writing** - the database has a unique index on the number, and contacts are inserted with "leave out the rows
    whose number is there". So even a number that was added by somebody else *after* the check cannot become a second contact.
 
-### One person, many numbers (a voter list)
+### One person, many numbers (a voter list) - only when asked for
+
+**Off by default.** Without it every different number is a contact of its own. With *Put the numbers of one person together* ticked
+(`group_people`; `--group-people` on the command line) a voter list is read as people.
 
 A voter list has **one row per number**: *Mobile Number, Voter Name, Relative Name, Age, Gender, EPIC No, Voter Pincode, Voter
 Address*. The same person is on many rows (one number each), and the same number can be on many rows (a family that shares a
-phone, a row typed twice). The import turns that into **people**:
+phone, a row typed twice). With the option on, the import turns that into **people**:
 
 * **Rows with the same name, relative, age, gender, pincode and address are one person** (capitals and spaces do not matter). The
   person is **one contact** with **all** their numbers (the first number is the main one). The calling app shows the name once.
@@ -90,7 +114,8 @@ phone, a row typed twice). The import turns that into **people**:
 * **A number is in one contact only.** A number that is on rows of different people (a shared phone) belongs to the first row of the
   sheet; the later rows are listed as repeats of that number, and those people are still added with their other numbers. The
   database has a unique index on every number, so whatever the sheet says, no number is ever in two contacts.
-* **At most 20 numbers per person** - more are not added, and the check says how many.
+* **No number is lost.** A contact lists at most 20 numbers; a person with more gets a **second contact** (a third ...) with the same
+  details for the rest, and the check says how many people had more.
 * **Every row is accounted for.** The check shows *people*, *numbers*, *rows that joined another row of the same person*, repeats and
   bad rows - and `bad + repeats + numbers = all rows`.
 * **People you have already** (found by any of their numbers, or by who they are) are not made again. *Skip* mode **adds their new
@@ -109,6 +134,11 @@ In the admin panel: the contact list shows the first number and *+N*, the contac
 answered), the voter details (relative, age, gender, voter ID, pincode, address) and an editor for the numbers; the list can be
 searched by **any** of the numbers, by name, relative, voter ID, pincode and address. The import check says *people / numbers / rows
 that joined*.
+
+**Why the default is by number (changed 2026-10-09).** A real list of 209,395 rows has 129,675 different numbers. Read as people (same
+name, relative, age, gender, pincode and address = one person) it gave only 27,692 contacts, and 14,323 numbers were left out because
+a person had more than 20 of them (one had 124). For a team that calls numbers this is the wrong way round, so now every different
+number is a contact, putting the numbers of one person together is something you ask for - and even then no number is dropped.
 
 ### How the new contacts are shared
 
@@ -139,6 +169,30 @@ interested, finished ...) and promised callbacks **stay** where they are.
   and in the audit log; receivers get a notification.
 * Doing it twice changes nothing: what was moved is not on the list any more. Old assignments are kept as history.
 
+### Everybody gets the same - also somebody who comes later
+
+A sheet is shared between the people who are working **at the moment it is added**. Somebody who comes afterwards - a new employee,
+or one who was away and is seen again - would have nothing, while a colleague has thousands of contacts that nobody has called. So
+the contacts that are **waiting for their first call** are shared out again, equally between everybody who is working
+(**People → Work sharing → Give everybody the same**).
+
+* **What moves** - only contacts nobody has started on: still `new`, no callback promised. A call that was made, a note, a promised
+  callback, every status after `new`: all of that stays where it is.
+* **Who gives and who receives** - the target for everybody is `waiting ÷ people`; the remainder (fewer than the number of people)
+  stays with the ones who have the most, so as few contacts as possible change hands, and afterwards no two people differ by more
+  than one. Whoever gives, gives the **newest** of their waiting contacts (the ones they would have called last). Nobody who gives
+  also receives.
+* **By itself** - every minute the server looks for somebody who is working and owns **no contact at all** (a new account counts as
+  working from the moment it is made). It then shares equally - but not while a sheet is being added, because that sheet is being
+  shared out with the same people at that moment. Settings → *Give a new employee a fair share by itself* (`auto_level`, default on).
+* **By hand** - the button shows the plan first (for every person: waiting now, after, +/−) and then moves the contacts in steps of
+  1,000; a contact somebody is editing at that moment waits for the next round. Doing it twice changes nothing: when everybody has
+  the same, there is nothing to move.
+* The people who give or receive get a notification; every sharing is in the history of the Work sharing page (kind *Same number
+  for everybody*, by hand or automatic) and in the audit log (`distribution.level`).
+* Measured (local MySQL 8.4, 127,675 contacts shared by two employees): a third employee was noticed and the contacts were shared out
+  again in **6.9 s** - 42,558 / 42,559 / 42,558, none lost, none twice.
+
 ### The passwords an administrator hands out
 
 When an employee is created (or a password is reset) the password is kept **encrypted** (Fernet, key derived from the server's JWT
@@ -163,7 +217,21 @@ On a laptop with MySQL 8.4 (384 MB buffer pool), one process:
 
 The same numbers are checked automatically on every push (`import-scale` job in CI: 300,000 rows on MySQL, plus an Excel file).
 
-A **voter list** at the size of the real one (`python -m scripts.voter_check`; laptop, MySQL 8.4, 2,000 people were contacts before):
+A **list by number** - the proof that no number is lost (`python -m scripts.number_check --sheet <file>`, or `--rows N` for a made-up
+list; here the real 209,395-row voter list, laptop, MySQL 8.4, 2 employees, 2,000 numbers were contacts before). The expected result is
+worked out from the file alone, before the import, and then compared with the database:
+
+| 209,395 rows, 8.4 MB (.xlsx) | |
+| --- | --- |
+| what the file says | 0 bad rows, 79,720 rows that repeat a number, **129,675 different numbers** |
+| check | **40.4 s** (5,187 rows/s) |
+| add + share | **26.1 s** (4,883 contacts/s) |
+| result | **129,675 contacts** = the different numbers of the file; the numbers in the database are *exactly* the numbers of the file (0 differences), one number per contact; shared **63,837 / 63,838** |
+| the same list again | adds nobody |
+| a third employee joins | shared out in **6.9 s**: 42,558 or 42,559 each |
+| memory of the process | **185 MB** peak |
+
+A **voter list** put together by person (`--group-people`, `python -m scripts.voter_check`; laptop, MySQL 8.4, 2,000 people were contacts before):
 
 | 209,395 rows, 23.5 MB, 8 columns | |
 | --- | --- |
@@ -213,6 +281,7 @@ step is audited.
 | --- | --- | --- |
 | `inactive_after_days` (Settings page) | 2 | days not seen = not working |
 | `auto_rebalance` (Settings page) | on | share the contacts of people who stopped, every 10 minutes |
+| `auto_level` (Settings page) | on | a working employee with no contact at all (a new account) gets a fair share, checked every minute |
 | `MAX_IMPORT_MB` | 200 | size of a sheet |
 | `MAX_IMPORT_ROWS` | 1,100,000 | rows of a sheet |
 | `MAX_IMPORT_COLUMNS` | 100 | columns |
@@ -230,7 +299,7 @@ holds the file in memory).
 
 | | |
 | --- | --- |
-| `POST /contacts/import` | upload (`file`, `mode`, `campaign_id`, `default_priority`); the check runs in the background |
+| `POST /contacts/import` | upload (`file`, `mode`, `campaign_id`, `default_priority`, `group_people`); the check runs in the background |
 | `GET /contacts/import`, `/{id}` | list / one import with progress (`status`, `scanned_rows`, `progress_percent`, `applied_rows`, `result`) |
 | `GET /contacts/import/{id}/rows?status=` | the first problem lines / valid lines (sample) |
 | `GET /contacts/import/{id}/issues.csv` | every problem line with the reason and the cells of the sheet |
@@ -239,7 +308,8 @@ holds the file in memory).
 | `POST /contacts/import/{id}/retry`, `/cancel` | continue a stopped import / cancel or stop |
 | `GET /distribution/overview` | every employee with state, what they own, what could be taken back |
 | `POST /distribution/rebalance/preview`, `/rebalance` | preview / do it (`from_employee_ids`, `to_employee_ids`, `strategy`, `order`) |
-| `GET /distribution/runs`, `/runs/{id}` | history |
+| `POST /distribution/level/preview`, `/level` | everybody who is working gets the same number of contacts nobody has called yet: the plan / do it (`employee_ids`, default everybody working) |
+| `GET /distribution/runs`, `/runs/{id}` | history (`kind` is `rebalance` or `level`) |
 | `GET /employees/{id}/credentials`, `/employees/credentials.xlsx?ids=` | the password handed out (audited) / the login sheet |
 
 ## Files
@@ -247,7 +317,9 @@ holds the file in memory).
 `backend/app/services/`: `import_files.py` (safe readers), `import_rows.py` (what a line must be, who a person is),
 `import_service.py` (the pipeline), `contact_numbers.py` (the numbers of a person: which to dial, what happened on each),
 `distribution.py` (the arithmetic - pure, tested against brute force), `activity.py` (who is working),
-`rebalance_service.py`, `workload.py`, `credential_vault.py`; `app/jobs.py` (background threads + scheduler); `scripts/import_contacts.py`,
-`scripts/scale_check.py`, `scripts/make_big_sheet.py`, `scripts/voter_check.py`, `scripts/make_voter_sheet.py`. Tests:
-`tests/test_import*.py`, `test_people_numbers.py`, `test_distribution.py`, `test_rebalance.py`, `test_activity.py`,
+`rebalance_service.py`, `level_service.py` (everybody gets the same), `import_undo.py` (take a wrong import away), `workload.py`,
+`credential_vault.py`; `app/jobs.py` (background threads + scheduler); `scripts/import_contacts.py`, `scripts/remove_import.py`,
+`scripts/number_check.py` (the proof that no number is lost), `scripts/scale_check.py`, `scripts/make_big_sheet.py`,
+`scripts/voter_check.py`, `scripts/make_voter_sheet.py`. Tests: `tests/test_import*.py` (`test_import_by_number.py`,
+`test_import_undo.py`), `test_people_numbers.py`, `test_level.py`, `test_distribution.py`, `test_rebalance.py`, `test_activity.py`,
 `test_credentials.py`, `test_scale_paths.py`. Table `contact_phones` (migration `0007`) holds every number of every contact.

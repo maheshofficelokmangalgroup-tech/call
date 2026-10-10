@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, CheckCircle2, Loader2, ShieldAlert, Users } from "lucide-react";
+import { ArrowRightLeft, CheckCircle2, Loader2, Scale, ShieldAlert, Users } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -14,17 +14,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { Table, TableWrap, TD, TH, THead, TR } from "@/components/ui/table";
 import { errorMessage } from "@/lib/api";
-import { useActivity, useMe, useRebalance, useRebalancePreview, useRebalanceRun, useRebalanceRuns } from "@/lib/queries";
+import { useActivity, useLevel, useLevelPreview, useMe, useRebalance, useRebalancePreview, useRebalanceRun, useRebalanceRuns } from "@/lib/queries";
 import { WORK_STATE, isWorking } from "@/lib/sharing";
-import type { RebalancePlan, RebalanceRequest, RebalanceRun } from "@/lib/types";
+import type { LevelPlan, LevelRequest, RebalancePlan, RebalanceRequest, RebalanceRun } from "@/lib/types";
 import { cn, formatDate, formatNumber, pluralize, timeAgo } from "@/lib/utils";
 
 type Filter = "all" | "working" | "away";
 
-function Tile({ label, value, tone, hint, testId }: { label: string; value: React.ReactNode; tone: "brand" | "warn" | "neutral" | "info"; hint?: string; testId?: string }) {
+function Tile({ label, value, tone, hint, testId, className }: { label: string; value: React.ReactNode; tone: "brand" | "warn" | "neutral" | "info"; hint?: string; testId?: string; className?: string }) {
   const styles = { brand: "bg-brand-soft text-brand-strong", warn: "bg-warn-soft text-warn", neutral: "bg-surface-3 text-ink-soft", info: "bg-info-soft text-info" }[tone];
   return (
-    <div className={cn("rounded-2xl p-4", styles)} data-testid={testId}>
+    <div className={cn("rounded-2xl p-4", styles, className)} data-testid={testId}>
       <p className="text-2xl font-extrabold leading-none tnum">{value}</p>
       <p className="mt-1 text-xs font-semibold">{label}</p>
       {hint ? <p className="mt-1 text-[11px] opacity-80">{hint}</p> : null}
@@ -37,6 +37,7 @@ export function DistributionView() {
   const activity = useActivity();
   const [filter, setFilter] = React.useState<Filter>("all");
   const [open, setOpen] = React.useState(false);
+  const [levelOpen, setLevelOpen] = React.useState(false);
 
   if (me.data && me.data.employee.role !== "admin") {
     return (
@@ -49,6 +50,7 @@ export function DistributionView() {
   const data = activity.data;
   const list = (data?.employees ?? []).filter((e) => (filter === "all" ? true : filter === "working" ? isWorking(e.state) : !isWorking(e.state)));
   const canRebalance = !!data && data.movable > 0 && data.working > 0;
+  const canLevel = !!data && data.working > 1;
 
   return (
     <div>
@@ -57,14 +59,18 @@ export function DistributionView() {
         title="Work sharing"
         description={
           <>
-            Who is working, and where the contacts of people who stopped working go. An employee counts as working when they were seen in the last{" "}
-            <b className="text-ink-soft">{data ? pluralize(data.inactive_after_days, "day") : "few days"}</b>.
+            Who is working, and how the contacts are shared between them: the contacts of people who stopped working go to the ones who are working, and a new employee gets the same number as the others. An
+            employee counts as working when they were seen in the last <b className="text-ink-soft">{data ? pluralize(data.inactive_after_days, "day") : "few days"}</b> (a new account counts from the
+            moment it is made).
           </>
         }
         actions={
           <>
             <Button asChild variant="ghost">
               <Link href="/settings">Change the rule</Link>
+            </Button>
+            <Button variant="secondary" onClick={() => setLevelOpen(true)} disabled={!canLevel} data-testid="level-open">
+              <Scale className="size-4" /> Give everybody the same
             </Button>
             <Button onClick={() => setOpen(true)} disabled={!canRebalance} data-testid="rebalance-open">
               <ArrowRightLeft className="size-4" /> Share their contacts now
@@ -84,11 +90,19 @@ export function DistributionView() {
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Tile label="working" value={formatNumber(data.working)} tone="brand" testId="tile-working" />
             <Tile label="not working" value={formatNumber(data.not_working)} tone={data.not_working > 0 ? "warn" : "neutral"} testId="tile-away" />
             <Tile label="contacts waiting with them" value={formatNumber(data.movable)} tone={data.movable > 0 ? "warn" : "neutral"} hint="not called yet, no callback promised" testId="tile-movable" />
             <Tile label="automatic sharing" value={data.auto_rebalance ? "On" : "Off"} tone={data.auto_rebalance ? "info" : "neutral"} hint={data.auto_rebalance ? "checked every 10 minutes" : "you share them by hand"} testId="tile-auto" />
+            <Tile
+              label="new employees get a share"
+              value={data.auto_level ? "On" : "Off"}
+              tone={data.auto_level ? "info" : "neutral"}
+              hint={data.auto_level ? "within a minute or two" : "you share by hand"}
+              testId="tile-auto-level"
+              className="col-span-2 lg:col-span-1"
+            />
           </div>
 
           <section className="rounded-2xl border border-line bg-surface shadow-card">
@@ -159,7 +173,7 @@ export function DistributionView() {
           <section className="rounded-2xl border border-line bg-surface shadow-card">
             <header className="border-b border-line px-5 py-4">
               <h2 className="text-base font-extrabold text-ink">What was shared</h2>
-              <p className="mt-0.5 text-xs text-muted">Every time contacts were taken from people who stopped working and given to people who are working.</p>
+              <p className="mt-0.5 text-xs text-muted">Every time contacts changed hands: taken from people who stopped working, or shared again so that everybody who is working has the same number.</p>
             </header>
             <RunsList />
           </section>
@@ -167,6 +181,7 @@ export function DistributionView() {
       )}
 
       <RebalanceDialog open={open} onOpenChange={setOpen} />
+      <LevelDialog open={levelOpen} onOpenChange={setLevelOpen} />
     </div>
   );
 }
@@ -208,6 +223,9 @@ function RunRow({ run }: { run: RebalanceRun }) {
       <TD className="whitespace-nowrap text-sm">{formatDate(run.created_at)}</TD>
       <TD>
         <Badge tone={run.trigger === "auto" ? "info" : "neutral"}>{run.trigger === "auto" ? "Automatic" : "By hand"}</Badge>
+        <p className="mt-1 text-xs text-muted" data-testid="run-kind">
+          {run.kind === "level" ? "Same number for everybody" : "From people who stopped"}
+        </p>
       </TD>
       <TD>
         {run.status === "completed" ? (
@@ -311,25 +329,7 @@ function RebalanceBody({ onOpenChange }: { onOpenChange: (open: boolean) => void
             )}
           </>
         ) : r ? (
-          <div className="rounded-2xl border border-line p-5" data-testid="rebalance-run">
-            <div className="flex items-center gap-3">
-              {finished && r.status === "completed" ? <CheckCircle2 className="size-7 text-brand" /> : finished ? <ShieldAlert className="size-7 text-danger" /> : <Loader2 className="size-7 animate-spin text-brand" />}
-              <p className="text-base font-bold text-ink tnum">
-                {formatNumber(r.moved)} of {formatNumber(r.planned)} contacts moved
-              </p>
-            </div>
-            {r.error_message ? <p className="mt-2 text-sm text-danger">{r.error_message}</p> : null}
-            {finished && r.status === "completed" ? (
-              <ul className="mt-3 space-y-1 text-sm text-ink-soft">
-                {((r.details?.to ?? []) as { name: string; received: number }[]).map((t) => (
-                  <li key={t.name} className="flex justify-between gap-3">
-                    <span>{t.name}</span>
-                    <span className="font-semibold tnum">+{formatNumber(t.received)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <RunResult run={r} testId="rebalance-run" />
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
@@ -354,6 +354,180 @@ function RebalanceBody({ onOpenChange }: { onOpenChange: (open: boolean) => void
         )}
       </DialogFooter>
     </>
+  );
+}
+
+/** How far one run is and, when it is finished, who received how many (for the equal sharing: also who gave). */
+function RunResult({ run, testId, showGivers = false }: { run: RebalanceRun; testId: string; showGivers?: boolean }) {
+  const finished = run.status !== "running";
+  const to = (run.details?.to ?? []) as { employee_id?: number; name: string; received: number }[];
+  const from = (run.details?.from ?? []) as { employee_id?: number; name: string; moved: number }[];
+  return (
+    <div className="rounded-2xl border border-line p-5" data-testid={testId}>
+      <div className="flex items-center gap-3">
+        {finished && run.status === "completed" ? <CheckCircle2 className="size-7 text-brand" /> : finished ? <ShieldAlert className="size-7 text-danger" /> : <Loader2 className="size-7 animate-spin text-brand" />}
+        <p className="text-base font-bold text-ink tnum">
+          {formatNumber(run.moved)} of {formatNumber(run.planned)} contacts moved
+        </p>
+      </div>
+      {run.error_message ? <p className="mt-2 text-sm text-danger">{run.error_message}</p> : null}
+      {finished && run.status === "completed" ? (
+        <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm text-ink-soft">
+          {to.map((t) => (
+            <li key={`to-${t.employee_id ?? t.name}`} className="flex justify-between gap-3">
+              <span>{t.name}</span>
+              <span className="font-semibold tnum">+{formatNumber(t.received)}</span>
+            </li>
+          ))}
+          {showGivers
+            ? from.map((f) => (
+                <li key={`from-${f.employee_id ?? f.name}`} className="flex justify-between gap-3">
+                  <span>{f.name}</span>
+                  <span className="font-semibold tnum text-warn">−{formatNumber(f.moved)}</span>
+                </li>
+              ))
+            : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+const EVERYBODY: LevelRequest = {};
+
+function LevelDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg" data-testid="level-dialog">
+        <LevelBody onOpenChange={onOpenChange} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Mounted only while the dialog is open: it starts from the preview every time and shows the result of this run only. */
+function LevelBody({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
+  const [runId, setRunId] = React.useState<number | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const preview = useLevelPreview(EVERYBODY, runId === null);
+  const level = useLevel();
+  const run = useRebalanceRun(runId);
+  const plan: LevelPlan | undefined = preview.data;
+
+  async function go() {
+    setError(null);
+    try {
+      const started = await level.mutateAsync(EVERYBODY);
+      setRunId(started.id);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
+
+  const r = run.data;
+  const finished = r && r.status !== "running";
+  return (
+    <>
+      <DialogHeader>
+        <div className="mb-2 flex size-12 items-center justify-center rounded-2xl bg-brand-soft text-brand">
+          <Scale className="size-6" />
+        </div>
+        <DialogTitle>{runId === null ? "Give everybody the same number of contacts" : finished ? (r.status === "completed" ? "Done" : "It stopped half way") : "Sharing the contacts..."}</DialogTitle>
+        <DialogDescription>
+          {runId === null
+            ? "The contacts nobody has called yet are shared out again, so that everybody who is working has the same number of them - also somebody who joined later. A promised callback, and every contact that was worked on, stays where it is."
+            : "You can close this window; it carries on."}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody className="space-y-4">
+        {runId === null ? (
+          preview.isError ? (
+            <p role="alert" className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm font-medium text-danger">
+              {errorMessage(preview.error)}
+            </p>
+          ) : preview.isPending || !plan ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <LevelSummary plan={plan} />
+          )
+        ) : r ? (
+          <RunResult run={r} testId="level-run" showGivers />
+        ) : (
+          <Skeleton className="h-24 w-full" />
+        )}
+        {error ? (
+          <p role="alert" className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm font-medium text-danger">
+            {error}
+          </p>
+        ) : null}
+      </DialogBody>
+      <DialogFooter>
+        {runId === null ? (
+          <>
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={go} disabled={!plan?.can_run} loading={level.isPending} data-testid="level-go">
+              {plan?.can_run ? `Move ${pluralize(plan.total_move, "contact")}` : "Move"}
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => onOpenChange(false)}>{finished ? "Close" : "Close - it keeps going"}</Button>
+        )}
+      </DialogFooter>
+    </>
+  );
+}
+
+function LevelSummary({ plan }: { plan: LevelPlan }) {
+  return (
+    <div className="space-y-3">
+      {plan.warnings.map((w) => (
+        <p key={w} className="rounded-xl bg-warn-soft px-3.5 py-2 text-xs font-medium text-warn" data-testid="level-warning">
+          {w}
+        </p>
+      ))}
+      {plan.employees.length > 0 ? (
+        <>
+          <p className="text-sm text-ink-soft" data-testid="level-summary">
+            <b className="text-ink tnum">{formatNumber(plan.total_waiting)}</b> contacts are waiting for a first call, with <b className="text-ink tnum">{formatNumber(plan.working)}</b> people who are working.
+            {plan.total_move > 0 ? (
+              <>
+                {" "}
+                <b className="text-ink tnum">{formatNumber(plan.total_move)}</b> of them change hands, so that everybody has the same number (one more for some, when it does not divide exactly).
+              </>
+            ) : null}
+          </p>
+          <TableWrap className="max-h-72 overflow-y-auto">
+            <Table className="min-w-0">
+              <THead className="sticky top-0 z-10">
+                <TR>
+                  <TH>Employee</TH>
+                  <TH className="text-right">Waiting now</TH>
+                  <TH className="text-right">After</TH>
+                  <TH className="text-right">Change</TH>
+                </TR>
+              </THead>
+              <tbody>
+                {plan.employees.map((e) => (
+                  <TR key={e.employee_id} data-testid="level-row">
+                    <TD>
+                      <span className="font-semibold text-ink">{e.full_name}</span> <span className="text-xs text-muted">{e.employee_code}</span>
+                      <p className="text-xs text-muted tnum">{formatNumber(e.assigned)} contacts in all</p>
+                    </TD>
+                    <TD className="text-right tnum">{formatNumber(e.waiting)}</TD>
+                    <TD className="text-right font-semibold text-ink tnum">{formatNumber(e.after)}</TD>
+                    <TD className={cn("text-right font-bold tnum", e.gives > 0 ? "text-warn" : e.receives > 0 ? "text-brand-strong" : "text-muted")}>
+                      {e.gives > 0 ? `−${formatNumber(e.gives)}` : e.receives > 0 ? `+${formatNumber(e.receives)}` : "-"}
+                    </TD>
+                  </TR>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrap>
+        </>
+      ) : null}
+    </div>
   );
 }
 
