@@ -3,7 +3,7 @@
 A sheet of 10 contacts or of a million: it is checked, **every different phone number becomes a contact of its own** (the same
 number never twice - and the name decides nothing), and what is new is shared **equally between the employees who are working**.
 Somebody who stopped working gets nothing and what was waiting with them is shared out again; **an employee who comes later (a new
-account) gets a fair share of what nobody has called yet** - by itself within a minute or two, or by hand (see
+account, or one who is back) gets a fair share of what nobody has called yet** - by itself within a minute or a few minutes, or by hand (see
 [Everybody gets the same](#everybody-gets-the-same---also-somebody-who-comes-later)).
 
 A list of people with **one row per number** (a voter list) can be put together by person if you tick *Put the numbers of one person
@@ -182,9 +182,17 @@ the contacts that are **waiting for their first call** are shared out again, equ
   stays with the ones who have the most, so as few contacts as possible change hands, and afterwards no two people differ by more
   than one. Whoever gives, gives the **newest** of their waiting contacts (the ones they would have called last). Nobody who gives
   also receives.
-* **By itself** - every minute the server looks for somebody who is working and owns **no contact at all** (a new account counts as
-  working from the moment it is made). It then shares equally - but not while a sheet is being added, because that sheet is being
-  shared out with the same people at that moment. Settings → *Give a new employee a fair share by itself* (`auto_level`, default on).
+* **By itself** (Settings → *Keep everybody at the same number by itself*, `auto_level`, default on) - in two cases, and always
+  with everybody who is working (a new account counts as working from the moment it is made):
+  1. every minute: somebody who is working owns **no contact at all** (a new employee, or one who is back after contacts were taken
+     from them) - within a minute or two they have their share;
+  2. every five minutes: somebody who is working has **less than half of the fair share** of the waiting contacts (the waiting
+     contacts of everybody, divided by the number of people) and at least 10 contacts would change hands - a new employee who was
+     given a few, somebody who is back and kept only what they had called, somebody who ran out. A smaller difference is left alone,
+     so that people are not shuffled around all day; by hand it can still be done.
+
+  Not while a sheet is being added (that sheet is being shared out with the same people at that moment). A contact that somebody
+  has dialled - also one whose outcome has not come yet - is never taken from them.
 * **By hand** - the button shows the plan first (for every person: waiting now, after, +/−) and then moves the contacts in steps of
   1,000; a contact somebody is editing at that moment waits for the next round. Doing it twice changes nothing: when everybody has
   the same, there is nothing to move.
@@ -285,7 +293,7 @@ step is audited.
 | --- | --- | --- |
 | `inactive_after_days` (Settings page) | 2 | days not seen = not working |
 | `auto_rebalance` (Settings page) | on | share the contacts of people who stopped, every 10 minutes |
-| `auto_level` (Settings page) | on | a working employee with no contact at all (a new account) gets a fair share, checked every minute |
+| `auto_level` (Settings page) | on | keep everybody who is working at about the same number of not-yet-called contacts: nobody has anything at all - every minute; far less than the others (under half of the fair share) - every 5 minutes |
 | `MAX_IMPORT_MB` | 200 | size of a sheet |
 | `MAX_IMPORT_ROWS` | 1,100,000 | rows of a sheet |
 | `MAX_IMPORT_COLUMNS` | 100 | columns |

@@ -10,8 +10,10 @@ remainder (fewer than the number of people) stays with the ones who have the mos
 person who gives takes nothing back: they give from the newest of their waiting contacts, the ones they would call last.
 
 It can be started by an administrator (look at the plan first, then run it), and it runs by itself - while the setting `auto_level` is
-on - whenever somebody who is working owns no contact at all: a minute or two after a new employee is added, or after somebody who was
-away is seen again. Moving is done in steps of 1,000 contacts, every step one transaction; contacts that somebody is editing at that
+on - in two cases: whenever somebody who is working owns no contact at all (a minute or two after a new employee is added, or after
+somebody who was away is seen again), and - looked at every few minutes - whenever somebody who is working has far less than the fair
+share of the waiting contacts (a new employee who was given a few, somebody who is back and kept only what he had called, somebody who
+ran out). Moving is done in steps of 1,000 contacts, every step one transaction; contacts that somebody is editing at that
 moment are left for the next round (SKIP LOCKED). Doing it twice is harmless: when everybody has the same there is nothing to move.
 """
 
@@ -45,6 +47,14 @@ from app.services.settings_service import get_setting
 log = logging.getLogger(__name__)
 
 KIND = "level"
+
+# What the automatic sharing treats as "far less than the others". Everybody who is working has about the same, so the ordinary case is
+# that nobody is short; somebody is short when they have less than this part of the fair share (the waiting contacts of everybody,
+# divided by the number of people) - and only when enough would move to be worth it (a handful of contacts is not shuffled around, and
+# nobody is sent a notification about it).
+SHORT_OF_SHARE = 0.5
+MIN_AUTO_MOVE = 10
+BALANCE_CHECK_SECONDS = 300  # how often the scheduler looks for that (the "nobody has anything" case is looked at every minute)
 
 
 @dataclass
@@ -244,19 +254,33 @@ def _without_contacts(db: Session) -> list[int]:
     return list(db.scalars(select(Employee.id).join(Role, Role.id == Employee.role_id).where(Role.name == ROLE_EMPLOYEE, Employee.is_active.is_(True), ~owns)))
 
 
-def auto_level() -> DistributionRun | None:
-    """The scheduler's turn: when somebody who is working has no contact at all and the others have contacts nobody has called, share them
-    equally. Waits while a sheet is being added (that is being shared out right now, with the same people)."""
+def _short_of_share(plan: _Plan) -> bool:
+    """Does somebody who is working have far less than the fair share of the waiting contacts - and would enough move to be worth it?"""
+    if len(plan.people) < 2 or plan.total_waiting == 0 or plan.total_move < MIN_AUTO_MOVE:
+        return False
+    fair = plan.total_waiting / len(plan.people)
+    fewest = min(plan.waiting.get(person.employee_id, 0) for person in plan.people)
+    return fewest < fair * SHORT_OF_SHARE
+
+
+def auto_level(*, check_balance: bool = True) -> DistributionRun | None:
+    """The scheduler's turn. Share the waiting contacts equally when
+      * somebody who is working has no contact at all (a new account) and the others have contacts nobody has called, or
+      * `check_balance` and somebody who is working has less than half of the fair share (a new employee who was given a few, somebody
+        who is back and kept only what he had called, somebody who ran out).
+    Waits while a sheet is being added (that is being shared out right now, with the same people)."""
     db = new_session()
     try:
         rebalance_service.recover_stuck_runs(db)
         if not bool(get_setting(db, "auto_level")):
             return None
-        empty = _without_contacts(db)
-        if not empty or _import_is_applying(db):
+        if _import_is_applying(db):
             return None
-        if not any(s.working for s in activity.employee_states(db, employee_ids=empty)):
-            return None  # (accounts that are switched off, or not seen for days, are not waiting for anything)
+        empty = _without_contacts(db)
+        has_nothing = bool(empty) and any(s.working for s in activity.employee_states(db, employee_ids=empty))  # (accounts that are off or not seen for days are not waiting for anything)
+        if not has_nothing:
+            if not check_balance or not _short_of_share(_build(db, LevelIn())):
+                return None
         run = start(db, data=LevelIn(), actor_id=None, trigger="auto", quiet=True)
         if run is not None:
             execute_run(run.id)

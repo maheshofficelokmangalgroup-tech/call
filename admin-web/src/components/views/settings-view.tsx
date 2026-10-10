@@ -269,13 +269,14 @@ function ActivitySection({ settings, index }: { settings: Settings; index: numbe
       </label>
       <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line p-4">
         <span>
-          <span className="block text-sm font-bold text-ink">Give a new employee a fair share by itself</span>
+          <span className="block text-sm font-bold text-ink">Keep everybody at the same number by itself</span>
           <span className="block text-xs text-muted">
-            When somebody who is working has no contact at all - a new employee, or one who comes back - the server takes the contacts nobody has called yet from the others, so that everybody has the same number. A minute or two
-            after the account is made. The ones with a promised callback, and every contact somebody started on, stay where they are. You can also do it by hand on the Work sharing page.
+            When somebody who is working has no contact at all - a new employee, or one who comes back - the server takes the contacts nobody has called yet from the others, so that everybody has the same number, a minute or two
+            after the account is made. The same when somebody has far less than the others (less than half of the fair share: a new employee who was given a few, or one who ran out), looked at every few minutes. The ones with a
+            promised callback, and every contact somebody started on, stay where they are. You can also do it by hand on the Work sharing page.
           </span>
         </span>
-        <Switch checked={settings.auto_level} onCheckedChange={(auto) => void setAutoLevel(auto)} disabled={update.isPending} data-testid="auto-level-switch" aria-label="Give a new employee a fair share by itself" />
+        <Switch checked={settings.auto_level} onCheckedChange={(auto) => void setAutoLevel(auto)} disabled={update.isPending} data-testid="auto-level-switch" aria-label="Keep everybody at the same number by itself" />
       </label>
       <ErrorLine message={s.error ?? switchError} />
     </Section>

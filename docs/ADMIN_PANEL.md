@@ -105,8 +105,9 @@ person owns and how many of those nobody has called yet.
 * **Give everybody the same** - the contacts nobody has called yet are shared out again, so that everybody who is working has the same
   number (one more for some when it does not divide). You see the plan first - for every person what they have waiting now, what they
   will have, and + or -. A promised callback and every contact that was worked on stay where they are. This is how a **new employee**
-  gets a share of what was given out before they came; the server also does it by itself a minute or two after the account is made
-  (*Settings → Give a new employee a fair share by itself*).
+  gets a share of what was given out before they came. The server also does it by itself: a minute or two after the account is made,
+  and every few minutes for anybody who has far less than the others - less than half of the fair share (*Settings → Keep everybody
+  at the same number by itself*).
 * **Share their contacts now** - what is waiting with somebody who stopped working goes to the people who are working (the server does
   this by itself every ten minutes: *Settings → Share their contacts automatically*).
 * **What was shared** - every time, by hand or automatic, who gave and who received.
