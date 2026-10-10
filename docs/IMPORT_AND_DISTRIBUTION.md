@@ -231,6 +231,10 @@ worked out from the file alone, before the import, and then compared with the da
 | a third employee joins | shared out in **6.9 s**: 42,558 or 42,559 each |
 | memory of the process | **185 MB** peak |
 
+**On production** (2026-10-10; the shared 2-vCPU server and the RDS, the same file, `python -m scripts.import_contacts` inside the API container): check **60.6 s**, adding
+about **110 s** (about 1,200 contacts/s), **129,675 contacts** shared **64,838 / 64,837**; the sha256 of the sorted numbers of that import is the sha256 of the sorted
+different numbers of the file (computed separately from the file alone) - exactly the numbers of the file, nothing lost, nothing twice. The API stayed at 190 MiB.
+
 A **voter list** put together by person (`--group-people`, `python -m scripts.voter_check`; laptop, MySQL 8.4, 2,000 people were contacts before):
 
 | 209,395 rows, 23.5 MB, 8 columns | |
