@@ -380,7 +380,7 @@ had 0. The file has **129,675 different numbers** (79,720 rows repeat one). Rows
 into one contact, and a contact lists at most 20 numbers: 14,323 numbers were dropped without a word (one person had 124). The second employee got nothing because a sheet is
 shared between the people who are working *at that moment* and nothing ever shared again afterwards.
 
-**What was changed (pull request #13, merge `47631a3`, CI 12/12):** every different number is a contact of its own and the name decides nothing; putting the numbers of one person
+**What was changed (pull request #13, merge commit 47631a3, CI 12/12):** every different number is a contact of its own and the name decides nothing; putting the numbers of one person
 together is an option that never drops a number; the contacts nobody has started on are shared again equally between everybody who is working - by hand (*Work sharing -> Give
 everybody the same*) or by itself within a minute when a working employee has no contact at all (setting `auto_level`); `scripts/remove_import.py` takes a wrongly added sheet away;
 `scripts/number_check.py` proves a list; a new employee could not be added after a code was ahead of the ids (fixed).
