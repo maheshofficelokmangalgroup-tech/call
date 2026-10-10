@@ -86,6 +86,7 @@ class RebalanceRunOut(ORMModel):
 class ActivityOverviewOut(BaseModel):
     inactive_after_days: int
     auto_rebalance: bool
+    auto_level: bool  # somebody new (or back from a long absence) is given a fair share by itself
     working: int
     not_working: int
     movable: int  # contacts waiting with people who are not working, that a rebalancing would move
@@ -127,5 +128,33 @@ class RebalancePlanOut(BaseModel):
     working: int
     sources: list[RebalanceSource]
     targets: list[RebalanceTarget]
+    warnings: list[str]
+    can_run: bool
+
+
+# ------------------------------------------------------------------------------------------------ the same for everybody
+class LevelIn(BaseModel):
+    """Share the contacts that nobody has started on equally between the people who are working."""
+
+    employee_ids: list[int] | None = Field(default=None, max_length=5000)  # None: everybody who is working
+
+
+class LevelEmployee(BaseModel):
+    employee_id: int
+    employee_code: str
+    full_name: str
+    state: State
+    assigned: int  # contacts they own now
+    waiting: int  # of those, nobody has called yet (these are what is shared)
+    after: int  # waiting, after the sharing
+    gives: int
+    receives: int
+
+
+class LevelPlanOut(BaseModel):
+    working: int  # people who take part
+    total_waiting: int  # contacts nobody has called yet, with these people
+    total_move: int  # how many change hands
+    employees: list[LevelEmployee]
     warnings: list[str]
     can_run: bool

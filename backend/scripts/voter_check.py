@@ -1,4 +1,5 @@
-"""Prove the import of a voter list at the size of the real one, on a real database - with exact numbers.
+"""Prove the import of a voter list at the size of the real one WITH THE OPTION "put the numbers of one person together", on a real
+database - with exact numbers. (Without the option, the ordinary way, every number is a contact of its own: scripts/number_check.py.)
 
     DATABASE_URL=mysql+pymysql://root@127.0.0.1:3307/calling_scale python -m scripts.voter_check --rows 209395
 
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(sheet, "rb") as handle:
             imp = import_service.create_import(
                 db, upload=UploadFile(file=handle, filename=sheet.name), actor=admin, mode="skip", campaign_id=None, assign_employee_ids=[],
-                assign_strategy="equal", default_priority=2, request=None,  # type: ignore[arg-type]
+                assign_strategy="equal", default_priority=2, group_people=True, request=None,  # type: ignore[arg-type]
             )
         import_id = imp.id
         began = time.perf_counter()

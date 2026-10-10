@@ -6,8 +6,8 @@ from app import jobs
 from app.api.deps import AdminUser, DbSession, Paging
 from app.core import rate_limit
 from app.schemas.common import Page
-from app.schemas.distribution import ActivityOverviewOut, RebalanceIn, RebalancePlanOut, RebalanceRunOut
-from app.services import rebalance_service
+from app.schemas.distribution import ActivityOverviewOut, LevelIn, LevelPlanOut, RebalanceIn, RebalancePlanOut, RebalanceRunOut
+from app.services import level_service, rebalance_service
 
 router = APIRouter()
 
@@ -31,6 +31,24 @@ def rebalance(payload: RebalanceIn, request: Request, db: DbSession, admin: Admi
     run = rebalance_service.start(db, data=payload, actor_id=admin.id, trigger="manual")
     assert run is not None
     jobs.submit("rebalance", rebalance_service.execute_run, run.id)
+    db.refresh(run)
+    return run
+
+
+@router.post("/level/preview", response_model=LevelPlanOut)
+def level_preview(payload: LevelIn, db: DbSession, _admin: AdminUser):
+    """What sharing the not-yet-called contacts equally between the people who are working would do right now. Nothing is changed."""
+    return level_service.preview(db, payload)
+
+
+@router.post("/level", response_model=RebalanceRunOut, status_code=status.HTTP_202_ACCEPTED)
+def level(payload: LevelIn, request: Request, db: DbSession, admin: AdminUser):
+    """Share the contacts nobody has called yet equally between the people who are working (a new employee gets his share).
+    Poll GET /distribution/runs/{id}."""
+    rate_limit.enforce_sensitive(request, "level", admin.id)
+    run = level_service.start(db, data=payload, actor_id=admin.id, trigger="manual")
+    assert run is not None
+    jobs.submit("level", level_service.execute_run, run.id)
     db.refresh(run)
     return run
 

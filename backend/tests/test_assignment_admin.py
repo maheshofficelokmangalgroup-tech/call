@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
 from app.models.contact import ContactAssignment
+from app.models.employee import Employee
 from app.models.system import AuditLog
 from app.services.assignment_service import plan_distribution
 from tests.conftest import PASSWORD, auth_headers, login
@@ -119,6 +120,39 @@ def test_admin_creates_an_employee_with_a_temporary_password_that_must_be_change
     assert dup_email.status_code == 409 and dup_email.json()["error"]["code"] == "email_taken"
     weak = client.post("/api/v1/employees", headers=as_admin, json={"email": "x@example.com", "full_name": "Weak Pw", "password": "abc"})
     assert weak.status_code == 422
+
+
+def test_a_code_that_is_ahead_of_the_ids_does_not_block_every_new_employee(client, make, db, as_admin):
+    """Two administrators adding somebody at the same moment (or a code typed by hand) can leave a code ahead of the ids. 'The newest id
+    plus one' is then taken already, and every employee added after that used to be refused for good."""
+    newest = db.query(Employee.id).order_by(Employee.id.desc()).limit(1).scalar() or 0
+    make.employee(code=f"EMP{newest + 2:04d}")  # this account has id newest + 1 and a code one further on
+    for n in range(3):  # the accounts after it are all fine, and none gets a code that is there already
+        created = client.post("/api/v1/employees", headers=as_admin, json={"email": f"ahead.{n}@example.com", "full_name": f"Ahead {n}"})
+        assert created.status_code == 201, created.text
+    codes = [code for (code,) in db.query(Employee.employee_code).all()]
+    assert len(codes) == len(set(codes))
+    assert f"EMP{newest + 2:04d}" in codes and f"EMP{newest + 3:04d}" in codes
+
+
+def test_a_code_that_somebody_else_takes_a_moment_later_is_retried_and_not_refused(client, make, as_admin, monkeypatch):
+    """Three employees added at the same moment are all given the same next code and only one can have it. The others get the next free
+    one - they are not told that 'the employee ID already exists' (nobody typed it). A code that WAS typed is still refused."""
+    from app.services import employee_service
+
+    make.employee(code="EMP0099")
+    real, asked = employee_service._next_code, []
+
+    def raced(session, jump=0):
+        asked.append(jump)
+        return "EMP0099" if len(asked) == 1 else real(session, jump)  # the first choice is gone by the time it is written
+
+    monkeypatch.setattr(employee_service, "_next_code", raced)
+    created = client.post("/api/v1/employees", headers=as_admin, json={"email": "raced@example.com", "full_name": "Raced Person"})
+    assert created.status_code == 201, created.text
+    assert created.json()["employee"]["employee_code"] not in ("", "EMP0099") and len(asked) == 2
+    typed = client.post("/api/v1/employees", headers=as_admin, json={"email": "typed@example.com", "full_name": "Typed Code", "employee_code": "emp0099"})
+    assert typed.status_code == 409 and typed.json()["error"]["code"] == "employee_code_taken"
 
 
 def test_admin_update_deactivate_reset_and_self_protection(client, make, admin, emp_a, as_admin):

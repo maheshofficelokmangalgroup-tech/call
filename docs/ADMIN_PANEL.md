@@ -90,17 +90,34 @@ are marked. Every time somebody listens to or downloads a recording it is writte
   A contact is a **person**: it can have **several numbers** (the list shows the first one and *+N*), and the voter details - relative,
   age, gender, voter ID (EPIC), pincode and address. The search finds a person by **any** of their numbers, by name, relative, voter
   ID, pincode or address. The contact drawer lists every number with how often it was called and answered, and *Edit* changes them
-  (the first number is the main one; a number that belongs to another person is refused, naming that person). A voter sheet with one
-  row per number becomes one contact per person - see `docs/IMPORT_AND_DISTRIBUTION.md`.
+  (the first number is the main one; a number that belongs to another person is refused, naming that person). In an imported sheet
+  **every different number is a contact of its own** - only the same number twice is added once, the name decides nothing. For a voter
+  list with one row per number tick *Put the numbers of one person together* in the import dialog to get one contact per person - see
+  `docs/IMPORT_AND_DISTRIBUTION.md`.
 * **Campaigns** - a goal with a list of contacts and a target number of calls; choose who calls, hand out the waiting contacts, watch the progress.
 * **Teams** - group employees; a manager sees the team they belong to.
+
+## Work sharing (administrators)
+
+**People → Work sharing** shows who is working (seen within the last two days, or an account that was just made), how many contacts each
+person owns and how many of those nobody has called yet.
+
+* **Give everybody the same** - the contacts nobody has called yet are shared out again, so that everybody who is working has the same
+  number (one more for some when it does not divide). You see the plan first - for every person what they have waiting now, what they
+  will have, and + or -. A promised callback and every contact that was worked on stay where they are. This is how a **new employee**
+  gets a share of what was given out before they came; the server also does it by itself a minute or two after the account is made
+  (*Settings → Give a new employee a fair share by itself*).
+* **Share their contacts now** - what is waiting with somebody who stopped working goes to the people who are working (the server does
+  this by itself every ten minutes: *Settings → Share their contacts automatically*).
+* **What was shared** - every time, by hand or automatic, who gave and who received.
 
 ## Audit log and settings (administrators)
 
 * **Audit log** - who signed in, who created or changed an account, reset a password, opened or deleted a recording, exported a report,
   changed a setting - with time and address.
 * **Settings** - switch call recording on/off and edit the notice employees accept, the default daily target for new employees, how long to
-  wait before a contact that did not answer comes back to an employee's list, and what happens to duplicate contacts in an import.
+  wait before a contact that did not answer comes back to an employee's list, what happens to duplicate contacts in an import, who counts
+  as working, and the two switches for sharing by itself (contacts of people who stopped; a fair share for a new employee).
 
 ## Tips
 

@@ -48,4 +48,5 @@ class SettingsOut(BaseModel):
     duplicate_policy: Literal["skip", "update"]
     inactive_after_days: int
     auto_rebalance: bool
+    auto_level: bool
     items: list[SettingOut]

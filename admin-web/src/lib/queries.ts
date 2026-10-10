@@ -32,6 +32,8 @@ import type {
   ImportJob,
   ImportPlan,
   ImportRow,
+  LevelPlan,
+  LevelRequest,
   Live,
   MeResponse,
   Note,
@@ -481,6 +483,8 @@ export interface UploadImportOptions {
   mode: "skip" | "update";
   campaignId: number | null;
   priority: number;
+  /** Rows of one person (name, relative, age, gender, pincode, address) become one contact with all their numbers. Off: one contact per different number. */
+  groupPeople?: boolean;
   /** bytes of the file sent so far, and the total */
   onProgress?: (sent: number, total: number) => void;
 }
@@ -506,6 +510,7 @@ export function useImportMutations() {
         form.append("mode", o.mode);
         if (o.campaignId !== null) form.append("campaign_id", String(o.campaignId));
         form.append("default_priority", String(o.priority));
+        if (o.groupPeople) form.append("group_people", "true");
         return upload<ImportJob>("contacts/import", { form, onProgress: o.onProgress });
       },
       onSuccess: refresh,
@@ -555,7 +560,28 @@ export function useRebalance() {
   return useMutation({
     mutationFn: (request: RebalanceRequest) => api<RebalanceRun>("distribution/rebalance", { method: "POST", body: request }),
     onSuccess: () => {
-      for (const key of ["activity", "rebalance-runs", "rebalance-run", "rebalance-preview", "contacts", "employee-stats"]) void qc.invalidateQueries({ queryKey: [key] });
+      for (const key of ["activity", "rebalance-runs", "rebalance-run", "rebalance-preview", "level-preview", "contacts", "employee-stats"]) void qc.invalidateQueries({ queryKey: [key] });
+    },
+  });
+}
+
+/** What sharing the contacts nobody has called yet equally between the people who are working would do. Nothing is written. */
+export const useLevelPreview = (request: LevelRequest, enabled: boolean) =>
+  useQuery({
+    queryKey: ["level-preview", request],
+    queryFn: ({ signal }) => api<LevelPlan>("distribution/level/preview", { method: "POST", body: request, signal }),
+    enabled,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
+/** Starts the equal sharing; the result is a run, followed with `useRebalanceRun` like any other. */
+export function useLevel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (request: LevelRequest) => api<RebalanceRun>("distribution/level", { method: "POST", body: request }),
+    onSuccess: () => {
+      for (const key of ["activity", "rebalance-runs", "rebalance-run", "rebalance-preview", "level-preview", "contacts", "employee-stats"]) void qc.invalidateQueries({ queryKey: [key] });
     },
   });
 }

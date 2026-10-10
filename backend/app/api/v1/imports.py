@@ -40,6 +40,7 @@ def upload_import(
     assign_employee_ids: Annotated[str, Form(description="comma separated employee ids that receive the new contacts (default: every employee who is working)")] = "",
     assign_strategy: Annotated[str, Form(description="equal | balance_total")] = "equal",
     default_priority: Annotated[int, Form()] = 2,
+    group_people: Annotated[bool, Form(description="false (default): every different number is a contact of its own, the same number twice is added once - the name decides nothing. true: rows that are the same person (name, relative, age, gender, pincode, address) become one contact with all their numbers")] = False,
 ):
     """Step 1: upload. The file is checked in the background; poll GET /contacts/import/{id} until status=previewed."""
     rate_limit.enforce_sensitive(request, "import_upload", admin.id)
@@ -52,6 +53,7 @@ def upload_import(
         assign_employee_ids=_parse_ids(assign_employee_ids),
         assign_strategy=assign_strategy,
         default_priority=default_priority,
+        group_people=group_people,
         request=request,
     )
     jobs.submit("import-check", import_service.run_validation, imp.id)

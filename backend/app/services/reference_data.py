@@ -65,6 +65,11 @@ DEFAULT_SETTINGS: dict[str, tuple[object, str]] = {
         True,
         "Automatically give the not-yet-called contacts of employees who are no longer working to the ones who are, every few minutes.",
     ),
+    "auto_level": (
+        True,
+        "Automatically give an employee who is working and has no contacts at all (a new one, or one back from a long absence) an equal share of "
+        "the not-yet-called contacts of the others, within a minute or two.",
+    ),
 }
 
 

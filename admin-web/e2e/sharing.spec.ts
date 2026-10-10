@@ -111,3 +111,82 @@ test.describe("sharing a sheet", () => {
     expect(await page.getByTestId("work-row").count()).toBe(overview.employees.length);
   });
 });
+
+/** Add a sheet through the panel's own proxy and give all of it to one employee, as the administrator would in the wizard. */
+async function addSheetFor(page: Page, employeeId: number, name: string, count: number) {
+  const headers = { "x-requested-with": "admin-web" };
+  const first = 9000000000 + (Date.now() % 9_000_000) * 100;
+  const rows = Array.from({ length: count }, (_, i) => `${name} ${i},${first + i}`);
+  const created = await page.request.post("/api/backend/contacts/import", {
+    headers,
+    multipart: { file: { name: "level.csv", mimeType: "text/csv", buffer: Buffer.from(["name,phone", ...rows].join("\r\n")) }, mode: "skip", default_priority: "2" },
+  });
+  expect(created.ok()).toBe(true);
+  const { id } = (await created.json()) as { id: number };
+  const statusOf = async () => ((await (await page.request.get(`/api/backend/contacts/import/${id}`)).json()) as { status: string }).status;
+  await expect.poll(statusOf, { timeout: 60_000 }).toBe("previewed");
+  const confirmed = await page.request.post(`/api/backend/contacts/import/${id}/confirm`, {
+    headers,
+    data: { mode: "skip", distribution: { strategy: "equal", order: "interleave", employee_ids: [employeeId], leave_unassigned: false } },
+  });
+  expect(confirmed.ok()).toBe(true);
+  await expect.poll(statusOf, { timeout: 60_000 }).toBe("completed");
+}
+
+async function assignedTo(page: Page, employeeId: number) {
+  const overview = (await (await page.request.get("/api/backend/distribution/overview")).json()) as { employees: { employee_id: number; assigned: number }[] };
+  return overview.employees.find((e) => e.employee_id === employeeId)?.assigned ?? -1;
+}
+
+test.describe("everybody gets the same, also somebody who comes later", () => {
+  test("a new employee gets a fair share of the contacts nobody has called yet", async ({ page }) => {
+    await login(page);
+    const id = unique();
+    const early = await createEmployee(page, `Level ${id} Early`, `level.${id}.early@example.com`);
+    await addSheetFor(page, early.id, `Level ${id}`, 40); // the first employee gets the whole sheet
+    const late = await createEmployee(page, `Level ${id} Late`, `level.${id}.late@example.com`); // the second one comes afterwards
+    expect(await assignedTo(page, early.id)).toBe(40);
+    expect(await assignedTo(page, late.id)).toBe(0);
+
+    await page.goto("/distribution");
+    await expect(page.getByTestId("tile-auto-level")).toContainText("On");
+    await page.getByTestId("level-open").click();
+    const dialog = page.getByTestId("level-dialog");
+    // the plan comes first: the new employee receives, nothing has moved yet
+    const lateRow = dialog.getByTestId("level-row").filter({ hasText: `Level ${id} Late` });
+    await expect(lateRow).toContainText("+");
+    await expect(dialog.getByTestId("level-summary")).toContainText("change hands");
+    expect(await assignedTo(page, late.id)).toBe(0);
+
+    await dialog.getByTestId("level-go").click();
+    await expect(dialog.getByRole("heading", { name: "Done" })).toBeVisible({ timeout: 60_000 });
+    await expect(dialog.getByTestId("level-run")).toContainText("contacts moved");
+    await expect(dialog.getByTestId("level-run")).toContainText(`Level ${id} Late`);
+    await dialog.locator("button", { hasText: /^Close$/ }).click();
+
+    // both have the same number now (one more for somebody when it does not divide exactly), and the new one is not empty-handed
+    await expect.poll(async () => Math.abs((await assignedTo(page, early.id)) - (await assignedTo(page, late.id)))).toBeLessThanOrEqual(1);
+    expect(await assignedTo(page, late.id)).toBeGreaterThan(0);
+    // it is in the history as a sharing of its own kind
+    await expect(page.getByTestId("run-kind").first()).toHaveText("Same number for everybody");
+
+    // doing it again moves nothing: the button is there, but the plan says everybody has the same
+    await page.getByTestId("level-open").click();
+    await expect(page.getByTestId("level-dialog").getByTestId("level-warning").first()).toContainText("same number");
+    await expect(page.getByTestId("level-go")).toBeDisabled();
+  });
+
+  test("the setting that gives a new employee a share by itself can be switched off and on", async ({ page }) => {
+    await login(page);
+    await page.goto("/settings");
+    const toggle = page.getByTestId("auto-level-switch");
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await toggle.click();
+    await expect(page.getByText("New employees get nothing until you share by hand")).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(((await (await page.request.get("/api/backend/settings")).json()) as { auto_level: boolean }).auto_level).toBe(false);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(((await (await page.request.get("/api/backend/settings")).json()) as { auto_level: boolean }).auto_level).toBe(true);
+  });
+});

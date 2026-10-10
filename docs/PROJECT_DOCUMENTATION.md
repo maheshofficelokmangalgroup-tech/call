@@ -13,7 +13,8 @@
 Ha project **band zala ahe** (2026-10-05). Server var che 4 Docker containers band kele ani GitHub var auto-deploy band kela; **code ani docs GitHub var rahile ahet**. Database (`Calling_db` RDS var), volumes, images ani `~/calling` server var jase hote tase ahet - kai kai rahile ani te kase kadhaycha te **section 15** madhe ahe.
 Project kay hota: employees Android app madhun contacts la call kartat, outcome lihitat, callback ठरवतात; admin la web panel madhe sagla disto
 (kon kiti call kela, kontya number la, response kay, kon call var ahe). 10,000 te 10 lakh contacts Excel/CSV madhun import karun working employees madhe
-**barabar vatle jatat**. Voter list (ek person che anek numbers) -> **ek contact, sagle numbers sobat**. Punha suru karaycha asel tar **section 11** (Restart from
+**barabar vatle jatat**. **Pratyek vegla phone number = ek contact** (naav var kahi farak padat nahi, fakta same number don vela yet nahi); voter list madhe "ek person che numbers
+ekatra" he option tick kele tarach ek contact sagle numbers sobat. Navin employee add kela ki tyala bakichya barabar vatap milte (**section 4**). Punha suru karaycha asel tar **section 11** (Restart from
 scratch) vacha; kay shikalo ani kay adhurech rahile te **section 13 ani 14** madhe ahe.
 
 ---
@@ -28,7 +29,8 @@ A system for a team of employees who phone a large list of people (customers, vo
   campaigns, follow-ups (who spoke to whom, what each person answered, who has to be called back), a bulk import of up to a million contacts that is
   **shared equally between the employees who are working**, and an audit log.
 * **The server** (FastAPI + MySQL + Redis) is the single source of truth. A very large list is checked line by line, no phone number ever gets in
-  twice, and a person who has several numbers is **one contact with all their numbers**.
+  twice, **every different number is a contact of its own** (the name decides nothing), and - when asked for - the numbers of one person can be put
+  together into **one contact with all their numbers**.
 
 ### The three parts
 
@@ -115,8 +117,10 @@ Contacts (import wizard) - Campaigns - Teams - **Work sharing** - Audit log - Se
 | **Retry rules**: a contact that did not answer comes back after a configurable wait (settings). | `services/settings_service.py`, `services/queue_service.py` |
 | **Who is working**: seen within `inactive_after_days` (default 2) by a sign-in, a token renewal or a heartbeat; a new account counts as working. | `services/activity.py` |
 | **Equal sharing**: *n* contacts between *k* people = *n ÷ k* each, the remainder one each to the lightest. *Even out the work* is the alternative. Somebody who is not working gets nothing; what was waiting with them is shared out again (by hand, or automatically every 10 minutes). | `services/distribution.py`, `services/rebalance_service.py`, [IMPORT_AND_DISTRIBUTION.md](IMPORT_AND_DISTRIBUTION.md) |
-| **No number twice**: three levels - inside the sheet, against the contacts, and a unique index at the moment of writing. | `services/import_service.py`, table `contact_phones` |
-| **One person, many numbers** (voter list): rows with the same name, relative, age, gender, pincode and address are one person; two EPIC numbers are two people; a number on rows of different people goes to the first row; at most 20 numbers per person. The number to dial next is the one answered last time, else the one tried the fewest times. | `services/import_rows.py`, `services/contact_numbers.py` |
+| **Everybody gets the same, also somebody who comes later**: the contacts nobody has called yet (still `new`, no callback) are shared again equally between everybody who is working (difference at most one; who gives, gives the newest; nothing that was started on moves). By hand (*Give everybody the same*) or by itself within a minute when a working employee owns no contact at all (setting `auto_level`, default on). | `services/level_service.py`, [IMPORT_AND_DISTRIBUTION.md](IMPORT_AND_DISTRIBUTION.md) |
+| **No number twice**: three levels - inside the sheet, against the contacts, and a unique index at the moment of writing. The phone number alone decides - never the name: every different number is a contact. | `services/import_service.py`, table `contact_phones` |
+| **One person, many numbers** (voter list) - **only when asked for** (`group_people`): rows with the same name, relative, age, gender, pincode and address are one person; two EPIC numbers are two people; a number on rows of different people goes to the first row; a contact lists at most 20 numbers and a person with more gets a second contact, so no number is lost. The number to dial next is the one answered last time, else the one tried the fewest times. | `services/import_rows.py`, `services/import_service.py`, `services/contact_numbers.py` |
+| **A wrongly added sheet can be taken away**: only the contacts nobody has touched (no call, note, callback; still `new`); the numbers are free again. | `services/import_undo.py`, `scripts/remove_import.py` |
 | **Password vault**: a handed-out first password is stored encrypted (Fernet, key derived from `JWT_SECRET`) so an administrator can look at it again, until the employee chooses their own, the account is deactivated, or 30 days pass. Every look is audited. | `services/credential_vault.py` |
 | **Audit log** is append-only; audit rows are never deleted on purpose. | `services/audit_service.py` |
 
@@ -168,6 +172,7 @@ the dependency versions of `backend/requirements.txt`** (a clean virtual environ
 | 150 phones with a call every ~2.5 s (about 5x a real day) | 122 requests/s sustained, 0 errors | CI |
 | Import of **1,000,000 rows** (66 MB), 100,000 contacts before | check 216 s, add 268 s, **44,098 or 44,099 each** (20 employees), 215 MB peak | local MySQL 8.4 |
 | Voter list of **209,395 rows** (8 columns) | **53,304 people with 161,244 numbers**; `123 bad + 48,528 repeats + 160,744 numbers = 209,395`; check 25.8 s, add **14.8 s**; 206 MB peak | local MySQL 8.4 |
+| The same real list **by number** (the default since 2026-10-09; 209,395 rows) | **129,675 contacts = the 129,675 different numbers** (0 differences, one number per contact), shared 63,837 / 63,838; check 40.4 s, add 26.1 s; a third employee joins and everybody has 42,558 or 42,559 in 6.9 s; 185 MB peak | local MySQL 8.4 (`scripts/number_check.py`) |
 | 300,000-row import | add 62 s (4,261 contacts/s), 159 MB peak | local MySQL 8.4, CI |
 | Production, 20,000 lines on the shared 2-vCPU server and RDS | check 4.2 s, add 9.3 s, exactly equal | production self-test |
 
@@ -176,20 +181,21 @@ production.
 
 ## 9. Tests and CI
 
-Final counts: **backend 451 tests** (the same suite on SQLite and on MySQL 8.4), **app 161 Jest tests**, **panel 116 Vitest tests** plus a Playwright browser
+Final counts: **backend 497 tests** (the same suite on SQLite and on MySQL 8.4), **app 161 Jest tests**, **panel 116 Vitest tests** plus a Playwright browser
 suite that drives the real panel against a real API (and plays the part of an employee's phone), `bandit`, `pip-audit`.
 
 `.github/workflows/`:
 
 | Workflow | What |
 |---|---|
-| `ci.yml` (12 jobs) | API on SQLite and MySQL 8.4; app types / lint / tests; panel types / lint / tests / build; "panel and API agree"; browser tests; the production Docker stack and the shared-server stack (with a real 12 MB sheet through the front door); security scan; load test; API fuzz; **import at scale** (300,000 rows, an Excel file, and a voter list) |
+| `ci.yml` (12 jobs) | API on SQLite and MySQL 8.4; app types / lint / tests; panel types / lint / tests / build; "panel and API agree"; browser tests; the production Docker stack and the shared-server stack (with a real 12 MB sheet through the front door); security scan; load test; API fuzz; **import at scale** (300,000 rows, an Excel file, a voter list put together by person, and a voter list by number with a late employee) |
 | `android.yml` | the signed release APK (arm64) -> Releases; an x86_64 build for an emulator (never published) |
 | `deploy.yml` | after CI is green on `main`: images -> SSH to the server -> pull exactly that commit -> restart -> wait until healthy -> check the public address; **a bad deploy puts the running version back by itself** |
 | `certificate.yml` | renews the HTTPS certificate every Monday when it has less than 30 days left |
 
-Also in the repository: scripts that prove things on a real database - `scripts/scale_check.py`, `scripts/voter_check.py`, `scripts/loadtest.py`,
-`scripts/selftest_sharing.py` (a self-cleaning test for a live server).
+Also in the repository: scripts that prove things on a real database - `scripts/scale_check.py`, `scripts/voter_check.py`, `scripts/number_check.py` (a list by
+number: the numbers in the database must be exactly the numbers of the file), `scripts/loadtest.py`, `scripts/selftest_sharing.py` (a self-cleaning test for a live
+server); and `scripts/remove_import.py` (take a wrongly added sheet away again).
 
 ## 10. How it was deployed
 
@@ -256,8 +262,12 @@ Pull requests merged into `main`: #1 (with #2), #4, #6, #5, #7, #3, #8, #9, in t
   internal APK / MDM, not through the public store.
 * **The app cannot mark a "wrong number".** The server supports the outcome *Invalid number* and treats it per number, but the app's outcome screen does not offer
   it (it is folded into *Switched off*). The numbers of a person simply take turns, the least-called first.
-* **A person is the same person only when name, relative, age, gender, pincode and address agree** (capitals and spaces aside). Age and gender are part of
-  the identity: the same voter with a different age in another list is a new person. Two EPIC numbers are two people.
+* **With the option *Put the numbers of one person together*, a person is the same person only when name, relative, age, gender, pincode and address agree**
+  (capitals and spaces aside). Age and gender are part of the identity: the same voter with a different age in another list is a new person. Two EPIC
+  numbers are two people. Without the option (the default) the name is never looked at.
+* **The equal sharing of a late employee only moves contacts nobody has started on** (still `new`, no callback). What an employee has already worked on
+  stays with them, so a person who has done a lot of work can end up with more *in total* than the others, and a new employee is given a share of the
+  *waiting* contacts only.
 * **A million rows was not run on the shared RDS** (it would have taken ~6-7 minutes of writes on a shared database); it was proven locally. 209,395 rows of the
   real shape were proven locally; 20,000 rows on the real server.
 * The app is Android only; there is no iOS build and no push notifications (phones poll and sync).
@@ -283,6 +293,16 @@ Pull requests merged into `main`: #1 (with #2), #4, #6, #5, #7, #3, #8, #9, in t
 9. **Time zones:** the dashboards use the business timezone (`APP_TIMEZONE`, Asia/Kolkata); tests that use "now + 1 hour" fail in the last hour of the day.
 
 10. **A shared server changes under you.** Between the shutdown and the restart the web server on ports 80 / 443 was replaced by another project's Caddy and a working copy (`~/calling`, with the settings and the certificate) was deleted by hand. Nothing of this project had been touched, but the way it got its certificate was gone. Keep the settings that cannot be recreated (the database password) where they can be read again, and prefer a certificate that does not depend on a port that somebody else may take over.
+
+5. **Merging rows by name silently loses numbers (found 2026-10-09).** A list of 209,395 rows with 129,675 different numbers was added as 27,692 contacts: rows with
+   the same name, relative, age, gender, pincode and address were merged into one person, and a person could list only 20 numbers, so 14,323 numbers were dropped
+   without a word (one person had 124). The default is now one contact per different number, putting people together is an option, and even then a person with
+   more numbers than fit gets another contact. `scripts/number_check.py` works out the expected numbers from the file alone and compares them with the database.
+6. **A code ahead of the ids blocks every new employee.** `EMP` codes are `newest id + 1`; two administrators adding somebody at the same moment (the browser tests
+   do) left a code *ahead* of the ids, and then every later *Add employee* answered "employee ID already exists" for good. The next code now skips codes that are taken,
+   and a code that was made by the server (not typed) and is taken a moment later by somebody else is retried instead of refused.
+7. **A sheet is shared between the people who are working at that moment.** Somebody who comes later got nothing, while a colleague kept thousands of contacts
+   nobody had called. Now the waiting contacts are shared out again (the *level* service), by hand or by itself.
 
 ## 15. Shutdown and restart record
 

@@ -43,6 +43,8 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--unassigned", action="store_true", help="add the contacts without giving them to anybody")
     parser.add_argument("--campaign", type=int, help="id of a campaign to add the contacts to")
     parser.add_argument("--priority", type=int, choices=(1, 2, 3), default=2, help="priority of rows that do not say (1 high, 2 medium, 3 low)")
+    parser.add_argument("--group-people", action="store_true", help="rows that are the same person (name, relative, age, gender, pincode, address) become ONE contact with all their numbers; "
+                        "without it every different number is a contact of its own (the same number twice is added once, whatever the name)")
     parser.add_argument("--yes", action="store_true", help="add the contacts after the check (without it only the check and the plan are done)")
     return parser.parse_args(argv)
 
@@ -102,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(path, "rb") as handle:
             imp = import_service.create_import(
                 db, upload=UploadFile(file=handle, filename=path.name), actor=admin, mode=args.mode, campaign_id=args.campaign,
-                assign_employee_ids=employee_ids, assign_strategy=args.strategy, default_priority=args.priority, request=None,  # type: ignore[arg-type]
+                assign_employee_ids=employee_ids, assign_strategy=args.strategy, default_priority=args.priority, group_people=args.group_people, request=None,  # type: ignore[arg-type]
             )
         import_id = imp.id
         runner = threading.Thread(target=import_service.run_validation, args=(import_id,), daemon=True)

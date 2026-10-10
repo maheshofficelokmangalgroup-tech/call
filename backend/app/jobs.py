@@ -70,7 +70,7 @@ def clean_upload_tmp(max_age_seconds: int = 24 * 3600) -> int:
 def tick() -> None:
     """One round of the scheduler. Every step is safe to run in every worker at the same time (leases / one-per-window gates)."""
     from app.core.database import new_session
-    from app.services import credential_vault, import_service, rebalance_service
+    from app.services import credential_vault, import_service, level_service, rebalance_service
 
     try:
         import_service.recover_stuck_imports()
@@ -81,6 +81,11 @@ def tick() -> None:
             rebalance_service.auto_rebalance()
         except Exception:  # noqa: BLE001
             log.exception("Automatic rebalancing failed")
+    if cache.once_per("job:auto-level", 60):  # every minute, in one worker: somebody working with nothing gets a fair share
+        try:
+            level_service.auto_level()
+        except Exception:  # noqa: BLE001
+            log.exception("Automatic sharing with new employees failed")
     if cache.once_per("job:housekeeping", 3600):
         db = new_session()
         try:
