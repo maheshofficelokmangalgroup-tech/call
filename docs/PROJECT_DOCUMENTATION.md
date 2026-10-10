@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Running again since 2026-10-09.** The project was cancelled on 2026-10-05 and its containers were stopped; on 2026-10-09 the owner asked for it to be put back on the same server "as it was", and it was (section 15). |
+| **Status** | **Running again since 2026-10-09.** The project was cancelled on 2026-10-05 and its containers were stopped; on 2026-10-09 the owner asked for it to be put back on the same server "as it was", and it was. On 2026-10-10 the import (every different number is a contact) and the sharing (an employee who comes later gets a fair share) were fixed on production (section 15). |
 | **Final version** | `v1.3.0` (APK Release) = commit `6335c3e` on `main` (merge of pull request #9) |
 | **Repository** | <https://github.com/maheshofficelokmangalgroup-tech/call> |
 | **Built** | 2026-10-01 to 2026-10-03 (first commit and first APK Release `v1.0.0` on 2026-10-01; last Release `v1.3.0` on 2026-10-03; 62 commits, 9 pull requests) |
@@ -175,6 +175,7 @@ the dependency versions of `backend/requirements.txt`** (a clean virtual environ
 | The same real list **by number** (the default since 2026-10-09; 209,395 rows) | **129,675 contacts = the 129,675 different numbers** (0 differences, one number per contact), shared 63,837 / 63,838; check 40.4 s, add 26.1 s; a third employee joins and everybody has 42,558 or 42,559 in 6.9 s; 185 MB peak | local MySQL 8.4 (`scripts/number_check.py`) |
 | 300,000-row import | add 62 s (4,261 contacts/s), 159 MB peak | local MySQL 8.4, CI |
 | Production, 20,000 lines on the shared 2-vCPU server and RDS | check 4.2 s, add 9.3 s, exactly equal | production self-test |
+| Production, the real 209,395-row list by number (2026-10-10) | check 60.6 s, adding about 110 s (about 1,200 contacts/s); **129,675 contacts, exactly the numbers of the file** (hash compared), shared 64,838 / 64,837; API 190 MiB | production, CLI inside the API container |
 
 The server was shared (2 vCPU, 3.8 GB, other projects on it; RDS `max_connections` 61): the system uses at most 9 database connections. Never load-test a shared
 production.
@@ -247,7 +248,8 @@ All APKs are signed with the same key (certificate SHA-256 `1730774eedb923e4cdc8
 | 1.2.0 | 2026-10-02 13:45 | Redis-first API, the phone's heartbeat, security hardening, load / fuzz / security checks in CI, the reviewed UI updates (pull requests #1 and #2) |
 | 1.3.0 | 2026-10-03 12:45 | everything after: bulk import with equal sharing, rebalancing and the password vault (#4); the front-door fixes (#5, #6, #7, #3); the follow-up dashboard (#8); **one person = one contact with all numbers**, the voter list, a 26x faster import, the app shows every number (#9) |
 
-Pull requests merged into `main`: #1 (with #2), #4, #6, #5, #7, #3, #8, #9, in that order.
+Pull requests merged into `main`: #1 (with #2), #4, #6, #5, #7, #3, #8, #9, in that order; after the last Release: #10 (the closing documentation), #11 (the shared certificate),
+#12 (the restart record) and #13 (import by number, a fair share for an employee who comes later) - none of them changes the app, so `v1.3.0` is still the one to install.
 
 ## 13. Known limits (stated honestly)
 
@@ -368,6 +370,36 @@ server kept running and were not restarted.
 **What the owner accepts with this:** the certificate belongs to the other project - it must keep running and renewing it (about 30 days before the end, around 2026-12-05); if that
 project stops using the host name, the certificate expires and this one has to be replaced (a real domain, or the other project's help to serve the Let's Encrypt challenge).
 The RDS master password was written in a chat during the restart: it is worth changing. The APK `v1.3.0` needs nothing: it starts with the same address.
+
+### Fix of the import and of the sharing (2026-10-10)
+
+The owner reported two problems: a list of 2,09,395 rows had added only 27,692 contacts, and an employee who was added after the contacts were shared out got none.
+
+**What was found (production, read-only):** import #30 (`Kolhapur -1.xlsx`, 209,395 rows) held 27,692 contacts with 115,352 numbers, all owned by EMP001; the second employee (EMP002)
+had 0. The file has **129,675 different numbers** (79,720 rows repeat one). Rows of the same *person* (same name, relative, age, gender, pincode and address) had been put together
+into one contact, and a contact lists at most 20 numbers: 14,323 numbers were dropped without a word (one person had 124). The second employee got nothing because a sheet is
+shared between the people who are working *at that moment* and nothing ever shared again afterwards.
+
+**What was changed (pull request #13, merge commit 47631a3, CI 12/12):** every different number is a contact of its own and the name decides nothing; putting the numbers of one person
+together is an option that never drops a number; the contacts nobody has started on are shared again equally between everybody who is working - by hand (*Work sharing -> Give
+everybody the same*) or by itself within a minute when a working employee has no contact at all (setting `auto_level`); `scripts/remove_import.py` takes a wrongly added sheet away;
+`scripts/number_check.py` proves a list; a new employee could not be added after a code was ahead of the ids (fixed).
+
+**What was done on production (with the owner's approval of each step):**
+
+1. Deploy of `sha-47631a3` (Deploy workflow green, no migration). Within 19 seconds of the start the server shared the contacts by itself: **13,846 of the 27,693 waiting contacts went
+   from EMP001 to EMP002** (before: 27,694 / 0).
+2. `remove_import 30`: the dry run showed 27,692 contacts, **0 that anybody had touched**, 13,846 with each employee; `--yes` removed them with their 115,352 numbers. The 2 test
+   contacts (import #13) stayed.
+3. The same file was added again by number (import #31) from the command line inside the API container, from a copy that lived only in the container's memory disk (same sha256 as
+   the original, removed afterwards): 209,395 rows, 0 bad, 79,720 repeats skipped, **129,675 contacts** given out **64,838 / 64,837** (EMP002 / EMP001).
+
+**Proven afterwards:** the sha256 of the sorted numbers of import #31 on production equals the sha256 of the sorted different numbers of the file worked out separately from the
+file alone (no number was printed or copied); every contact has exactly one number; 129,677 contacts and 129,677 different numbers in all (the 2 test contacts too); the
+waiting contacts are 64,838 with each employee; the API log since the deploy has no error.
+
+**Worth knowing:** the equal sharing only moves contacts nobody has started on, so somebody who has already called a lot can have more in total; the list of the rows that were
+not added (here the repeated numbers) is kept 7 days in the import folder by design and then removed; the 2 test contacts are still there (delete them in the panel if not wanted).
 
 ## 16. Map of the other documents
 
